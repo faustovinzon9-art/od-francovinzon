@@ -138,7 +138,7 @@
   </div>
 
   <div id="panel-turno-calendario" class="panel hidden">
-    <h2>Nuevo turno</h2>
+    <h2 id="mc-title">Nuevo turno</h2>
     <div class="mc-header">
       <button class="nav-btn" id="mc-prev">‹</button>
       <div class="mc-month-label" id="mc-month-label"></div>
@@ -402,8 +402,12 @@
     agendaEl.querySelectorAll('[data-action]').forEach((btn) => {
       const item = agendaItems[parseInt(btn.dataset.idx, 10)];
       btn.addEventListener('click', () => {
-        if (btn.dataset.action === 'mover') abrirMover(item);
-        else cancelarItem(item);
+        if (btn.dataset.action === 'mover') {
+          if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
+          else abrirMover(item);
+        } else {
+          cancelarItem(item);
+        }
       });
     });
   }
@@ -451,22 +455,43 @@
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('t-msg', 'Error de red.', 'error'); });
   }
 
-  // ---------- Nuevo turno (calendario + horarios, igual que /turnos) ----------
+  // ---------- Nuevo turno / Mover turno (calendario + horarios, igual que /turnos) ----------
   let mcYear, mcMonth, mcAvailability = {}, mcFecha = null, mcHora = null;
+  let mcMode = 'crear'; // 'crear' | 'mover'
+  let mcMoverContext = null; // { eventId, calendarId }
 
   document.getElementById('btn-nuevo-turno').addEventListener('click', abrirNuevoTurno);
   document.getElementById('mc-cancel').addEventListener('click', () => showOnly(null));
   document.getElementById('mc-prev').addEventListener('click', () => cambiarMesMC(-1));
   document.getElementById('mc-next').addEventListener('click', () => cambiarMesMC(1));
-  document.getElementById('mc-confirm').addEventListener('click', confirmarNuevoTurno);
+  document.getElementById('mc-confirm').addEventListener('click', confirmarMC);
 
   function abrirNuevoTurno() {
+    mcMode = 'crear';
+    mcMoverContext = null;
     const [y, m] = currentDate.split('-').map(Number);
     mcYear = y; mcMonth = m;
     mcFecha = null; mcHora = null;
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
     ['mc-nombre', 'mc-apellido', 'mc-telefono', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    document.getElementById('mc-title').textContent = 'Nuevo turno';
+    document.getElementById('mc-confirm').textContent = 'Guardar';
+    setMsg('mc-msg', '', '');
+    showOnly(panelTurnoCalendario);
+    cargarMesMC();
+  }
+
+  function abrirMoverTurnoCalendario(item) {
+    mcMode = 'mover';
+    mcMoverContext = { eventId: item.id, calendarId: item.calendarId };
+    const [y, m] = currentDate.split('-').map(Number);
+    mcYear = y; mcMonth = m;
+    mcFecha = null; mcHora = null;
+    document.getElementById('mc-slots-wrap').classList.add('hidden');
+    document.getElementById('mc-form-wrap').classList.add('hidden');
+    document.getElementById('mc-title').textContent = 'Mover turno';
+    document.getElementById('mc-confirm').textContent = 'Mover';
     setMsg('mc-msg', '', '');
     showOnly(panelTurnoCalendario);
     cargarMesMC();
@@ -541,21 +566,44 @@
       btn.addEventListener('click', () => {
         mcHora = btn.dataset.hora;
         renderMCSlots(slots);
-        document.getElementById('mc-form-wrap').classList.remove('hidden');
+        if (mcMode === 'crear') document.getElementById('mc-form-wrap').classList.remove('hidden');
       });
     });
   }
 
-  function confirmarNuevoTurno() {
+  function confirmarMC() {
+    if (!mcFecha || !mcHora) {
+      setMsg('mc-msg', 'Elegí un día y un horario.', 'error');
+      return;
+    }
+
+    if (mcMode === 'mover') {
+      setMsg('mc-msg', 'Moviendo...', '');
+      fetch('/api/gestion/mover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: gestionKey, eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora }),
+      })
+        .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+        .then((res) => {
+          setMsg('mc-msg', res.message, res.success ? 'ok' : 'error');
+          if (res.success) {
+            showOnly(null);
+            currentDate = mcFecha;
+            dateInput.value = currentDate;
+            updateTodayBtn();
+            cargarAgenda();
+          }
+        })
+        .catch((err) => { if (err.message !== 'unauthorized') setMsg('mc-msg', 'Error de red.', 'error'); });
+      return;
+    }
+
     const nombre = document.getElementById('mc-nombre').value.trim();
     const apellido = document.getElementById('mc-apellido').value.trim();
     const telefono = document.getElementById('mc-telefono').value.trim();
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!mcFecha || !mcHora) {
-      setMsg('mc-msg', 'Elegí un día y un horario.', 'error');
-      return;
-    }
     if (!nombre || !motivo) {
       setMsg('mc-msg', 'Completá nombre y motivo.', 'error');
       return;
