@@ -157,11 +157,17 @@
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
 
-  const hoy = new Date();
-  let viewYear = hoy.getFullYear();
-  let viewMonth = hoy.getMonth() + 1;
-  const minYear = hoy.getFullYear();
-  const minMonth = hoy.getMonth() + 1;
+  const TIME_ZONE = 'America/Argentina/Buenos_Aires';
+  // "Hoy" siempre en hora Argentina, sin importar la zona horaria del dispositivo del visitante.
+  const hoyArgStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const [hoyYear, hoyMonth, hoyDay] = hoyArgStr.split('-').map(Number);
+
+  let viewYear = hoyYear;
+  let viewMonth = hoyMonth;
+  const minYear = hoyYear;
+  const minMonth = hoyMonth;
 
   let availability = {};
   let fechaSeleccionada = null;
@@ -219,7 +225,7 @@
     for (let i = 0; i < firstDow; i++) html += '<div class="day-cell"></div>';
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const isToday = viewYear === hoy.getFullYear() && viewMonth === hoy.getMonth() + 1 && d === hoy.getDate();
+      const isToday = viewYear === hoyYear && viewMonth === hoyMonth && d === hoyDay;
       const isAvailable = !!availability[d];
       const dateStr = `${viewYear}-${pad2(viewMonth)}-${pad2(d)}`;
       const isSelected = fechaSeleccionada === dateStr;

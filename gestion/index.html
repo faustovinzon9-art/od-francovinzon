@@ -270,10 +270,10 @@
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  };
+  // "Hoy" siempre en hora Argentina, sin importar la zona horaria del dispositivo de quien usa el panel.
+  const todayStr = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
   const fmtHora = (iso) => new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
 
   let gestionKey = sessionStorage.getItem('gestionKey') || '';
