@@ -168,7 +168,7 @@
   <div class="actions-row">
     <button class="action-btn primary" id="btn-nuevo-turno">+ Nuevo turno</button>
     <button class="action-btn gold" id="btn-nuevo-sobreturno">+ Nuevo sobreturno</button>
-    <button class="action-btn" id="btn-toggle-bloqueo-dia">Bloquear este día completo</button>
+    <button class="action-btn" id="btn-toggle-bloqueo-dia">Bloquear un día completo</button>
     <button class="action-btn danger" id="btn-bloquear-horario">Bloquear un horario</button>
   </div>
 
@@ -251,13 +251,24 @@
   </div>
 
   <div id="panel-bloqueo-dia" class="panel hidden">
-    <h2 id="panel-bloqueo-dia-title">Bloquear este día completo</h2>
-    <div class="field"><label>Motivo (opcional)</label><input type="text" id="b-motivo"></div>
-    <div class="panel-actions">
-      <button class="btn-confirm" id="b-confirm">Confirmar</button>
-      <button class="btn-cancel" id="b-cancel">Cancelar</button>
+    <div id="b-form-wrap">
+      <h2>Bloquear un día completo</h2>
+      <div class="field"><label>Día</label><input type="date" id="b-fecha"></div>
+      <div class="field"><label>Motivo (opcional)</label><input type="text" id="b-motivo"></div>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="b-confirm">Bloquear</button>
+        <button class="btn-cancel" id="b-cancel">Cancelar</button>
+      </div>
+      <div class="panel-msg hidden" id="b-msg"></div>
     </div>
-    <div class="panel-msg hidden" id="b-msg"></div>
+    <div id="b-success-wrap" class="hidden">
+      <h2>Día bloqueado</h2>
+      <p class="empty-day" id="b-success-text" style="margin-bottom: 14px;"></p>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="b-goto">Ir a ese día</button>
+        <button class="btn-cancel" id="b-done">Listo</button>
+      </div>
+    </div>
   </div>
 
   <div class="agenda" id="agenda"></div>
@@ -427,7 +438,7 @@
 
   function renderAgenda() {
     const bloqueoCompleto = diaBloqueadoCompleto();
-    btnToggleBloqueoDia.textContent = bloqueoCompleto ? 'Desbloquear este día' : 'Bloquear este día completo';
+    btnToggleBloqueoDia.textContent = bloqueoCompleto ? 'Desbloquear este día' : 'Bloquear un día completo';
     btnToggleBloqueoDia.classList.toggle('danger', !!bloqueoCompleto);
 
     const esHoy = currentDate === todayStr();
@@ -710,6 +721,8 @@
   });
 
   // ---------- Bloquear / desbloquear día completo ----------
+  let bFechaBloqueada = null;
+
   btnToggleBloqueoDia.addEventListener('click', () => {
     const bloqueado = diaBloqueadoCompleto();
     if (bloqueado) {
@@ -723,26 +736,51 @@
         .then(() => cargarAgenda())
         .catch(() => {});
     } else {
+      document.getElementById('b-fecha').value = currentDate;
       document.getElementById('b-motivo').value = '';
       setMsg('b-msg', '', '');
+      document.getElementById('b-form-wrap').classList.remove('hidden');
+      document.getElementById('b-success-wrap').classList.add('hidden');
       showOnly(panelBloqueoDia);
     }
   });
   document.getElementById('b-cancel').addEventListener('click', () => showOnly(null));
   document.getElementById('b-confirm').addEventListener('click', () => {
+    const fecha = document.getElementById('b-fecha').value;
     const motivo = document.getElementById('b-motivo').value.trim();
+
+    if (!fecha) {
+      setMsg('b-msg', 'Elegí un día.', 'error');
+      return;
+    }
+
     setMsg('b-msg', 'Bloqueando...', '');
     fetch('/api/gestion/bloquear-dia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: currentDate, motivo }),
+      body: JSON.stringify({ key: gestionKey, date: fecha, motivo }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
-        setMsg('b-msg', res.message, res.success ? 'ok' : 'error');
-        if (res.success) { showOnly(null); cargarAgenda(); }
+        if (res.success) {
+          bFechaBloqueada = fecha;
+          document.getElementById('b-success-text').textContent = res.message;
+          document.getElementById('b-form-wrap').classList.add('hidden');
+          document.getElementById('b-success-wrap').classList.remove('hidden');
+        } else {
+          setMsg('b-msg', res.message, 'error');
+        }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('b-msg', 'Error de red.', 'error'); });
+  });
+  document.getElementById('b-done').addEventListener('click', () => showOnly(null));
+  document.getElementById('b-goto').addEventListener('click', () => {
+    if (!bFechaBloqueada) { showOnly(null); return; }
+    currentDate = bFechaBloqueada;
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    showOnly(null);
+    cargarAgenda();
   });
 
   // ---------- Mover ----------
