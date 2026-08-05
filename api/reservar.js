@@ -37,6 +37,7 @@ export default async function handler(req, res) {
 
     const title = `Turnos (${nombre} ${apellido || ''})`.trim();
     const description =
+      `Email: ${email || '-'}\n` +
       `Teléfono: ${telefono}\n` +
       `Motivo: ${motivo || '-'}\n` +
       'Reservado desde el formulario propio (hora Argentina fija, sin depender del dispositivo del paciente).';
@@ -48,17 +49,15 @@ export default async function handler(req, res) {
       start: { dateTime: start.toISOString(), timeZone: TIME_ZONE },
       end: { dateTime: end.toISOString(), timeZone: TIME_ZONE },
     };
-    if (email) eventBody.attendees = [{ email }];
 
     await calendar.events.insert({
       calendarId: CALENDAR_ID,
       requestBody: eventBody,
-      sendUpdates: email ? 'all' : 'none',
     });
 
     res.status(200).json({
       success: true,
-      message: `Turno confirmado para el ${date} a las ${time} hs (hora Argentina). Te llega un mail de confirmación.`,
+      message: `Turno confirmado para el ${date} a las ${time} hs (hora Argentina).`,
     });
   } catch (err) {
     console.error(err);
