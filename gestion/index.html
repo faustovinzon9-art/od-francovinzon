@@ -37,7 +37,7 @@
   #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
   .main-content { min-width: 0; }
   .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .topbar img { width: 150px; height: auto; }
+  .topbar img { width: 210px; max-width: 55vw; height: auto; }
 
   .search-mobile { background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .search-mobile input { width: 100%; border: none; background: transparent; padding: 6px 8px; font-size: 14px; color: var(--text); }
@@ -278,17 +278,28 @@
   </div>
 
   <div id="panel-horario" class="panel hidden">
-    <h2>Bloquear un horario</h2>
-    <div class="field-row">
-      <div class="field"><label>Desde</label><input type="time" id="h-inicio" step="900"></div>
-      <div class="field"><label>Hasta</label><input type="time" id="h-fin" step="900"></div>
+    <div id="h-form-wrap">
+      <h2>Bloquear un horario</h2>
+      <div class="field"><label>Día</label><input type="date" id="h-fecha"></div>
+      <div class="field-row">
+        <div class="field"><label>Desde</label><input type="time" id="h-inicio" step="900"></div>
+        <div class="field"><label>Hasta</label><input type="time" id="h-fin" step="900"></div>
+      </div>
+      <div class="field"><label>Motivo (opcional)</label><input type="text" id="h-motivo"></div>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="h-confirm">Bloquear</button>
+        <button class="btn-cancel" id="h-cancel">Cancelar</button>
+      </div>
+      <div class="panel-msg hidden" id="h-msg"></div>
     </div>
-    <div class="field"><label>Motivo (opcional)</label><input type="text" id="h-motivo"></div>
-    <div class="panel-actions">
-      <button class="btn-confirm" id="h-confirm">Bloquear</button>
-      <button class="btn-cancel" id="h-cancel">Cancelar</button>
+    <div id="h-success-wrap" class="hidden">
+      <h2>Horario bloqueado</h2>
+      <p class="empty-day" id="h-success-text" style="margin-bottom: 14px;"></p>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="h-goto">Ir a ese día</button>
+        <button class="btn-cancel" id="h-done">Listo</button>
+      </div>
     </div>
-    <div class="panel-msg hidden" id="h-msg"></div>
   </div>
 
   <div id="panel-mover" class="panel hidden">
@@ -974,17 +985,27 @@
   }
 
   // ---------- Bloquear horario ----------
+  let hFechaBloqueada = null;
+
   document.getElementById('btn-bloquear-horario').addEventListener('click', () => {
+    document.getElementById('h-fecha').value = currentDate;
     ['h-inicio', 'h-fin', 'h-motivo'].forEach((id) => document.getElementById(id).value = '');
     setMsg('h-msg', '', '');
+    document.getElementById('h-form-wrap').classList.remove('hidden');
+    document.getElementById('h-success-wrap').classList.add('hidden');
     showOnly(panelHorario);
   });
   document.getElementById('h-cancel').addEventListener('click', () => showOnly(null));
   document.getElementById('h-confirm').addEventListener('click', () => {
+    const fecha = document.getElementById('h-fecha').value;
     const horaInicio = document.getElementById('h-inicio').value;
     const horaFin = document.getElementById('h-fin').value;
     const motivo = document.getElementById('h-motivo').value.trim();
 
+    if (!fecha) {
+      setMsg('h-msg', 'Elegí un día.', 'error');
+      return;
+    }
     if (!horaInicio || !horaFin) {
       setMsg('h-msg', 'Completá desde y hasta.', 'error');
       return;
@@ -994,14 +1015,29 @@
     fetch('/api/gestion/bloquear-horario', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: currentDate, horaInicio, horaFin, motivo }),
+      body: JSON.stringify({ key: gestionKey, date: fecha, horaInicio, horaFin, motivo }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
-        setMsg('h-msg', res.message, res.success ? 'ok' : 'error');
-        if (res.success) { showOnly(null); cargarAgenda(); }
+        if (res.success) {
+          hFechaBloqueada = fecha;
+          document.getElementById('h-success-text').textContent = res.message;
+          document.getElementById('h-form-wrap').classList.add('hidden');
+          document.getElementById('h-success-wrap').classList.remove('hidden');
+        } else {
+          setMsg('h-msg', res.message, 'error');
+        }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('h-msg', 'Error de red.', 'error'); });
+  });
+  document.getElementById('h-done').addEventListener('click', () => showOnly(null));
+  document.getElementById('h-goto').addEventListener('click', () => {
+    if (!hFechaBloqueada) { showOnly(null); return; }
+    currentDate = hFechaBloqueada;
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    showOnly(null);
+    cargarAgenda();
   });
 
   // ---------- Bloquear / desbloquear día completo ----------
