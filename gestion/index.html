@@ -43,22 +43,24 @@
   .sidebar { display: none; }
 
   @media (min-width: 1000px) {
-    #app { max-width: 1220px; display: flex; align-items: flex-start; gap: 40px; padding: 40px 32px 60px; }
+    #app { max-width: 1260px; display: flex; align-items: flex-start; gap: 40px; padding: 40px 32px 60px; }
     .main-content { flex: 1; }
     .topbar { display: none; }
     .sidebar {
       display: flex;
       flex-direction: column;
-      width: 300px;
+      width: 340px;
       flex-shrink: 0;
       background: var(--white);
       border-radius: 18px;
-      padding: 34px 28px;
+      padding: 36px 30px;
       box-shadow: 0 1px 8px rgba(30,58,95,.06);
       position: sticky;
       top: 40px;
     }
-    .sidebar img { height: 104px; margin-bottom: 24px; }
+    /* Solo se fija el ancho; el alto queda en "auto" para que escale
+       proporcional al archivo real (1779x514) y no se deforme. */
+    .sidebar img { width: 260px; height: auto; margin-bottom: 24px; align-self: flex-start; }
     .sidebar h1 { font-size: 23px; margin-bottom: 5px; }
     .sidebar p { color: var(--muted); font-size: 13.5px; text-transform: capitalize; margin-bottom: 20px; }
     .sidebar-logout { margin-left: 0; margin-top: auto; text-align: left; padding-top: 18px; font-size: 13px; }
