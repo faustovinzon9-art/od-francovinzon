@@ -35,9 +35,34 @@
 
   /* App shell */
   #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
+  .main-content { min-width: 0; }
   .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
   .topbar img { height: 38px; }
   .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  .sidebar { display: none; }
+
+  @media (min-width: 1000px) {
+    #app { max-width: 1160px; display: flex; align-items: flex-start; gap: 40px; padding: 40px 32px 60px; }
+    .main-content { flex: 1; }
+    .topbar { display: none; }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--white);
+      border-radius: 18px;
+      padding: 28px 24px;
+      box-shadow: 0 1px 8px rgba(30,58,95,.06);
+      position: sticky;
+      top: 40px;
+    }
+    .sidebar img { height: 56px; margin-bottom: 24px; }
+    .sidebar h1 { font-size: 21px; margin-bottom: 4px; }
+    .sidebar p { color: var(--muted); font-size: 12.5px; text-transform: capitalize; margin-bottom: 28px; }
+    .sidebar-logout { margin-left: 0; margin-top: auto; text-align: left; }
+  }
 
   .datebar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .nav-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 15px; flex-shrink: 0; }
@@ -78,7 +103,7 @@
   .row .hora { font-weight: 700; color: var(--navy); width: 46px; flex-shrink: 0; font-size: 13px; }
   .row .info { flex: 1; min-width: 0; }
   .row .nombre { font-weight: 600; font-size: 13.5px; }
-  .row .detalle { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .detalle { color: var(--muted); font-size: 13px; font-weight: 500; }
   .badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 3px 8px; border-radius: 100px; flex-shrink: 0; color: var(--white); }
   .badge.turno { background: var(--turno); }
   .badge.sobreturno { background: var(--sobreturno); }
@@ -118,6 +143,16 @@
 </div>
 
 <div id="app" class="hidden">
+
+  <aside class="sidebar">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
+    <h1 id="sidebar-greeting">Hola, Ayelen</h1>
+    <p id="sidebar-date"></p>
+    <button class="logout-btn sidebar-logout" id="logout-btn-desktop">Salir</button>
+  </aside>
+
+  <div class="main-content">
+
   <div class="topbar">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <button class="logout-btn" id="logout-btn">Salir</button>
@@ -226,6 +261,8 @@
   </div>
 
   <div class="agenda" id="agenda"></div>
+
+  </div>
 </div>
 
 <script>
@@ -277,13 +314,15 @@
   loginBtn.addEventListener('click', tryLogin);
   keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
 
-  document.getElementById('logout-btn').addEventListener('click', () => {
+  function logout() {
     sessionStorage.removeItem('gestionKey');
     gestionKey = '';
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     keyInput.value = '';
-  });
+  }
+  document.getElementById('logout-btn').addEventListener('click', logout);
+  document.getElementById('logout-btn-desktop').addEventListener('click', logout);
 
   function onUnauthorized() {
     sessionStorage.removeItem('gestionKey');
@@ -299,6 +338,8 @@
     appEl.classList.remove('hidden');
     dateInput.value = currentDate;
     updateTodayBtn();
+    document.getElementById('sidebar-date').textContent =
+      new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
     cargarAgenda();
   }
 
@@ -350,8 +391,16 @@
     return agendaItems.find((it) => it.tipo === 'bloqueo' && it.allDay);
   }
 
+  function extraerMotivo(description, tipo) {
+    if (tipo === 'bloqueo') return '';
+    const sinTags = (description || '').replace(/<[^>]*>/g, ' ');
+    const match = sinTags.match(/Motivo\s*:?\s*\n?\s*([^\n]+)/i);
+    const motivo = match ? match[1].replace(/<[^>]*>/g, '').trim() : '';
+    return motivo || 'Sin motivo especificado';
+  }
+
   function renderRow(it, idx) {
-    const desc = (it.description || '').split('\n').filter((l) => !l.includes('BLOQUEO_AUTOMATICO_TURNOS')).join(' · ');
+    const desc = extraerMotivo(it.description, it.tipo);
     const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
     const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
     const acciones = it.tipo === 'bloqueo'
