@@ -36,14 +36,34 @@
   /* App shell */
   #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
   .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .topbar img { height: 30px; }
-  .topbar h1 { font-size: 16px; }
+  .topbar img { height: 38px; }
   .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
 
   .datebar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
-  .nav-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 15px; }
+  .nav-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 15px; flex-shrink: 0; }
+  .today-btn { border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 11.5px; font-weight: 700; padding: 0 12px; height: 32px; flex-shrink: 0; }
+  .today-btn:disabled { opacity: .4; cursor: default; }
   #date-input { flex: 1; border: none; background: transparent; font-weight: 600; color: var(--navy); text-align: center; padding: 6px; }
   #date-input:focus { outline: none; }
+
+  .mc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .mc-month-label { font-weight: 700; font-size: 13.5px; color: var(--navy); text-transform: capitalize; }
+  .mc-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 4px; text-transform: uppercase; }
+  .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 4px; margin-bottom: 12px; }
+  .mc-cell { display: flex; align-items: center; justify-content: center; }
+  .mc-day { width: 26px; height: 26px; border-radius: 50%; border: none; background: transparent; font-family: 'Inter', sans-serif; font-size: 11.5px; font-weight: 600; color: var(--line); }
+  .mc-day.available { background: var(--navy); color: var(--white); cursor: pointer; }
+  .mc-day.selected { box-shadow: inset 0 0 0 2px var(--gold); }
+  .empty-day { color: var(--muted); font-size: 12.5px; }
+  .slots-title { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+  .slots { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+  .slot-btn { padding: 7px 13px; border: 1.5px solid var(--navy-soft); border-radius: 100px; background: var(--white); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; }
+  .slot-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
+
+  .ahora-row { padding: 7px 14px; }
+  .ahora-line { display: flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; color: var(--bloqueo); text-transform: uppercase; letter-spacing: .3px; }
+  .ahora-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bloqueo); flex-shrink: 0; }
+  .ahora-line::after { content: ''; flex: 1; height: 1px; background: var(--bloqueo); opacity: .3; }
 
   .actions-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .action-btn { padding: 8px 14px; border-radius: 9px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 12.5px; font-weight: 600; }
@@ -99,8 +119,7 @@
 
 <div id="app" class="hidden">
   <div class="topbar">
-    <img src="../assets/isologo.png" alt="">
-    <h1>Agenda</h1>
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <button class="logout-btn" id="logout-btn">Salir</button>
   </div>
 
@@ -108,6 +127,7 @@
     <button class="nav-btn" id="prev-day">‹</button>
     <input type="date" id="date-input">
     <button class="nav-btn" id="next-day">›</button>
+    <button class="today-btn" id="today-btn">Hoy</button>
   </div>
 
   <div class="actions-row">
@@ -117,8 +137,41 @@
     <button class="action-btn danger" id="btn-bloquear-horario">Bloquear un horario</button>
   </div>
 
+  <div id="panel-turno-calendario" class="panel hidden">
+    <h2>Nuevo turno</h2>
+    <div class="mc-header">
+      <button class="nav-btn" id="mc-prev">‹</button>
+      <div class="mc-month-label" id="mc-month-label"></div>
+      <button class="nav-btn" id="mc-next">›</button>
+    </div>
+    <div class="mc-weekdays"><span>D</span><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span></div>
+    <div id="mc-days"></div>
+
+    <div id="mc-slots-wrap" class="hidden">
+      <div class="slots-title" id="mc-slots-title"></div>
+      <div class="slots" id="mc-slots"></div>
+    </div>
+
+    <div id="mc-form-wrap" class="hidden">
+      <div class="field-row">
+        <div class="field"><label>Nombre</label><input type="text" id="mc-nombre"></div>
+        <div class="field"><label>Apellido</label><input type="text" id="mc-apellido"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Teléfono (opcional)</label><input type="text" id="mc-telefono"></div>
+      </div>
+      <div class="field"><label>Motivo</label><input type="text" id="mc-motivo"></div>
+    </div>
+
+    <div class="panel-actions">
+      <button class="btn-confirm" id="mc-confirm">Guardar</button>
+      <button class="btn-cancel" id="mc-cancel">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="mc-msg"></div>
+  </div>
+
   <div id="panel-turno" class="panel hidden">
-    <h2 id="panel-turno-title">Nuevo turno</h2>
+    <h2>Nuevo sobreturno</h2>
     <div class="field-row">
       <div class="field"><label>Nombre</label><input type="text" id="t-nombre"></div>
       <div class="field"><label>Apellido</label><input type="text" id="t-apellido"></div>
@@ -178,6 +231,7 @@
 <script>
 (function () {
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
   const todayStr = () => {
     const d = new Date();
@@ -200,12 +254,14 @@
   const btnToggleBloqueoDia = document.getElementById('btn-toggle-bloqueo-dia');
 
   const panelTurno = document.getElementById('panel-turno');
+  const panelTurnoCalendario = document.getElementById('panel-turno-calendario');
   const panelHorario = document.getElementById('panel-horario');
   const panelMover = document.getElementById('panel-mover');
   const panelBloqueoDia = document.getElementById('panel-bloqueo-dia');
+  const todayBtn = document.getElementById('today-btn');
 
   function showOnly(panel) {
-    [panelTurno, panelHorario, panelMover, panelBloqueoDia].forEach((p) => p.classList.add('hidden'));
+    [panelTurno, panelTurnoCalendario, panelHorario, panelMover, panelBloqueoDia].forEach((p) => p.classList.add('hidden'));
     if (panel) panel.classList.remove('hidden');
   }
 
@@ -242,23 +298,37 @@
     loginScreen.classList.add('hidden');
     appEl.classList.remove('hidden');
     dateInput.value = currentDate;
+    updateTodayBtn();
     cargarAgenda();
   }
 
   // ---------- Fecha ----------
   dateInput.addEventListener('change', () => {
     currentDate = dateInput.value;
+    updateTodayBtn();
     cargarAgenda();
   });
   document.getElementById('prev-day').addEventListener('click', () => cambiarDia(-1));
   document.getElementById('next-day').addEventListener('click', () => cambiarDia(1));
+  todayBtn.addEventListener('click', () => {
+    if (currentDate === todayStr()) return;
+    currentDate = todayStr();
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    cargarAgenda();
+  });
 
   function cambiarDia(delta) {
     const [y, m, d] = currentDate.split('-').map(Number);
     const dt = new Date(Date.UTC(y, m - 1, d + delta));
     currentDate = `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
     dateInput.value = currentDate;
+    updateTodayBtn();
     cargarAgenda();
+  }
+
+  function updateTodayBtn() {
+    todayBtn.disabled = currentDate === todayStr();
   }
 
   // ---------- Agenda ----------
@@ -280,37 +350,54 @@
     return agendaItems.find((it) => it.tipo === 'bloqueo' && it.allDay);
   }
 
+  function renderRow(it, idx) {
+    const desc = (it.description || '').split('\n').filter((l) => !l.includes('BLOQUEO_AUTOMATICO_TURNOS')).join(' · ');
+    const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
+    const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
+    const acciones = it.tipo === 'bloqueo'
+      ? ''
+      : `<div class="row-actions">
+           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
+           <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
+         </div>`;
+    return `
+      <div class="row">
+        <div class="hora">${hora}</div>
+        <div class="info">
+          <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
+          <div class="detalle">${escapeHtml(desc)}</div>
+        </div>
+        <span class="badge ${it.tipo}">${badgeLabel}</span>
+        ${acciones}
+      </div>`;
+  }
+
+  function renderAhoraRow(now) {
+    return `<div class="row ahora-row"><div class="ahora-line"><span class="ahora-dot"></span> Ahora · ${fmtHora(now)}</div></div>`;
+  }
+
   function renderAgenda() {
     const bloqueoCompleto = diaBloqueadoCompleto();
     btnToggleBloqueoDia.textContent = bloqueoCompleto ? 'Desbloquear este día' : 'Bloquear este día completo';
     btnToggleBloqueoDia.classList.toggle('danger', !!bloqueoCompleto);
 
-    if (agendaItems.length === 0) {
+    const esHoy = currentDate === todayStr();
+
+    if (agendaItems.length === 0 && !esHoy) {
       agendaEl.innerHTML = '<div class="agenda-empty">No hay turnos, sobreturnos ni bloqueos este día.</div>';
       return;
     }
 
-    agendaEl.innerHTML = agendaItems.map((it, idx) => {
-      const desc = (it.description || '').split('\n').filter((l) => !l.includes('BLOQUEO_AUTOMATICO_TURNOS')).join(' · ');
-      const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
-      const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
-      const acciones = it.tipo === 'bloqueo'
-        ? ''
-        : `<div class="row-actions">
-             <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
-             <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
-           </div>`;
-      return `
-        <div class="row">
-          <div class="hora">${hora}</div>
-          <div class="info">
-            <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
-            <div class="detalle">${escapeHtml(desc)}</div>
-          </div>
-          <span class="badge ${it.tipo}">${badgeLabel}</span>
-          ${acciones}
-        </div>`;
-    }).join('');
+    const rows = agendaItems.map((it, idx) => renderRow(it, idx));
+
+    if (esHoy) {
+      const now = new Date();
+      let insertAt = agendaItems.findIndex((it) => new Date(it.start) > now);
+      if (insertAt === -1) insertAt = rows.length;
+      rows.splice(insertAt, 0, renderAhoraRow(now));
+    }
+
+    agendaEl.innerHTML = rows.join('');
 
     agendaEl.querySelectorAll('[data-action]').forEach((btn) => {
       const item = agendaItems[parseInt(btn.dataset.idx, 10)];
@@ -327,17 +414,12 @@
     return div.innerHTML;
   }
 
-  // ---------- Nuevo turno / sobreturno ----------
-  document.getElementById('btn-nuevo-turno').addEventListener('click', () => abrirTurno(false));
-  document.getElementById('btn-nuevo-sobreturno').addEventListener('click', () => abrirTurno(true));
+  // ---------- Nuevo sobreturno (hora libre, calendario de sobreturnos) ----------
+  document.getElementById('btn-nuevo-sobreturno').addEventListener('click', abrirTurno);
   document.getElementById('t-cancel').addEventListener('click', () => showOnly(null));
   document.getElementById('t-confirm').addEventListener('click', confirmarTurno);
 
-  let sobreturnoActual = false;
-
-  function abrirTurno(sobreturno) {
-    sobreturnoActual = sobreturno;
-    document.getElementById('panel-turno-title').textContent = sobreturno ? 'Nuevo sobreturno' : 'Nuevo turno';
+  function abrirTurno() {
     ['t-nombre', 't-apellido', 't-hora', 't-telefono', 't-motivo'].forEach((id) => document.getElementById(id).value = '');
     setMsg('t-msg', '', '');
     showOnly(panelTurno);
@@ -359,7 +441,7 @@
     fetch('/api/gestion/crear-turno', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: currentDate, time: hora, nombre, apellido, telefono, motivo, sobreturno: sobreturnoActual }),
+      body: JSON.stringify({ key: gestionKey, date: currentDate, time: hora, nombre, apellido, telefono, motivo, sobreturno: true }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -367,6 +449,136 @@
         if (res.success) { showOnly(null); cargarAgenda(); }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('t-msg', 'Error de red.', 'error'); });
+  }
+
+  // ---------- Nuevo turno (calendario + horarios, igual que /turnos) ----------
+  let mcYear, mcMonth, mcAvailability = {}, mcFecha = null, mcHora = null;
+
+  document.getElementById('btn-nuevo-turno').addEventListener('click', abrirNuevoTurno);
+  document.getElementById('mc-cancel').addEventListener('click', () => showOnly(null));
+  document.getElementById('mc-prev').addEventListener('click', () => cambiarMesMC(-1));
+  document.getElementById('mc-next').addEventListener('click', () => cambiarMesMC(1));
+  document.getElementById('mc-confirm').addEventListener('click', confirmarNuevoTurno);
+
+  function abrirNuevoTurno() {
+    const [y, m] = currentDate.split('-').map(Number);
+    mcYear = y; mcMonth = m;
+    mcFecha = null; mcHora = null;
+    document.getElementById('mc-slots-wrap').classList.add('hidden');
+    document.getElementById('mc-form-wrap').classList.add('hidden');
+    ['mc-nombre', 'mc-apellido', 'mc-telefono', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    setMsg('mc-msg', '', '');
+    showOnly(panelTurnoCalendario);
+    cargarMesMC();
+  }
+
+  function cambiarMesMC(delta) {
+    let m = mcMonth + delta, y = mcYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    mcYear = y; mcMonth = m;
+    mcFecha = null; mcHora = null;
+    document.getElementById('mc-slots-wrap').classList.add('hidden');
+    document.getElementById('mc-form-wrap').classList.add('hidden');
+    cargarMesMC();
+  }
+
+  function cargarMesMC() {
+    document.getElementById('mc-month-label').textContent = MESES[mcMonth - 1] + ' ' + mcYear;
+    document.getElementById('mc-days').innerHTML = '<div class="loading-note">Cargando...</div>';
+    fetch(`/api/disponibilidad-mes?year=${mcYear}&month=${mcMonth}`)
+      .then((r) => r.json())
+      .then((data) => { mcAvailability = data; renderMCDays(); })
+      .catch(() => { document.getElementById('mc-days').innerHTML = '<div class="loading-note">No se pudo cargar.</div>'; });
+  }
+
+  function renderMCDays() {
+    const firstDow = new Date(mcYear, mcMonth - 1, 1).getDay();
+    const daysInMonth = new Date(mcYear, mcMonth, 0).getDate();
+    let html = '<div class="mc-grid">';
+    for (let i = 0; i < firstDow; i++) html += '<div class="mc-cell"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const isAvailable = !!mcAvailability[d];
+      const dateStr = `${mcYear}-${pad2(mcMonth)}-${pad2(d)}`;
+      const isSelected = mcFecha === dateStr;
+      const cls = ['mc-day', isAvailable && 'available', isSelected && 'selected'].filter(Boolean).join(' ');
+      html += `<div class="mc-cell"><button type="button" class="${cls}" data-day="${d}" ${isAvailable ? '' : 'disabled'}>${d}</button></div>`;
+    }
+    html += '</div>';
+    document.getElementById('mc-days').innerHTML = html;
+    document.querySelectorAll('#mc-days .mc-day.available').forEach((btn) => {
+      btn.addEventListener('click', () => seleccionarDiaMC(parseInt(btn.dataset.day, 10)));
+    });
+  }
+
+  function seleccionarDiaMC(dia) {
+    mcFecha = `${mcYear}-${pad2(mcMonth)}-${pad2(dia)}`;
+    mcHora = null;
+    renderMCDays();
+    document.getElementById('mc-form-wrap').classList.add('hidden');
+
+    const wrap = document.getElementById('mc-slots-wrap');
+    wrap.classList.remove('hidden');
+    document.getElementById('mc-slots-title').textContent = `Horarios para el ${dia} de ${MESES[mcMonth - 1]}`;
+    document.getElementById('mc-slots').innerHTML = '<span class="empty-day">Buscando horarios...</span>';
+
+    fetch(`/api/horarios-dia?date=${mcFecha}`)
+      .then((r) => r.json())
+      .then((slots) => renderMCSlots(slots))
+      .catch(() => { document.getElementById('mc-slots').innerHTML = '<span class="empty-day">No se pudieron cargar los horarios.</span>'; });
+  }
+
+  function renderMCSlots(slots) {
+    const el = document.getElementById('mc-slots');
+    if (!slots || slots.length === 0) {
+      el.innerHTML = '<span class="empty-day">No quedan horarios libres este día.</span>';
+      return;
+    }
+    el.innerHTML = slots.map((hora) =>
+      `<button type="button" class="slot-btn${mcHora === hora ? ' selected' : ''}" data-hora="${hora}">${hora}</button>`
+    ).join('');
+    el.querySelectorAll('.slot-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        mcHora = btn.dataset.hora;
+        renderMCSlots(slots);
+        document.getElementById('mc-form-wrap').classList.remove('hidden');
+      });
+    });
+  }
+
+  function confirmarNuevoTurno() {
+    const nombre = document.getElementById('mc-nombre').value.trim();
+    const apellido = document.getElementById('mc-apellido').value.trim();
+    const telefono = document.getElementById('mc-telefono').value.trim();
+    const motivo = document.getElementById('mc-motivo').value.trim();
+
+    if (!mcFecha || !mcHora) {
+      setMsg('mc-msg', 'Elegí un día y un horario.', 'error');
+      return;
+    }
+    if (!nombre || !motivo) {
+      setMsg('mc-msg', 'Completá nombre y motivo.', 'error');
+      return;
+    }
+
+    setMsg('mc-msg', 'Guardando...', '');
+    fetch('/api/gestion/crear-turno', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, motivo, sobreturno: false }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        setMsg('mc-msg', res.message, res.success ? 'ok' : 'error');
+        if (res.success) {
+          showOnly(null);
+          currentDate = mcFecha;
+          dateInput.value = currentDate;
+          updateTodayBtn();
+          cargarAgenda();
+        }
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') setMsg('mc-msg', 'Error de red.', 'error'); });
   }
 
   // ---------- Bloquear horario ----------
