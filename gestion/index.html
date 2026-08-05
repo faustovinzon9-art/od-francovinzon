@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de gestión | Franco Vinzón Odontólogo</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/isologo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
+    --cream: #FAF9F6; --line: #E9E4D8; --white: #FFFFFF;
+    --text: #2A2A2A; --muted: #8A8578;
+    --turno: #1E3A5F; --sobreturno: #D4A24C; --bloqueo: #C1443A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
+  .hidden { display: none !important; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select { font-family: inherit; font-size: 14px; }
+
+  /* Login */
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-box { background: var(--white); border-radius: 20px; padding: 32px 28px; max-width: 320px; width: 100%; box-shadow: 0 10px 40px rgba(30,58,95,.12); text-align: center; }
+  .login-box img { height: 40px; margin-bottom: 18px; }
+  .login-box h1 { font-size: 20px; margin-bottom: 18px; }
+  .login-box input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .login-box input:focus { outline: none; border-color: var(--gold); }
+  .login-box button { width: 100%; background: var(--navy); color: var(--white); border: none; padding: 11px; border-radius: 10px; font-weight: 600; }
+  .login-error { color: var(--bloqueo); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+
+  /* App shell */
+  #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
+  .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .topbar img { height: 30px; }
+  .topbar h1 { font-size: 16px; }
+  .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  .datebar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .nav-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 15px; }
+  #date-input { flex: 1; border: none; background: transparent; font-weight: 600; color: var(--navy); text-align: center; padding: 6px; }
+  #date-input:focus { outline: none; }
+
+  .actions-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .action-btn { padding: 8px 14px; border-radius: 9px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 12.5px; font-weight: 600; }
+  .action-btn.primary { background: var(--navy); color: var(--white); }
+  .action-btn.gold { border-color: var(--gold); color: var(--gold); }
+  .action-btn.danger { border-color: var(--bloqueo); color: var(--bloqueo); }
+
+  .agenda { background: var(--white); border-radius: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); overflow: hidden; margin-bottom: 16px; }
+  .agenda-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row .hora { font-weight: 700; color: var(--navy); width: 46px; flex-shrink: 0; font-size: 13px; }
+  .row .info { flex: 1; min-width: 0; }
+  .row .nombre { font-weight: 600; font-size: 13.5px; }
+  .row .detalle { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 3px 8px; border-radius: 100px; flex-shrink: 0; color: var(--white); }
+  .badge.turno { background: var(--turno); }
+  .badge.sobreturno { background: var(--sobreturno); }
+  .badge.bloqueo { background: var(--bloqueo); }
+  .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
+
+  .panel { background: var(--white); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .panel h2 { font-size: 15px; margin-bottom: 12px; }
+  .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 130px; margin-bottom: 10px; }
+  .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
+  .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .panel-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .panel-actions button { padding: 9px 18px; border-radius: 9px; font-weight: 600; font-size: 13px; border: none; }
+  .btn-confirm { background: var(--gold); color: var(--white); }
+  .btn-cancel { background: var(--cream); color: var(--navy); }
+  .panel-msg { margin-top: 10px; font-size: 12.5px; font-weight: 600; }
+  .panel-msg.error { color: var(--bloqueo); }
+  .panel-msg.ok { color: #1a8f4c; }
+
+  .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <img src="../assets/isologo.png" alt="">
+    <h1>Panel de gestión</h1>
+    <input type="password" id="key-input" placeholder="Clave de acceso" autocomplete="off">
+    <button id="login-btn">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <img src="../assets/isologo.png" alt="">
+    <h1>Agenda</h1>
+    <button class="logout-btn" id="logout-btn">Salir</button>
+  </div>
+
+  <div class="datebar">
+    <button class="nav-btn" id="prev-day">‹</button>
+    <input type="date" id="date-input">
+    <button class="nav-btn" id="next-day">›</button>
+  </div>
+
+  <div class="actions-row">
+    <button class="action-btn primary" id="btn-nuevo-turno">+ Nuevo turno</button>
+    <button class="action-btn gold" id="btn-nuevo-sobreturno">+ Nuevo sobreturno</button>
+    <button class="action-btn" id="btn-toggle-bloqueo-dia">Bloquear este día completo</button>
+    <button class="action-btn danger" id="btn-bloquear-horario">Bloquear un horario</button>
+  </div>
+
+  <div id="panel-turno" class="panel hidden">
+    <h2 id="panel-turno-title">Nuevo turno</h2>
+    <div class="field-row">
+      <div class="field"><label>Nombre</label><input type="text" id="t-nombre"></div>
+      <div class="field"><label>Apellido</label><input type="text" id="t-apellido"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Hora</label><input type="time" id="t-hora" step="900"></div>
+      <div class="field"><label>Teléfono (opcional)</label><input type="text" id="t-telefono"></div>
+    </div>
+    <div class="field"><label>Motivo</label><input type="text" id="t-motivo"></div>
+    <div class="panel-actions">
+      <button class="btn-confirm" id="t-confirm">Guardar</button>
+      <button class="btn-cancel" id="t-cancel">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="t-msg"></div>
+  </div>
+
+  <div id="panel-horario" class="panel hidden">
+    <h2>Bloquear un horario</h2>
+    <div class="field-row">
+      <div class="field"><label>Desde</label><input type="time" id="h-inicio" step="900"></div>
+      <div class="field"><label>Hasta</label><input type="time" id="h-fin" step="900"></div>
+    </div>
+    <div class="field"><label>Motivo (opcional)</label><input type="text" id="h-motivo"></div>
+    <div class="panel-actions">
+      <button class="btn-confirm" id="h-confirm">Bloquear</button>
+      <button class="btn-cancel" id="h-cancel">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="h-msg"></div>
+  </div>
+
+  <div id="panel-mover" class="panel hidden">
+    <h2>Mover</h2>
+    <div class="field-row">
+      <div class="field"><label>Nueva fecha</label><input type="date" id="m-fecha"></div>
+      <div class="field"><label>Nueva hora</label><input type="time" id="m-hora" step="900"></div>
+    </div>
+    <div class="panel-actions">
+      <button class="btn-confirm" id="m-confirm">Mover</button>
+      <button class="btn-cancel" id="m-cancel">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="m-msg"></div>
+  </div>
+
+  <div id="panel-bloqueo-dia" class="panel hidden">
+    <h2 id="panel-bloqueo-dia-title">Bloquear este día completo</h2>
+    <div class="field"><label>Motivo (opcional)</label><input type="text" id="b-motivo"></div>
+    <div class="panel-actions">
+      <button class="btn-confirm" id="b-confirm">Confirmar</button>
+      <button class="btn-cancel" id="b-cancel">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="b-msg"></div>
+  </div>
+
+  <div class="agenda" id="agenda"></div>
+</div>
+
+<script>
+(function () {
+  const TIME_ZONE = 'America/Argentina/Buenos_Aires';
+  const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  const fmtHora = (iso) => new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+
+  let gestionKey = sessionStorage.getItem('gestionKey') || '';
+  let currentDate = todayStr();
+  let agendaItems = [];
+  let moverContext = null; // { eventId, calendarId }
+
+  const loginScreen = document.getElementById('login-screen');
+  const appEl = document.getElementById('app');
+  const keyInput = document.getElementById('key-input');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
+  const dateInput = document.getElementById('date-input');
+  const agendaEl = document.getElementById('agenda');
+  const btnToggleBloqueoDia = document.getElementById('btn-toggle-bloqueo-dia');
+
+  const panelTurno = document.getElementById('panel-turno');
+  const panelHorario = document.getElementById('panel-horario');
+  const panelMover = document.getElementById('panel-mover');
+  const panelBloqueoDia = document.getElementById('panel-bloqueo-dia');
+
+  function showOnly(panel) {
+    [panelTurno, panelHorario, panelMover, panelBloqueoDia].forEach((p) => p.classList.add('hidden'));
+    if (panel) panel.classList.remove('hidden');
+  }
+
+  // ---------- Login ----------
+  function tryLogin() {
+    const k = keyInput.value.trim();
+    if (!k) return;
+    gestionKey = k;
+    sessionStorage.setItem('gestionKey', k);
+    loginError.textContent = '';
+    verificarYArrancar();
+  }
+  loginBtn.addEventListener('click', tryLogin);
+  keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('gestionKey');
+    gestionKey = '';
+    appEl.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    keyInput.value = '';
+  });
+
+  function onUnauthorized() {
+    sessionStorage.removeItem('gestionKey');
+    gestionKey = '';
+    appEl.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    loginError.textContent = 'Clave incorrecta.';
+  }
+
+  function verificarYArrancar() {
+    if (!gestionKey) return;
+    loginScreen.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    dateInput.value = currentDate;
+    cargarAgenda();
+  }
+
+  // ---------- Fecha ----------
+  dateInput.addEventListener('change', () => {
+    currentDate = dateInput.value;
+    cargarAgenda();
+  });
+  document.getElementById('prev-day').addEventListener('click', () => cambiarDia(-1));
+  document.getElementById('next-day').addEventListener('click', () => cambiarDia(1));
+
+  function cambiarDia(delta) {
+    const [y, m, d] = currentDate.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + delta));
+    currentDate = `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+    dateInput.value = currentDate;
+    cargarAgenda();
+  }
+
+  // ---------- Agenda ----------
+  function cargarAgenda() {
+    showOnly(null);
+    agendaEl.innerHTML = '<div class="loading-note">Cargando agenda...</div>';
+    fetch(`/api/gestion/turnos-dia?date=${currentDate}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => {
+        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+        return r.json();
+      })
+      .then((data) => { agendaItems = data; renderAgenda(); })
+      .catch((err) => {
+        if (err.message !== 'unauthorized') agendaEl.innerHTML = '<div class="agenda-empty">No se pudo cargar la agenda.</div>';
+      });
+  }
+
+  function diaBloqueadoCompleto() {
+    return agendaItems.find((it) => it.tipo === 'bloqueo' && it.allDay);
+  }
+
+  function renderAgenda() {
+    const bloqueoCompleto = diaBloqueadoCompleto();
+    btnToggleBloqueoDia.textContent = bloqueoCompleto ? 'Desbloquear este día' : 'Bloquear este día completo';
+    btnToggleBloqueoDia.classList.toggle('danger', !!bloqueoCompleto);
+
+    if (agendaItems.length === 0) {
+      agendaEl.innerHTML = '<div class="agenda-empty">No hay turnos, sobreturnos ni bloqueos este día.</div>';
+      return;
+    }
+
+    agendaEl.innerHTML = agendaItems.map((it, idx) => {
+      const desc = (it.description || '').split('\n').filter((l) => !l.includes('BLOQUEO_AUTOMATICO_TURNOS')).join(' · ');
+      const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
+      const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
+      const acciones = it.tipo === 'bloqueo'
+        ? ''
+        : `<div class="row-actions">
+             <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
+             <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
+           </div>`;
+      return `
+        <div class="row">
+          <div class="hora">${hora}</div>
+          <div class="info">
+            <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
+            <div class="detalle">${escapeHtml(desc)}</div>
+          </div>
+          <span class="badge ${it.tipo}">${badgeLabel}</span>
+          ${acciones}
+        </div>`;
+    }).join('');
+
+    agendaEl.querySelectorAll('[data-action]').forEach((btn) => {
+      const item = agendaItems[parseInt(btn.dataset.idx, 10)];
+      btn.addEventListener('click', () => {
+        if (btn.dataset.action === 'mover') abrirMover(item);
+        else cancelarItem(item);
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ---------- Nuevo turno / sobreturno ----------
+  document.getElementById('btn-nuevo-turno').addEventListener('click', () => abrirTurno(false));
+  document.getElementById('btn-nuevo-sobreturno').addEventListener('click', () => abrirTurno(true));
+  document.getElementById('t-cancel').addEventListener('click', () => showOnly(null));
+  document.getElementById('t-confirm').addEventListener('click', confirmarTurno);
+
+  let sobreturnoActual = false;
+
+  function abrirTurno(sobreturno) {
+    sobreturnoActual = sobreturno;
+    document.getElementById('panel-turno-title').textContent = sobreturno ? 'Nuevo sobreturno' : 'Nuevo turno';
+    ['t-nombre', 't-apellido', 't-hora', 't-telefono', 't-motivo'].forEach((id) => document.getElementById(id).value = '');
+    setMsg('t-msg', '', '');
+    showOnly(panelTurno);
+  }
+
+  function confirmarTurno() {
+    const nombre = document.getElementById('t-nombre').value.trim();
+    const apellido = document.getElementById('t-apellido').value.trim();
+    const hora = document.getElementById('t-hora').value;
+    const telefono = document.getElementById('t-telefono').value.trim();
+    const motivo = document.getElementById('t-motivo').value.trim();
+
+    if (!nombre || !motivo || !hora) {
+      setMsg('t-msg', 'Completá nombre, hora y motivo.', 'error');
+      return;
+    }
+
+    setMsg('t-msg', 'Guardando...', '');
+    fetch('/api/gestion/crear-turno', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, date: currentDate, time: hora, nombre, apellido, telefono, motivo, sobreturno: sobreturnoActual }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        setMsg('t-msg', res.message, res.success ? 'ok' : 'error');
+        if (res.success) { showOnly(null); cargarAgenda(); }
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') setMsg('t-msg', 'Error de red.', 'error'); });
+  }
+
+  // ---------- Bloquear horario ----------
+  document.getElementById('btn-bloquear-horario').addEventListener('click', () => {
+    ['h-inicio', 'h-fin', 'h-motivo'].forEach((id) => document.getElementById(id).value = '');
+    setMsg('h-msg', '', '');
+    showOnly(panelHorario);
+  });
+  document.getElementById('h-cancel').addEventListener('click', () => showOnly(null));
+  document.getElementById('h-confirm').addEventListener('click', () => {
+    const horaInicio = document.getElementById('h-inicio').value;
+    const horaFin = document.getElementById('h-fin').value;
+    const motivo = document.getElementById('h-motivo').value.trim();
+
+    if (!horaInicio || !horaFin) {
+      setMsg('h-msg', 'Completá desde y hasta.', 'error');
+      return;
+    }
+
+    setMsg('h-msg', 'Bloqueando...', '');
+    fetch('/api/gestion/bloquear-horario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, date: currentDate, horaInicio, horaFin, motivo }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        setMsg('h-msg', res.message, res.success ? 'ok' : 'error');
+        if (res.success) { showOnly(null); cargarAgenda(); }
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') setMsg('h-msg', 'Error de red.', 'error'); });
+  });
+
+  // ---------- Bloquear / desbloquear día completo ----------
+  btnToggleBloqueoDia.addEventListener('click', () => {
+    const bloqueado = diaBloqueadoCompleto();
+    if (bloqueado) {
+      if (!confirm('¿Desbloquear este día?')) return;
+      fetch('/api/gestion/desbloquear-dia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: gestionKey, date: currentDate }),
+      })
+        .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+        .then(() => cargarAgenda())
+        .catch(() => {});
+    } else {
+      document.getElementById('b-motivo').value = '';
+      setMsg('b-msg', '', '');
+      showOnly(panelBloqueoDia);
+    }
+  });
+  document.getElementById('b-cancel').addEventListener('click', () => showOnly(null));
+  document.getElementById('b-confirm').addEventListener('click', () => {
+    const motivo = document.getElementById('b-motivo').value.trim();
+    setMsg('b-msg', 'Bloqueando...', '');
+    fetch('/api/gestion/bloquear-dia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, date: currentDate, motivo }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        setMsg('b-msg', res.message, res.success ? 'ok' : 'error');
+        if (res.success) { showOnly(null); cargarAgenda(); }
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') setMsg('b-msg', 'Error de red.', 'error'); });
+  });
+
+  // ---------- Mover ----------
+  function abrirMover(item) {
+    moverContext = { eventId: item.id, calendarId: item.calendarId };
+    document.getElementById('m-fecha').value = currentDate;
+    document.getElementById('m-hora').value = fmtHora(item.start);
+    setMsg('m-msg', '', '');
+    showOnly(panelMover);
+  }
+  document.getElementById('m-cancel').addEventListener('click', () => showOnly(null));
+  document.getElementById('m-confirm').addEventListener('click', () => {
+    const nuevaFecha = document.getElementById('m-fecha').value;
+    const nuevaHora = document.getElementById('m-hora').value;
+    if (!nuevaFecha || !nuevaHora || !moverContext) return;
+
+    setMsg('m-msg', 'Moviendo...', '');
+    fetch('/api/gestion/mover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        setMsg('m-msg', res.message, res.success ? 'ok' : 'error');
+        if (res.success) { showOnly(null); cargarAgenda(); }
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') setMsg('m-msg', 'Error de red.', 'error'); });
+  });
+
+  // ---------- Cancelar ----------
+  function cancelarItem(item) {
+    if (!confirm(`¿Cancelar el turno de "${item.title}"?`)) return;
+    fetch('/api/gestion/cancelar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then(() => cargarAgenda())
+      .catch(() => {});
+  }
+
+  function setMsg(id, text, type) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'panel-msg' + (type ? ' ' + type : '');
+    if (!text) el.classList.add('hidden'); else el.classList.remove('hidden');
+  }
+
+  // ---------- Arranque ----------
+  if (gestionKey) verificarYArrancar();
+})();
+</script>
+</body>
+</html>
