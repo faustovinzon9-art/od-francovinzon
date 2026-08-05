@@ -37,7 +37,14 @@
   #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
   .main-content { min-width: 0; }
   .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .topbar img { height: 38px; }
+  .topbar img { width: 150px; height: auto; }
+
+  .search-mobile { background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .search-mobile input { width: 100%; border: none; background: transparent; padding: 6px 8px; font-size: 14px; color: var(--text); }
+  .search-mobile input:focus { outline: none; }
+  @media (min-width: 1000px) {
+    .search-mobile { display: none; }
+  }
   .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
 
   .sidebar { display: none; }
@@ -194,6 +201,10 @@
   <div class="topbar">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <button class="logout-btn" id="logout-btn">Salir</button>
+  </div>
+
+  <div class="search-mobile">
+    <input type="text" id="search-input-mobile" placeholder="Buscar paciente...">
   </div>
 
   <div class="datebar">
@@ -580,16 +591,24 @@
   }
 
   // ---------- Búsqueda de pacientes ----------
+  const searchInputMobile = document.getElementById('search-input-mobile');
   let searchDebounce = null;
-  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ejecutarBusqueda(searchInput.value.trim()); });
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchDebounce);
-    const q = searchInput.value.trim();
-    if (!q) return;
-    searchDebounce = setTimeout(() => ejecutarBusqueda(q), 500);
-  });
+
+  function wireSearchInput(el) {
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') ejecutarBusqueda(el.value.trim()); });
+    el.addEventListener('input', () => {
+      clearTimeout(searchDebounce);
+      const q = el.value.trim();
+      if (!q) return;
+      searchDebounce = setTimeout(() => ejecutarBusqueda(q), 500);
+    });
+  }
+  wireSearchInput(searchInput);
+  wireSearchInput(searchInputMobile);
+
   document.getElementById('search-back').addEventListener('click', () => {
     searchInput.value = '';
+    searchInputMobile.value = '';
     cambiarVista('dia');
   });
 
