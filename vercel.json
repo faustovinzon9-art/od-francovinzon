@@ -1,9 +1,0 @@
-{
-  "redirects": [
-    {
-      "source": "/turnos",
-      "destination": "https://script.google.com/macros/s/AKfycbz3iz8QL36v2soVJVFwNXE_pP2WkpaejfaDouC4fbBpgd1rIzP-1r6afiU2wI793CeDXg/exec",
-      "permanent": false
-    }
-  ]
-}
