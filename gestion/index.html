@@ -58,11 +58,36 @@
       position: sticky;
       top: 40px;
     }
-    .sidebar img { height: 56px; margin-bottom: 24px; }
+    .sidebar img { height: 76px; margin-bottom: 22px; }
     .sidebar h1 { font-size: 21px; margin-bottom: 4px; }
-    .sidebar p { color: var(--muted); font-size: 12.5px; text-transform: capitalize; margin-bottom: 28px; }
-    .sidebar-logout { margin-left: 0; margin-top: auto; text-align: left; }
+    .sidebar p { color: var(--muted); font-size: 12.5px; text-transform: capitalize; margin-bottom: 18px; }
+    .sidebar-logout { margin-left: 0; margin-top: auto; text-align: left; padding-top: 18px; }
   }
+
+  .sidebar-summary { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  .summary-line { font-size: 12.5px; color: var(--text); line-height: 1.4; }
+  .summary-line strong { color: var(--navy); font-weight: 700; }
+  .sidebar-search { margin-bottom: 4px; }
+  .sidebar-search input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 12.5px; }
+  .sidebar-search input:focus { outline: none; border-color: var(--gold); background: var(--white); }
+
+  .viewbar { display: flex; gap: 6px; margin-bottom: 14px; }
+  .view-btn { flex: 1; padding: 8px; border-radius: 9px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 12.5px; font-weight: 600; }
+  .view-btn.active { background: var(--navy); color: var(--white); }
+
+  .week-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .week-day-card { display: flex; align-items: center; gap: 12px; background: var(--white); border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); text-align: left; border: none; cursor: pointer; width: 100%; }
+  .week-day-card.is-today { box-shadow: 0 1px 8px rgba(30,58,95,.06), inset 0 0 0 2px var(--gold); }
+  .week-day-card .wd-date { width: 92px; flex-shrink: 0; }
+  .week-day-card .wd-weekday { font-size: 10.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
+  .week-day-card .wd-daynum { font-family: 'Fraunces', Georgia, serif; font-size: 17px; color: var(--navy); font-weight: 600; }
+  .week-day-card .wd-info { flex: 1; font-size: 12.5px; color: var(--text); }
+  .week-day-card .wd-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 100px; color: var(--white); background: var(--bloqueo); flex-shrink: 0; }
+
+  .search-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .search-header h2 { font-size: 15px; flex: 1; }
+  .search-back { background: none; border: none; color: var(--navy); font-size: 12.5px; font-weight: 600; text-decoration: underline; }
+  .row .fecha { font-weight: 700; color: var(--navy); width: 76px; flex-shrink: 0; font-size: 12px; line-height: 1.3; }
 
   .datebar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .nav-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 15px; flex-shrink: 0; }
@@ -148,6 +173,17 @@
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <h1 id="sidebar-greeting">Hola, Ayelen</h1>
     <p id="sidebar-date"></p>
+
+    <div class="sidebar-summary" id="sidebar-summary">
+      <div class="summary-line"><strong id="sum-turnos">–</strong> turnos hoy</div>
+      <div class="summary-line"><strong id="sum-huecos">–</strong> huecos libres hoy</div>
+      <div class="summary-line hidden" id="sum-bloqueo-line">Próximo día bloqueado: <strong id="sum-bloqueo-fecha"></strong></div>
+    </div>
+
+    <div class="sidebar-search">
+      <input type="text" id="search-input" placeholder="Buscar paciente...">
+    </div>
+
     <button class="logout-btn sidebar-logout" id="logout-btn-desktop">Salir</button>
   </aside>
 
@@ -165,7 +201,12 @@
     <button class="today-btn" id="today-btn">Hoy</button>
   </div>
 
-  <div class="actions-row">
+  <div class="viewbar">
+    <button class="view-btn active" id="view-dia-btn">Día</button>
+    <button class="view-btn" id="view-semana-btn">Semana</button>
+  </div>
+
+  <div class="actions-row" id="actions-row">
     <button class="action-btn primary" id="btn-nuevo-turno">+ Nuevo turno</button>
     <button class="action-btn gold" id="btn-nuevo-sobreturno">+ Nuevo sobreturno</button>
     <button class="action-btn" id="btn-toggle-bloqueo-dia">Bloquear un día completo</button>
@@ -271,6 +312,16 @@
     </div>
   </div>
 
+  <div class="week-grid hidden" id="week-view"></div>
+
+  <div id="search-results" class="hidden">
+    <div class="search-header">
+      <h2 id="search-title">Resultados</h2>
+      <button class="search-back" id="search-back">Volver a la agenda</button>
+    </div>
+    <div class="agenda" id="search-agenda"></div>
+  </div>
+
   <div class="agenda" id="agenda"></div>
 
   </div>
@@ -287,10 +338,15 @@
   }).format(new Date());
   const fmtHora = (iso) => new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
 
+  const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
   let gestionKey = sessionStorage.getItem('gestionKey') || '';
   let currentDate = todayStr();
   let agendaItems = [];
   let moverContext = null; // { eventId, calendarId }
+  let currentView = 'dia'; // 'dia' | 'semana' | 'busqueda'
+  let searchResults = [];
+  let searchQuery = '';
 
   const loginScreen = document.getElementById('login-screen');
   const appEl = document.getElementById('app');
@@ -300,6 +356,15 @@
   const dateInput = document.getElementById('date-input');
   const agendaEl = document.getElementById('agenda');
   const btnToggleBloqueoDia = document.getElementById('btn-toggle-bloqueo-dia');
+  const datebarEl = document.querySelector('.datebar');
+  const viewbarEl = document.querySelector('.viewbar');
+  const actionsRowEl = document.getElementById('actions-row');
+  const weekViewEl = document.getElementById('week-view');
+  const searchResultsEl = document.getElementById('search-results');
+  const searchAgendaEl = document.getElementById('search-agenda');
+  const searchInput = document.getElementById('search-input');
+  const viewDiaBtn = document.getElementById('view-dia-btn');
+  const viewSemanaBtn = document.getElementById('view-semana-btn');
 
   const panelTurno = document.getElementById('panel-turno');
   const panelTurnoCalendario = document.getElementById('panel-turno-calendario');
@@ -352,22 +417,23 @@
     document.getElementById('sidebar-date').textContent =
       new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
     cargarAgenda();
+    cargarResumenSidebar();
   }
 
   // ---------- Fecha ----------
   dateInput.addEventListener('change', () => {
     currentDate = dateInput.value;
     updateTodayBtn();
-    cargarAgenda();
+    if (currentView === 'semana') cargarSemana(); else cargarAgenda();
   });
-  document.getElementById('prev-day').addEventListener('click', () => cambiarDia(-1));
-  document.getElementById('next-day').addEventListener('click', () => cambiarDia(1));
+  document.getElementById('prev-day').addEventListener('click', () => cambiarDia(currentView === 'semana' ? -7 : -1));
+  document.getElementById('next-day').addEventListener('click', () => cambiarDia(currentView === 'semana' ? 7 : 1));
   todayBtn.addEventListener('click', () => {
     if (currentDate === todayStr()) return;
     currentDate = todayStr();
     dateInput.value = currentDate;
     updateTodayBtn();
-    cargarAgenda();
+    if (currentView === 'semana') cargarSemana(); else cargarAgenda();
   });
 
   function cambiarDia(delta) {
@@ -376,14 +442,59 @@
     currentDate = `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
     dateInput.value = currentDate;
     updateTodayBtn();
-    cargarAgenda();
+    if (currentView === 'semana') cargarSemana(); else cargarAgenda();
   }
 
   function updateTodayBtn() {
     todayBtn.disabled = currentDate === todayStr();
   }
 
-  // ---------- Agenda ----------
+  // ---------- Resumen del sidebar ----------
+  function cargarResumenSidebar() {
+    const hoy = todayStr();
+    Promise.all([
+      fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`/api/horarios-dia?date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
+    ]).then(([turnosHoy, huecosHoy, proximoBloqueo]) => {
+      const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
+      document.getElementById('sum-turnos').textContent = cantidadTurnos;
+      document.getElementById('sum-huecos').textContent = (huecosHoy || []).length;
+
+      const lineaBloqueo = document.getElementById('sum-bloqueo-line');
+      if (proximoBloqueo && proximoBloqueo.date) {
+        const [y, m, d] = proximoBloqueo.date.split('-').map(Number);
+        document.getElementById('sum-bloqueo-fecha').textContent = `${d} de ${MESES[m - 1]}`;
+        lineaBloqueo.classList.remove('hidden');
+      } else {
+        lineaBloqueo.classList.add('hidden');
+      }
+    }).catch(() => {});
+  }
+
+  // ---------- Vista Día / Semana / Búsqueda ----------
+  function actualizarVisibilidadVista() {
+    const buscando = currentView === 'busqueda';
+    datebarEl.classList.toggle('hidden', buscando);
+    viewbarEl.classList.toggle('hidden', buscando);
+    actionsRowEl.classList.toggle('hidden', buscando || currentView === 'semana');
+    searchResultsEl.classList.toggle('hidden', !buscando);
+    weekViewEl.classList.toggle('hidden', currentView !== 'semana');
+    agendaEl.classList.toggle('hidden', currentView !== 'dia');
+  }
+
+  function cambiarVista(view) {
+    currentView = view;
+    viewDiaBtn.classList.toggle('active', view === 'dia');
+    viewSemanaBtn.classList.toggle('active', view === 'semana');
+    actualizarVisibilidadVista();
+    if (view === 'dia') cargarAgenda();
+    else if (view === 'semana') cargarSemana();
+  }
+  viewDiaBtn.addEventListener('click', () => cambiarVista('dia'));
+  viewSemanaBtn.addEventListener('click', () => cambiarVista('semana'));
+
+  // ---------- Agenda (vista Día) ----------
   function cargarAgenda() {
     showOnly(null);
     agendaEl.innerHTML = '<div class="loading-note">Cargando agenda...</div>';
@@ -392,10 +503,157 @@
         if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
         return r.json();
       })
-      .then((data) => { agendaItems = data; renderAgenda(); })
+      .then((data) => { agendaItems = data; renderAgenda(); cargarResumenSidebar(); })
       .catch((err) => {
         if (err.message !== 'unauthorized') agendaEl.innerHTML = '<div class="agenda-empty">No se pudo cargar la agenda.</div>';
       });
+  }
+
+  // ---------- Vista Semana ----------
+  function getWeekDates(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dow = new Date(y, m - 1, d).getDay();
+    const sundayUTC = Date.UTC(y, m - 1, d - dow);
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date(sundayUTC + i * 24 * 60 * 60000);
+      dates.push(`${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`);
+    }
+    return dates;
+  }
+
+  function cargarSemana() {
+    weekViewEl.innerHTML = '<div class="loading-note">Cargando semana...</div>';
+    const dates = getWeekDates(currentDate);
+
+    Promise.all(dates.map((fecha) =>
+      fetch(`/api/gestion/turnos-dia?date=${fecha}&key=${encodeURIComponent(gestionKey)}`)
+        .then((r) => {
+          if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+          return r.json();
+        })
+        .then((items) => ({ fecha, items }))
+    )).then((resultados) => {
+      renderSemana(resultados);
+      cargarResumenSidebar();
+    }).catch((err) => {
+      if (err.message !== 'unauthorized') weekViewEl.innerHTML = '<div class="agenda-empty">No se pudo cargar la semana.</div>';
+    });
+  }
+
+  function renderSemana(resultados) {
+    const hoy = todayStr();
+
+    weekViewEl.innerHTML = resultados.map(({ fecha, items }) => {
+      const [y, m, d] = fecha.split('-').map(Number);
+      const dow = new Date(y, m - 1, d).getDay();
+      const turnos = items.filter((it) => it.tipo !== 'bloqueo').length;
+      const bloqueoTotal = items.some((it) => it.tipo === 'bloqueo' && it.allDay);
+      const bloqueoParcial = !bloqueoTotal && items.some((it) => it.tipo === 'bloqueo');
+      const badge = bloqueoTotal ? '<span class="wd-badge">Bloqueado</span>' : bloqueoParcial ? '<span class="wd-badge">Bloqueo parcial</span>' : '';
+      const isToday = fecha === hoy;
+      const infoText = bloqueoTotal
+        ? 'No atiende'
+        : `${turnos} turno${turnos === 1 ? '' : 's'}${bloqueoParcial ? ' · con bloqueo parcial' : ''}`;
+
+      return `
+        <button type="button" class="week-day-card${isToday ? ' is-today' : ''}" data-fecha="${fecha}">
+          <div class="wd-date">
+            <div class="wd-weekday">${DIAS_SEMANA[dow]}</div>
+            <div class="wd-daynum">${d} de ${MESES[m - 1]}</div>
+          </div>
+          <div class="wd-info">${infoText}</div>
+          ${badge}
+        </button>`;
+    }).join('');
+
+    weekViewEl.querySelectorAll('.week-day-card').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        currentDate = btn.dataset.fecha;
+        dateInput.value = currentDate;
+        updateTodayBtn();
+        cambiarVista('dia');
+      });
+    });
+  }
+
+  // ---------- Búsqueda de pacientes ----------
+  let searchDebounce = null;
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ejecutarBusqueda(searchInput.value.trim()); });
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    const q = searchInput.value.trim();
+    if (!q) return;
+    searchDebounce = setTimeout(() => ejecutarBusqueda(q), 500);
+  });
+  document.getElementById('search-back').addEventListener('click', () => {
+    searchInput.value = '';
+    cambiarVista('dia');
+  });
+
+  function ejecutarBusqueda(q) {
+    const query = (q !== undefined ? q : searchQuery).trim();
+    if (!query) return;
+    searchQuery = query;
+    currentView = 'busqueda';
+    actualizarVisibilidadVista();
+    document.getElementById('search-title').textContent = `Resultados para "${query}"`;
+    searchAgendaEl.innerHTML = '<div class="loading-note">Buscando...</div>';
+
+    fetch(`/api/gestion/buscar?q=${encodeURIComponent(query)}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => {
+        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+        return r.json();
+      })
+      .then((data) => { searchResults = data; renderSearchResults(); cargarResumenSidebar(); })
+      .catch((err) => {
+        if (err.message !== 'unauthorized') searchAgendaEl.innerHTML = '<div class="agenda-empty">No se pudo buscar.</div>';
+      });
+  }
+
+  function renderSearchRow(it, idx) {
+    const desc = extraerMotivo(it.description, it.tipo);
+    const d = new Date(it.start);
+    const fechaCorta = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(d);
+    const fechaTxt = it.allDay ? fechaCorta : `${fechaCorta}<br>${fmtHora(it.start)}`;
+    const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
+    const acciones = it.tipo === 'bloqueo'
+      ? ''
+      : `<div class="row-actions">
+           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
+           <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
+         </div>`;
+    return `
+      <div class="row">
+        <div class="fecha">${fechaTxt}</div>
+        <div class="info">
+          <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
+          <div class="detalle">${escapeHtml(desc)}</div>
+        </div>
+        <span class="badge ${it.tipo}">${badgeLabel}</span>
+        ${acciones}
+      </div>`;
+  }
+
+  function renderSearchResults() {
+    if (searchResults.length === 0) {
+      searchAgendaEl.innerHTML = '<div class="agenda-empty">No se encontraron resultados.</div>';
+      return;
+    }
+
+    searchAgendaEl.innerHTML = searchResults.map((it, idx) => renderSearchRow(it, idx)).join('');
+
+    searchAgendaEl.querySelectorAll('[data-action]').forEach((btn) => {
+      const item = searchResults[parseInt(btn.dataset.idx, 10)];
+      btn.addEventListener('click', () => {
+        if (btn.dataset.action === 'mover') {
+          if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
+          else abrirMover(item);
+        } else {
+          cancelarItem(item);
+        }
+      });
+    });
   }
 
   function diaBloqueadoCompleto() {
@@ -545,7 +803,8 @@
   function abrirMoverTurnoCalendario(item) {
     mcMode = 'mover';
     mcMoverContext = { eventId: item.id, calendarId: item.calendarId };
-    const [y, m] = currentDate.split('-').map(Number);
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.start));
+    const [y, m] = fechaItem.split('-').map(Number);
     mcYear = y; mcMonth = m;
     mcFecha = null; mcHora = null;
     document.getElementById('mc-slots-wrap').classList.add('hidden');
@@ -649,10 +908,14 @@
           setMsg('mc-msg', res.message, res.success ? 'ok' : 'error');
           if (res.success) {
             showOnly(null);
-            currentDate = mcFecha;
-            dateInput.value = currentDate;
-            updateTodayBtn();
-            cargarAgenda();
+            if (currentView === 'busqueda') {
+              ejecutarBusqueda();
+            } else {
+              currentDate = mcFecha;
+              dateInput.value = currentDate;
+              updateTodayBtn();
+              cargarAgenda();
+            }
           }
         })
         .catch((err) => { if (err.message !== 'unauthorized') setMsg('mc-msg', 'Error de red.', 'error'); });
@@ -786,7 +1049,8 @@
   // ---------- Mover ----------
   function abrirMover(item) {
     moverContext = { eventId: item.id, calendarId: item.calendarId };
-    document.getElementById('m-fecha').value = currentDate;
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.start));
+    document.getElementById('m-fecha').value = fechaItem;
     document.getElementById('m-hora').value = fmtHora(item.start);
     setMsg('m-msg', '', '');
     showOnly(panelMover);
@@ -806,7 +1070,10 @@
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
         setMsg('m-msg', res.message, res.success ? 'ok' : 'error');
-        if (res.success) { showOnly(null); cargarAgenda(); }
+        if (res.success) {
+          showOnly(null);
+          if (currentView === 'busqueda') ejecutarBusqueda(); else cargarAgenda();
+        }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('m-msg', 'Error de red.', 'error'); });
   });
@@ -820,7 +1087,11 @@
       body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
-      .then(() => cargarAgenda())
+      .then(() => {
+        if (currentView === 'busqueda') ejecutarBusqueda();
+        else if (currentView === 'semana') cargarSemana();
+        else cargarAgenda();
+      })
       .catch(() => {});
   }
 
