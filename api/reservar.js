@@ -35,7 +35,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const title = `Turnos (${nombre} ${apellido || ''})`.trim();
+    const title = `${nombre} ${apellido || ''}`.trim();
     const description =
       `Email: ${email || '-'}\n` +
       `Teléfono: ${telefono}\n` +
