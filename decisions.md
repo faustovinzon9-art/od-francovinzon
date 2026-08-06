@@ -138,6 +138,74 @@ hace falta que además genere una tarea separada en el sidebar — sería redund
 - **Los sobreturnos se cargan a propósito superpuestos** con turnos normales — es su función (meter un huequito extra en un horario ya ocupado). Por eso "Nuevo sobreturno" sigue con hora libre a mano (sin calendario de disponibilidad) y su chequeo de solapamiento es solo contra el calendario de sobreturnos, nunca contra el principal.
 - **"Nuevo turno" (calendario principal) sí usa el mismo selector de calendario + horarios reales que ven los pacientes en `/turnos`** (reutiliza `/api/disponibilidad-mes` y `/api/horarios-dia`), para no calcular disponibilidad de dos formas distintas.
 
+## Confirmación de turno en `/turnos`: acciones post-reserva (2026-08-06)
+
+- **"Agregar al calendario"**: genera un `.ics` 100% en el cliente (sin librerías, sin
+  ruta de API nueva) a partir de `fechaSeleccionada`/`horarioSeleccionado`. Argentina es
+  siempre UTC-3 fijo, así que el `DTSTART`/`DTEND` del `.ics` se arman sumando 3 horas a
+  la hora Argentina para obtener UTC — mismo principio que `toArgDate()` del lado
+  servidor, sin necesitar esa función en el cliente.
+- **"Cambiar día y horario" / "Cancelar turno": sin link persistente, a propósito.**
+  Se evaluó el esquema original que tenía pensado `tasks.md` (token en la URL o
+  derivado del `eventId`, para volver a un turno después de haberse ido de la página) y
+  **se descartó por alcance**: lo que se pidió esta vez es mucho más acotado —
+  corregir un error *en el momento*, sin reiniciar el formulario, no dar
+  autogestión persistente. Por eso:
+  - El `eventId` que devuelve `/api/reservar` al crear el turno **vive solo en una
+    variable JS en memoria** (`ultimoEventId`) durante esa carga de página. No se pone
+    en la URL, no se guarda en `localStorage`/`sessionStorage`. Al recargar la página
+    se pierde — es intencional, no un descuido.
+  - `reservar.js` (público, sin `GESTION_KEY`) acepta `accion: 'mover'|'cancelar'`
+    además de crear (que sigue siendo el default). Ambas acciones ignoran cualquier
+    `calendarId` — están **hardcodeadas a `CALENDAR_ID`**, porque los pacientes nunca
+    reservan sobreturnos; así no hay que confiar en ese dato si viniera del cliente.
+  - La seguridad depende de que el `eventId` de Google Calendar es un string de alta
+    entropía, no listado en ningún lado público — es el mismo modelo que ya usa
+    `agregar-telefono.js`/`evento.js` del lado de `/gestion` (conocer el id alcanza).
+    Si en el futuro se quiere una autogestión real después de cerrar la pestaña (el
+    ítem 6 original, con link para volver más tarde), hay que retomar el diseño de
+    token que ya se había pensado — esto no lo reemplaza, es un caso más chico y más
+    seguro (todo pasa en la misma sesión, nunca se comparte un link).
+  - "Cambiar día y horario" reutiliza el mismo calendario/horarios que ya estaba
+    visible en la página (no hace falta un formulario nuevo de nombre/teléfono/motivo,
+    esos datos no cambian) — solo pide confirmar el nuevo horario elegido.
+
+## Toasts, diálogo de confirmación propio y actualizaciones locales en `/gestion` (2026-08-06)
+
+- **Toasts solo para 4 acciones** (a propósito, "sin exagerar la cantidad" fue pedido
+  explícito): turno creado, turno reprogramado, turno eliminado, cambios guardados
+  (edición de teléfono). No se agregaron a bloquear/desbloquear día ni a bloquear
+  horario — no estaban en la lista pedida.
+- **`confirm()` nativo reemplazado en los dos lugares donde existía**: cancelar turno
+  ("Eliminar turno" — texto explícitamente pedido) y desbloquear día (mismo componente
+  reutilizado, por consistencia — no se pidió un texto puntual para ese caso). Un solo
+  `confirmDialog({title, message, confirmLabel, cancelLabel})` genérico, devuelve una
+  Promise<boolean>, estilo propio de la app.
+- **Actualizaciones locales sin refetch, para evitar el parpadeo de "Cargando
+  agenda..."**: editar/agregar teléfono y cancelar turno mutan `agendaItems` en memoria
+  con lo que ya devolvió el servidor (por eso `agregar-telefono.js` ahora devuelve
+  `telefono`/`telefonoVerificado` en la respuesta) y llaman a `renderAgenda()` local
+  (sin volver a pedir el día completo). Crear y mover turno sí necesitan un fetch
+  (pueden aterrizar en un día distinto al que se está mirando), pero después resaltan
+  la fila nueva/movida (`resaltarEvento()`) en vez de dejar la navegación "seca".
+  Este patrón es deliberadamente distinto de una reescritura a diffing/virtual-DOM —
+  alcanza para que no haya re-render completo de la lista en las acciones más
+  frecuentes, sin sumar una librería ni una capa de abstracción nueva.
+
+## Buscador de `/gestion` (2026-08-06)
+
+- **Reposicionado**: en el sidebar desktop, ahora va inmediatamente debajo de
+  saludo/fecha, arriba del resumen del día y de la lista de tareas.
+- **Se saca el botón "Volver a la agenda"**: vaciar el campo de búsqueda (borrar todo
+  el texto) vuelve sola a la vista Día. No hace falta debounce para este caso — se
+  dispara apenas el input queda vacío.
+- **"Nuevo turno" en `/gestion` suma la casilla "Paciente nuevo"**, igual que en
+  `/turnos` — `crear-turno.js` ahora acepta `esNuevo` y escribe la misma línea
+  `Paciente nuevo: Sí|No` que ya escribía `reservar.js`. Antes solo `/turnos` podía
+  generar el badge dorado "✨ Nuevo paciente"/teléfono destacado en la agenda; ahora
+  también se puede marcar a mano desde `/gestion`. No se agregó a "Nuevo sobreturno"
+  (no se pidió, y `/turnos` tampoco ofrece reservar sobreturnos).
+
 ## Zona horaria
 
 - **Nunca usar getters locales de `Date` para "hoy"/"ahora"** en código que corre en el navegador (afecta a cualquier visitante en otro huso horario). Siempre `Intl.DateTimeFormat` con `timeZone: 'America/Argentina/Buenos_Aires'` explícito. Ya hubo un bug real de esto, corregido — no reintroducirlo.

@@ -2,6 +2,14 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (quinta vuelta) — ítems 5/6/8 del pedido grande + mejoras de `/gestion`
+
+- **`/turnos`**: después de confirmar un turno, tres acciones nuevas en la pantalla de éxito — "Agregar al calendario" (`.ics` generado en el cliente, sin librerías), "Cambiar día y horario" (reutiliza el calendario/horarios ya visible, sin repetir nombre/teléfono/motivo) y "Cancelar turno" (diálogo de confirmación propio). Alcance acotado a propósito respecto de lo que decía `tasks.md`: sin login, sin link persistente para volver más tarde — el `eventId` vive solo en memoria durante esa carga de página. `reservar.js` (público) suma `accion: 'mover'|'cancelar'`. Ver `decisions.md`.
+- **`/gestion`**: buscador reposicionado arriba del sidebar (debajo de saludo/fecha); se saca el botón "Volver a la agenda" — vaciar el campo vuelve solo a la agenda. "Nuevo turno" suma la casilla "Paciente nuevo" (igual que `/turnos`) — `crear-turno.js` ahora acepta `esNuevo`.
+- **Toasts + diálogo de confirmación propio en `/gestion`**: 4 toasts (turno creado/reprogramado/eliminado, cambios guardados), `confirm()` nativo reemplazado en cancelar turno ("Eliminar turno") y desbloquear día. Editar teléfono y cancelar turno ya no vuelven a pedir el día completo al servidor — actualizan la agenda en memoria y re-renderizan local (sin el parpadeo de "Cargando..."), con resaltado breve en la fila creada/reprogramada. `agregar-telefono.js` ahora devuelve el teléfono guardado para poder hacer ese parcheo.
+- **Pulido visual en las 3 páginas**: transiciones consistentes (150–250ms, misma curva) en botones/tarjetas/inputs — hover, click (`scale(0.96)` al tocar), foco. Fade-in sutil al abrir `/gestion`. No es el efecto "Liquid Glass" (ítem 7, sigue pendiente) — es un pase de microinteracciones aparte.
+- Probado con datos simulados (sin credenciales de Google en esta máquina): los 3 flujos de `/turnos` (agregar calendario, reprogramar, cancelar) y los de `/gestion` (buscador, nuevo turno con paciente nuevo, editar teléfono sin parpadeo, cancelar con diálogo propio). Falta la prueba contra el Calendar real en producción — ver `tasks.md`.
+
 ## 2026-08-06 (cuarta vuelta) — tres correcciones sobre teléfonos y lista de tareas
 
 - **Badge de la fila corregido**: pasó de "cualquier teléfono sin `Teléfono verificado: Sí`" a **"⚠ Tel. inválido"**, mostrado únicamente cuando el teléfono guardado no pasa la validación real de formato (mismo chequeo que arma el link de `wa.me`). Un teléfono legado sin la marca pero con formato válido ya no se marca — el criterio anterior era demasiado agresivo. `Teléfono verificado`/`extraerTelefonoVerificado()` se siguen usando, pero solo para decidir el prellenado del selector de país al editar (no para el badge).

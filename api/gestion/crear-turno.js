@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
 
-  const { key, date, time, nombre, apellido, telefono, motivo, sobreturno } = req.body;
+  const { key, date, time, nombre, apellido, telefono, motivo, sobreturno, esNuevo } = req.body;
 
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
@@ -55,9 +55,10 @@ export default async function handler(req, res) {
       `Teléfono: ${telNormalizado}\n` +
       'Teléfono verificado: Sí\n' +
       `Motivo: ${motivo}\n` +
+      `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
       'Cargado manualmente desde el panel de gestión.';
 
-    await calendar.events.insert({
+    const { data: created } = await calendar.events.insert({
       calendarId,
       requestBody: {
         summary: title,
@@ -71,6 +72,8 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       message: `${sobreturno ? 'Sobreturno' : 'Turno'} cargado para el ${date} a las ${time} hs.`,
+      eventId: created.id,
+      calendarId,
     });
   } catch (err) {
     console.error(err);

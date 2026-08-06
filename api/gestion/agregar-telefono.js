@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       const limpia = descActual.replace(/\s+$/, '');
       nuevaDescripcion = limpia ? `${limpia}\nTeléfono: ${valorGuardar}` : `Teléfono: ${valorGuardar}`;
     } else {
-      return res.status(200).json({ success: true, message: 'Sin cambios.' });
+      return res.status(200).json({ success: true, message: 'Sin cambios.', telefono: '', telefonoVerificado: false });
     }
 
     // "Teléfono verificado: Sí" marca que el número pasó por el selector de país recién
@@ -63,7 +63,13 @@ export default async function handler(req, res) {
       requestBody: { description: nuevaDescripcion },
     });
 
-    res.status(200).json({ success: true, message: crudo ? 'Teléfono actualizado.' : 'Teléfono borrado.' });
+    res.status(200).json({
+      success: true,
+      message: crudo ? 'Teléfono actualizado.' : 'Teléfono borrado.',
+      // Para que el cliente pueda parchear la fila en memoria sin volver a pedir el día entero.
+      telefono: valorGuardar === '-' ? '' : valorGuardar,
+      telefonoVerificado: valorGuardar !== '-',
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'No se pudo guardar el teléfono.' });

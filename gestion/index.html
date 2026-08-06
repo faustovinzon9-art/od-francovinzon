@@ -88,7 +88,7 @@
   .task-item-btn { padding: 5px 11px; border-radius: 100px; border: 1.5px solid var(--gold); background: var(--white); color: var(--gold); font-size: 10.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
   .tasks-more { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: center; }
 
-  .sidebar-search { margin-bottom: 4px; }
+  .sidebar-search { margin-bottom: 18px; }
   .sidebar-search input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13.5px; }
   .sidebar-search input:focus { outline: none; border-color: var(--gold); background: var(--white); }
 
@@ -107,7 +107,6 @@
 
   .search-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .search-header h2 { font-size: 15px; flex: 1; }
-  .search-back { background: none; border: none; color: var(--navy); font-size: 12.5px; font-weight: 600; text-decoration: underline; }
   .row .fecha { font-weight: 700; color: var(--navy); width: 76px; flex-shrink: 0; font-size: 12px; line-height: 1.3; }
 
   .datebar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
@@ -182,6 +181,9 @@
   .autocomplete-item:last-child { border-bottom: none; }
   .autocomplete-item:hover { background: var(--cream); }
   .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+  .checkbox-row input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--navy); flex-shrink: 0; }
+  .checkbox-row label { display: inline; margin: 0; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--text); }
   .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
   .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
   .field .iti, .inline-tel-wrap .iti { width: 100%; }
@@ -203,6 +205,55 @@
   .panel-msg.ok { color: #1a8f4c; }
 
   .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+
+  /* Microinteracciones: mismo timing/curva en toda la app */
+  button, .icon-btn, .add-tel-btn, .action-btn, .view-btn, .slot-btn, .mc-day, .day-btn, .week-day-card,
+  .task-item-btn, input, textarea, select, .row, .card, .panel, .agenda {
+    transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
+  }
+  button:active:not(:disabled), .icon-btn:active, .add-tel-btn:active, .action-btn:active,
+  .view-btn:active, .slot-btn:active, .mc-day.available:active, .week-day-card:active, .task-item-btn:active {
+    transform: scale(0.95);
+  }
+  .action-btn:hover, .view-btn:hover, .task-item-btn:hover, .add-tel-btn:hover { filter: brightness(0.97); }
+  .icon-btn:hover { background: var(--cream); }
+  .week-day-card:hover, .row:hover { background: rgba(30,58,95,.025); }
+  .mc-day.available:hover { box-shadow: 0 3px 8px rgba(30,58,95,.35); }
+  .slot-btn:hover { border-color: var(--gold); }
+  input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(212,162,76,.15); }
+  .row-highlight { background: rgba(212,162,76,.16) !important; }
+  .row-removing { opacity: 0; transform: scale(0.98); }
+
+  #app { opacity: 0; }
+  #app.fade-in { opacity: 1; transition: opacity .2s ease; }
+
+  #toast-container {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999;
+    display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none;
+  }
+  .toast {
+    background: var(--navy); color: var(--white); padding: 11px 20px; border-radius: 100px;
+    font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(30,58,95,.28);
+    opacity: 0; transform: translateY(-10px); transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .confirm-overlay {
+    position: fixed; inset: 0; background: rgba(30,58,95,.35); display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 998; opacity: 0; transition: opacity .18s ease;
+  }
+  .confirm-overlay.show { opacity: 1; }
+  .confirm-box {
+    background: var(--white); border-radius: 20px; padding: 24px 22px; max-width: 320px; width: 100%;
+    box-shadow: 0 20px 50px rgba(30,58,95,.25); transform: scale(0.94); transition: transform .18s ease;
+  }
+  .confirm-overlay.show .confirm-box { transform: scale(1); }
+  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; }
+  .confirm-box p { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+  .confirm-actions { display: flex; gap: 8px; }
+  .confirm-actions button { flex: 1; padding: 11px; border-radius: 100px; font-weight: 700; font-size: 13.5px; border: none; }
+  .confirm-actions .btn-cancel { background: var(--cream); color: var(--navy); }
+  .confirm-actions .btn-danger { background: var(--bloqueo); color: var(--white); }
 </style>
 </head>
 <body>
@@ -224,6 +275,10 @@
     <h1 id="sidebar-greeting">Hola, Ayelen</h1>
     <p id="sidebar-date"></p>
 
+    <div class="sidebar-search">
+      <input type="text" id="search-input" placeholder="Buscar paciente...">
+    </div>
+
     <div class="sidebar-summary" id="sidebar-summary">
       <div class="summary-line"><strong id="sum-turnos">–</strong> turnos hoy</div>
       <div class="summary-line"><strong id="sum-huecos">–</strong> huecos libres hoy</div>
@@ -234,10 +289,6 @@
       <div class="tasks-title">Tareas pendientes</div>
       <div id="sidebar-tasks-list"></div>
       <div class="tasks-more hidden" id="sidebar-tasks-more"></div>
-    </div>
-
-    <div class="sidebar-search">
-      <input type="text" id="search-input" placeholder="Buscar paciente...">
     </div>
 
     <button class="logout-btn sidebar-logout" id="logout-btn-desktop">Salir</button>
@@ -296,6 +347,10 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="mc-nuevo">
+          <label for="mc-nuevo">Paciente nuevo</label>
         </div>
       </div>
       <div class="field"><label>Motivo</label><input type="text" id="mc-motivo"></div>
@@ -391,13 +446,25 @@
   <div id="search-results" class="hidden">
     <div class="search-header">
       <h2 id="search-title">Resultados</h2>
-      <button class="search-back" id="search-back">Volver a la agenda</button>
     </div>
     <div class="agenda" id="search-agenda"></div>
   </div>
 
   <div class="agenda" id="agenda"></div>
 
+  </div>
+</div>
+
+<div id="toast-container" aria-live="polite"></div>
+
+<div class="confirm-overlay hidden" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-msg"></p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="confirm-cancel-btn"></button>
+      <button class="btn-danger" id="confirm-ok-btn"></button>
+    </div>
   </div>
 </div>
 
@@ -500,6 +567,7 @@
     if (!gestionKey) return;
     loginScreen.classList.add('hidden');
     appEl.classList.remove('hidden');
+    requestAnimationFrame(() => requestAnimationFrame(() => appEl.classList.add('fade-in')));
     dateInput.value = currentDate;
     updateTodayBtn();
     document.getElementById('sidebar-date').textContent =
@@ -769,18 +837,16 @@
     el.addEventListener('input', () => {
       clearTimeout(searchDebounce);
       const q = el.value.trim();
-      if (!q) return;
+      if (!q) {
+        // Buscador vacío: vuelve sola a la agenda, sin botón "Volver" que tocar.
+        if (currentView === 'busqueda') { searchQuery = ''; cambiarVista('dia'); }
+        return;
+      }
       searchDebounce = setTimeout(() => ejecutarBusqueda(q), 500);
     });
   }
   wireSearchInput(searchInput);
   wireSearchInput(searchInputMobile);
-
-  document.getElementById('search-back').addEventListener('click', () => {
-    searchInput.value = '';
-    searchInputMobile.value = '';
-    cambiarVista('dia');
-  });
 
   function ejecutarBusqueda(q) {
     const query = (q !== undefined ? q : searchQuery).trim();
@@ -1049,7 +1115,16 @@
       body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId, telefono }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
-      .then((res) => { if (res.success) { inlineTelInstances.delete(idx); cargarAgenda(); } })
+      .then((res) => {
+        if (!res.success) return;
+        inlineTelInstances.delete(idx);
+        // Parcheo local: no hace falta volver a pedir el día entero para una fila.
+        agendaItems[idx] = { ...agendaItems[idx], telefono: res.telefono || '', telefonoVerificado: !!res.telefonoVerificado };
+        renderAgenda();
+        resaltarFila(idx);
+        cargarResumenSidebar();
+        toast('✅ Cambios guardados');
+      })
       .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
   }
 
@@ -1057,6 +1132,61 @@
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // ---------- Toasts (solo para acciones importantes, ver decisions.md) ----------
+  const toastContainer = document.getElementById('toast-container');
+  function toast(mensaje) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = mensaje;
+    toastContainer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, 2600);
+  }
+
+  // ---------- Diálogo de confirmación propio (reemplaza confirm() nativo) ----------
+  const confirmOverlay = document.getElementById('confirm-overlay');
+  function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' }) {
+    return new Promise((resolve) => {
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-msg').textContent = message;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      const cancelBtn = document.getElementById('confirm-cancel-btn');
+      okBtn.textContent = confirmLabel;
+      cancelBtn.textContent = cancelLabel;
+      confirmOverlay.classList.remove('hidden');
+      requestAnimationFrame(() => confirmOverlay.classList.add('show'));
+      function cerrar(resultado) {
+        confirmOverlay.classList.remove('show');
+        setTimeout(() => confirmOverlay.classList.add('hidden'), 180);
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(resultado);
+      }
+      function onOk() { cerrar(true); }
+      function onCancel() { cerrar(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  // ---------- Resaltado breve de una fila (crear/reprogramar), ver decisions.md ----------
+  function resaltarFila(idx) {
+    const el = agendaEl.querySelector(`.row[data-row-idx="${idx}"]`);
+    if (!el) return;
+    el.classList.add('row-highlight');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => el.classList.remove('row-highlight'), 2200);
+  }
+  // Busca en agendaItems (ya cargados para currentDate) el evento por id y resalta su fila.
+  function resaltarEvento(eventId, calendarId) {
+    if (!eventId) return;
+    const idx = agendaItems.findIndex((it) => it.id === eventId && it.calendarId === calendarId);
+    if (idx !== -1) resaltarFila(idx);
   }
 
   // ---------- Nuevo sobreturno (hora libre, calendario de sobreturnos) ----------
@@ -1097,7 +1227,11 @@
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
         setMsg('t-msg', res.message, res.success ? 'ok' : 'error');
-        if (res.success) { showOnly(null); cargarAgenda(); }
+        if (res.success) {
+          showOnly(null);
+          toast('✅ Turno creado correctamente');
+          cargarAgenda().then(() => resaltarEvento(res.eventId, res.calendarId));
+        }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('t-msg', 'Error de red.', 'error'); });
   }
@@ -1123,6 +1257,7 @@
     document.getElementById('mc-form-wrap').classList.add('hidden');
     document.getElementById('mc-datos-paciente').classList.remove('hidden');
     ['mc-nombre', 'mc-apellido', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    document.getElementById('mc-nuevo').checked = false;
     itiMcTelefono.setNumber('');
     document.getElementById('mc-title').textContent = 'Nuevo turno';
     document.getElementById('mc-confirm').textContent = 'Guardar';
@@ -1242,13 +1377,14 @@
           setMsg('mc-msg', res.message, res.success ? 'ok' : 'error');
           if (res.success) {
             showOnly(null);
+            toast('✅ Turno reprogramado correctamente');
             if (currentView === 'busqueda') {
               ejecutarBusqueda();
             } else {
               currentDate = mcFecha;
               dateInput.value = currentDate;
               updateTodayBtn();
-              cargarAgenda();
+              cargarAgenda().then(() => resaltarEvento(mcMoverContext.eventId, mcMoverContext.calendarId));
             }
           }
         })
@@ -1259,6 +1395,7 @@
     const nombre = document.getElementById('mc-nombre').value.trim();
     const apellido = document.getElementById('mc-apellido').value.trim();
     const telefonoIngresado = document.getElementById('mc-telefono').value.trim();
+    const esNuevo = document.getElementById('mc-nuevo').checked;
     const motivo = document.getElementById('mc-motivo').value.trim();
 
     if (!nombre || !motivo || !telefonoIngresado) {
@@ -1275,7 +1412,7 @@
     fetch('/api/gestion/crear-turno', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, motivo, sobreturno: false }),
+      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, motivo, esNuevo, sobreturno: false }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -1285,7 +1422,8 @@
           currentDate = mcFecha;
           dateInput.value = currentDate;
           updateTodayBtn();
-          cargarAgenda();
+          toast('✅ Turno creado correctamente');
+          cargarAgenda().then(() => resaltarEvento(res.eventId, res.calendarId));
         }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('mc-msg', 'Error de red.', 'error'); });
@@ -1353,15 +1491,22 @@
   btnToggleBloqueoDia.addEventListener('click', () => {
     const bloqueado = diaBloqueadoCompleto();
     if (bloqueado) {
-      if (!confirm('¿Desbloquear este día?')) return;
-      fetch('/api/gestion/bloqueo-dia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: gestionKey, accion: 'desbloquear', date: currentDate }),
-      })
-        .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
-        .then(() => cargarAgenda())
-        .catch(() => {});
+      confirmDialog({
+        title: 'Desbloquear día',
+        message: '¿Estás seguro de que querés desbloquear este día?',
+        confirmLabel: 'Desbloquear',
+        cancelLabel: 'Cancelar',
+      }).then((ok) => {
+        if (!ok) return;
+        fetch('/api/gestion/bloqueo-dia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: gestionKey, accion: 'desbloquear', date: currentDate }),
+        })
+          .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+          .then(() => cargarAgenda())
+          .catch(() => {});
+      });
     } else {
       document.getElementById('b-fecha').value = currentDate;
       document.getElementById('b-motivo').value = '';
@@ -1438,7 +1583,9 @@
         setMsg('m-msg', res.message, res.success ? 'ok' : 'error');
         if (res.success) {
           showOnly(null);
-          if (currentView === 'busqueda') ejecutarBusqueda(); else cargarAgenda();
+          toast('✅ Turno reprogramado correctamente');
+          if (currentView === 'busqueda') ejecutarBusqueda();
+          else cargarAgenda().then(() => resaltarEvento(moverContext.eventId, moverContext.calendarId));
         }
       })
       .catch((err) => { if (err.message !== 'unauthorized') setMsg('m-msg', 'Error de red.', 'error'); });
@@ -1446,19 +1593,50 @@
 
   // ---------- Cancelar ----------
   function cancelarItem(item) {
-    if (!confirm(`¿Cancelar el turno de "${item.title}"?`)) return;
-    fetch('/api/gestion/evento', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, accion: 'cancelar', eventId: item.id, calendarId: item.calendarId }),
-    })
-      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
-      .then(() => {
-        if (currentView === 'busqueda') ejecutarBusqueda();
-        else if (currentView === 'semana') cargarSemana();
-        else cargarAgenda();
+    confirmDialog({
+      title: 'Eliminar turno',
+      message: `¿Estás seguro de que querés eliminar este turno${item.title ? ` de "${item.title}"` : ''}?`,
+      confirmLabel: 'Eliminar',
+      cancelLabel: 'Cancelar',
+    }).then((ok) => {
+      if (!ok) return;
+      fetch('/api/gestion/evento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: gestionKey, accion: 'cancelar', eventId: item.id, calendarId: item.calendarId }),
       })
-      .catch(() => {});
+        .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+        .then((res) => {
+          if (!res.success) return;
+          toast('✅ Turno eliminado correctamente');
+          if (currentView === 'dia') {
+            const idx = agendaItems.findIndex((it) => it.id === item.id && it.calendarId === item.calendarId);
+            quitarFilaConAnimacion(idx);
+          } else if (currentView === 'busqueda') {
+            const idxS = searchResults.findIndex((it) => it.id === item.id && it.calendarId === item.calendarId);
+            if (idxS !== -1) { searchResults.splice(idxS, 1); renderSearchResults(); }
+            cargarResumenSidebar();
+          } else {
+            cargarSemana();
+          }
+        })
+        .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
+    });
+  }
+
+  // Anima la fila antes de sacarla de agendaItems y re-renderizar localmente
+  // (sin volver a pedir el día entero al servidor).
+  function quitarFilaConAnimacion(idx) {
+    if (idx === -1) { cargarAgenda(); return; }
+    const terminar = () => {
+      agendaItems.splice(idx, 1);
+      renderAgenda();
+      cargarResumenSidebar();
+    };
+    const el = agendaEl.querySelector(`.row[data-row-idx="${idx}"]`);
+    if (!el) { terminar(); return; }
+    el.classList.add('row-removing');
+    setTimeout(terminar, 200);
   }
 
   function setMsg(id, text, type) {
