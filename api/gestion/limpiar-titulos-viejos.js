@@ -5,6 +5,7 @@ import { getCalendarClient, CALENDAR_ID, isValidGestionKey } from '../../lib/goo
 export const config = { maxDuration: 60 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const BATCH_LIMIT = 40; // por invocación, para no pisar la cuota ni el límite de tiempo
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -40,21 +41,32 @@ export default async function handler(req, res) {
       pageToken = data.nextPageToken;
     } while (pageToken);
 
-    if (aRenombrar.length === 0) {
-      return res.status(200).json({ success: true, renombrados: 0, message: 'No quedaban títulos viejos para limpiar.' });
+    const totalEncontrados = aRenombrar.length;
+
+    if (totalEncontrados === 0) {
+      return res.status(200).json({ success: true, renombrados: 0, restantes: 0, message: 'No quedaban títulos viejos para limpiar.' });
     }
 
-    // Secuencial y con una pequeña pausa entre llamadas para no pisar la cuota
-    // de Google Calendar API (compartida con el resto de las rutas en uso).
-    for (const p of aRenombrar) {
+    // Procesa como máximo BATCH_LIMIT por invocación (secuencial, con pausa entre
+    // llamadas) para no pisar la cuota de Google ni el límite de tiempo de la función.
+    // Es seguro llamar esta ruta varias veces seguidas: cada vez toma los que todavía
+    // no se renombraron, hasta que "restantes" da 0.
+    const lote = aRenombrar.slice(0, BATCH_LIMIT);
+
+    for (const p of lote) {
       await calendar.events.patch({ calendarId: CALENDAR_ID, eventId: p.id, requestBody: { summary: p.nuevoTitulo } });
-      await sleep(120);
+      await sleep(150);
     }
+
+    const restantes = totalEncontrados - lote.length;
 
     res.status(200).json({
       success: true,
-      renombrados: aRenombrar.length,
-      message: `${aRenombrar.length} evento(s) renombrado(s).`,
+      renombrados: lote.length,
+      restantes,
+      message: restantes > 0
+        ? `${lote.length} evento(s) renombrado(s) en este lote. Quedan ${restantes}: volvé a llamar la misma ruta para seguir.`
+        : `${lote.length} evento(s) renombrado(s). Listo, no queda ninguno más.`,
     });
   } catch (err) {
     console.error(err);
