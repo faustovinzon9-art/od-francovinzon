@@ -76,7 +76,7 @@
     .sidebar {
       display: flex;
       flex-direction: column;
-      width: 340px;
+      width: 390px;
       flex-shrink: 0;
       background: var(--white);
       border-radius: 18px;
@@ -547,6 +547,9 @@
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
+  // Tacho de basura de contorno (Feather "trash-2") — el emoji 🗑 no se reconocía
+  // como ícono de eliminar. currentColor hereda el color de .icon-btn.trash.
+  const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
   // "Hoy" siempre en hora Argentina, sin importar la zona horaria del dispositivo de quien usa el panel.
   const todayStr = () => new Intl.DateTimeFormat('en-CA', {
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1027,7 +1030,7 @@
       ? ''
       : `<div class="row-actions">
            <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>
-           <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
+           <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>
          </div>`;
     return `
       <div class="row">
@@ -1133,7 +1136,7 @@
     }
     if (it.tipo !== 'bloqueo') {
       botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>`);
-      botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>`);
+      botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>`);
     }
     const acciones = botones.length ? `<div class="row-actions">${botones.join('')}</div>` : '';
 
@@ -1894,6 +1897,37 @@
   }
   wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono', itiTTelefono);
   wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono', itiMcTelefono);
+
+  // ---------- Auto-refresh cada 60s, solo si Ayelen no está en medio de nada ----------
+  // "Ocupada" = algún panel (nuevo turno/sobreturno/horario/mover/bloqueo) abierto,
+  // algún modal (confirmar/tareas) abierto, un editor inline de teléfono abierto, o
+  // el foco en un input/textarea/select — en cualquiera de esos casos se salta este
+  // ciclo entero y se reintenta en el próximo (no interrumpe, no reintenta al toque).
+  function haySesionOcupada() {
+    const panelAbierto = [panelTurno, panelTurnoCalendario, panelHorario, panelMover, panelBloqueoDia]
+      .some((p) => !p.classList.contains('hidden'));
+    const overlayAbierto = !confirmOverlay.classList.contains('hidden') || !tasksModalOverlay.classList.contains('hidden');
+    const editandoTelefono = inlineTelInstances.size > 0;
+    const activo = document.activeElement;
+    const inputActivo = !!activo && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activo.tagName);
+    return panelAbierto || overlayAbierto || editandoTelefono || inputActivo;
+  }
+
+  // Solo actualiza los datos (agendaItems + renderAgenda), sin el placeholder
+  // "Cargando agenda..." de cargarAgenda() — para que no parpadee cada minuto.
+  function refrescarAgendaSilencioso() {
+    if (!gestionKey || currentView !== 'dia') return;
+    fetch(`/api/gestion/turnos-dia?date=${currentDate}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((data) => { agendaItems = data; renderAgenda(); })
+      .catch(() => {});
+  }
+
+  setInterval(() => {
+    if (!gestionKey || haySesionOcupada()) return;
+    refrescarAgendaSilencioso();
+    cargarResumenSidebar();
+  }, 60000);
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();

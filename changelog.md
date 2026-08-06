@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (décima vuelta) — 5 arreglos en `/gestion`: ícono, sidebar, auto-refresh, bug de "Reorganizar turnos" y migración de motivo
+
+- Ícono de cancelar turno: emoji 🗑 → tacho de contorno SVG. Sidebar de desktop ensanchado (340px→390px) para que las tareas no se corten en dos líneas. Auto-refresh de la agenda cada 60s, se salta el ciclo si hay algo abierto/con foco. **Fix real**: `buscar.js?modo=tareas` limitaba la detección de bloqueos a 14 días (igual que "Agregar teléfono"), por eso "Reorganizar turnos" no aparecía para un bloqueo cargado con más anticipación (ej. 16 de noviembre bloqueado hoy) — ahora esa ventana es de 120 días (igual que `proximo-bloqueo.js`), sin tocar los 14 días de "Agregar teléfono". Sumado `api/gestion/migrar-motivo-titulo.js` (script de un solo uso, sin correr todavía — necesita disparo manual con credenciales que no hay en esta máquina, ver `tasks.md`) para rescatar el motivo de sobreturnos viejos con título `"Nombre (motivo)"`.
+
 ## 2026-08-06 (décima vuelta) — fix: autocompletar teléfono mostraba España en vez de Argentina
 
 - `buscar.js?modo=telefono` y `?modo=pacientes` ahora también devuelven `telefonoVerificado`; el autocompletado en "Nuevo turno"/"Nuevo sobreturno" (`setNumeroAutocompletado()`) antepone "+" solo si el teléfono está verificado, igual que ya hacía "Editar tel." — antes le anteponía "+" a ciegas a números legados sin código de país, y `+3442641639` se confundía con España. Probado en vivo: paciente con teléfono legado (`3442641639`, sin verificar) autocompleta correcto como 🇦🇷 +54, y uno verificado (`5493442641639`) también.

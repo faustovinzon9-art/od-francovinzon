@@ -222,10 +222,16 @@ async function buscarPacientes(req, res) {
   }
 }
 
-const RANGO_TAREAS_DIAS = 14;
+const RANGO_SIN_TELEFONO_DIAS = 14;
+// Los bloqueos se pueden cargar con mucha anticipación (ej. cerrar por
+// vacaciones/fiestas con meses de anticipo) — 14 días se quedaba corto y la tarea
+// "Reorganizar turnos" no aparecía para un bloqueo+turno más lejano en el tiempo,
+// aunque el cruce en sí estuviera bien calculado (bug real: no se llegaba a pedir
+// esos eventos a la Calendar API). Mismo horizonte que ya usa proximo-bloqueo.js.
+const RANGO_REORGANIZAR_DIAS = 120;
 
-// Alimenta la "lista de tareas inteligente" del sidebar de /gestion, de HOY en
-// adelante (14 días). Dos categorías, ambas de datos reales:
+// Alimenta la "lista de tareas inteligente" del sidebar de /gestion. Dos categorías,
+// ambas de datos reales, cada una con su propia ventana:
 // - reorganizar: cada bloqueo (día completo, bloqueo-dia.js, O rango horario puntual,
 //   bloquear-horario.js — ambos solo en CALENDAR_ID) que TODAVÍA tiene algún turno o
 //   sobreturno superpuesto en su rango — hay que reubicarlos. Una tarea POR BLOQUEO,
@@ -233,13 +239,17 @@ const RANGO_TAREAS_DIAS = 14;
 //   puntuales distintos), son dos tareas separadas. El solapamiento se calcula con los
 //   límites reales del bloqueo (eventBounds ya da 00:00→00:00 del día siguiente para
 //   uno de día completo, así que la misma comparación sirve para los dos casos).
-// - sinTelefono: turnos/sobreturnos sin ninguna línea de teléfono cargada.
+//   Ventana: hoy + 120 días (RANGO_REORGANIZAR_DIAS).
+// - sinTelefono: turnos/sobreturnos sin ninguna línea de teléfono cargada. Ventana
+//   más corta a propósito (hoy + 14 días, RANGO_SIN_TELEFONO_DIAS) — no tiene sentido
+//   recordar "agregar teléfono" de un turno lejano todavía.
 // No incluye teléfonos con formato inválido: ese caso ya no genera tarea, solo el
 // badge visual de la fila (ver decisions.md).
 async function tareas(req, res) {
   try {
     const desde = toArgDate(formatArgDay(new Date()), '00:00');
-    const hasta = new Date(desde.getTime() + RANGO_TAREAS_DIAS * 24 * 60 * 60000);
+    const limiteSinTelefono = new Date(desde.getTime() + RANGO_SIN_TELEFONO_DIAS * 24 * 60 * 60000);
+    const hasta = new Date(desde.getTime() + RANGO_REORGANIZAR_DIAS * 24 * 60 * 60000);
 
     const calendar = getCalendarClient();
 
@@ -286,14 +296,19 @@ async function tareas(req, res) {
       const { start, end } = eventBounds(ev);
       turnos.push({ start, end });
 
-      const telefono = extraerTelefono(ev.description);
-      if (!telefono) {
-        sinTelefono.push({
-          id: ev.id,
-          calendarId,
-          title: ev.summary || '',
-          start: start.toISOString(),
-        });
+      // "Agregar teléfono" solo para turnos dentro de la ventana corta — el turno
+      // en sí ya se agregó a `turnos` arriba con la ventana larga, para que el
+      // cruce con bloqueos lejanos funcione igual.
+      if (start < limiteSinTelefono) {
+        const telefono = extraerTelefono(ev.description);
+        if (!telefono) {
+          sinTelefono.push({
+            id: ev.id,
+            calendarId,
+            title: ev.summary || '',
+            start: start.toISOString(),
+          });
+        }
       }
     });
 
