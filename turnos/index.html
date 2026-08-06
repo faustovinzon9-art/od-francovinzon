@@ -15,6 +15,7 @@
     --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
     --cream: #FAF9F6; --cream-deep: #F1ECE2; --white: #FFFFFF;
     --text: #2A2A2A; --muted: #8A8578; --disabled: #D7D2C6; --success: #25D366;
+    --confirmado: #4F9A3C;
     --radius-pill: 100px; --radius-card: 22px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -82,19 +83,50 @@
   .success-card .check { width: 56px; height: 56px; border-radius: 50%; background: var(--success); color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
   .success-card h3 { font-size: 18px; margin-bottom: 8px; }
   .success-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
+  .success-card p.success-highlight { font-size: 17px; font-weight: 700; color: var(--confirmado); line-height: 1.4; }
   .success-nuevo-logo { width: 200px; max-width: 70%; height: auto; margin: 0 auto 18px; display: block; }
   .success-nuevo p#success-text-nuevo { margin-bottom: 14px; }
   .success-nuevo-note { margin-bottom: 16px !important; }
   .success-nuevo-wa { display: inline-flex; }
+
+  /* Transición de entrada de las pantallas de éxito: fade + leve movimiento
+     (misma curva/timing que el resto del sitio, ver .card en la sección de
+     microinteracciones más abajo), en vez del aparecer/desaparecer instantáneo
+     de .hidden. Se dispara agregando .card-visible vía JS (mostrarCardAnimada). */
+  .success-card { opacity: 0; transform: translateY(10px); transition: opacity .22s ease, transform .22s ease; }
+  .success-card.card-visible { opacity: 1; transform: translateY(0); }
+
+  /* "¡Bienvenido/a!" (paciente nuevo): zoom-in con rebote sutil hasta asentarse
+     en su tamaño normal. Se retrigger vía JS (quitar/forzar reflow/poner la
+     clase) cada vez que se muestra la pantalla de bienvenida. */
+  @keyframes bienvenidoPop {
+    from { transform: scale(0.4); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  #bienvenido-title.pop-in { animation: bienvenidoPop .5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+  /* Confeti (solo paciente nuevo): ráfaga corta cayendo desde arriba, colores de
+     la marca. pointer-events: none para que nunca tape ni bloquee los botones. */
+  @keyframes confettiFall {
+    0% { transform: translateY(-16px) translateX(0) rotate(0deg); opacity: 0; }
+    12% { opacity: 1; }
+    100% { transform: translateY(var(--fall, 180px)) translateX(var(--drift, 0px)) rotate(var(--rot, 220deg)); opacity: 0; }
+  }
+  .confetti-piece {
+    position: fixed; top: 0; width: 8px; height: 8px; border-radius: 2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12); pointer-events: none; z-index: 500;
+    animation: confettiFall var(--dur, 1.1s) ease-out forwards;
+    animation-delay: var(--delay, 0s);
+  }
   .empty-day { text-align: center; color: var(--muted); font-size: 13.5px; padding: 6px 0 2px; display: block; }
   .hidden { display: none !important; }
 
   /* Microinteracciones: mismo timing/curva en toda la página */
-  button, .day-btn, .slot-btn, .contact-btn, .icon-btn, input, textarea, .card {
+  button, .day-btn, .slot-btn, .contact-btn, .icon-btn, input, textarea, .card, .post-action-btn {
     transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
   }
   button, .day-btn.available, .slot-btn, .contact-btn { cursor: pointer; }
-  button:active:not(:disabled), .day-btn.available:active, .slot-btn:active, .contact-btn:active { transform: scale(0.96); }
+  button:active:not(:disabled), .day-btn.available:active, .slot-btn:active, .contact-btn:active, .post-action-btn:active { transform: scale(0.96); }
   .day-btn.available:hover { box-shadow: 0 4px 12px rgba(30, 58, 95, 0.4); }
   .slot-btn:hover { border-color: var(--gold); }
   .contact-btn:hover, button.primary:hover:not(:disabled) { filter: brightness(1.04); box-shadow: 0 5px 16px rgba(30, 58, 95, 0.12); }
@@ -105,6 +137,7 @@
   .post-action-btn {
     width: 100%; padding: 12px; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif;
     font-size: 13.5px; font-weight: 600; border: 1.5px solid var(--navy-soft); background: var(--white); color: var(--navy);
+    text-align: center; text-decoration: none; cursor: pointer; box-sizing: border-box;
   }
   .post-action-btn:hover { background: var(--cream-deep); }
   .post-action-btn.danger { border-color: rgba(193, 68, 55, 0.4); color: #C14437; }
@@ -201,14 +234,14 @@
   <div class="card success-card hidden" id="success-card">
     <div class="check">✓</div>
     <h3 id="success-title">¡Turno confirmado!</h3>
-    <p id="success-text"></p>
+    <p id="success-text" class="success-highlight"></p>
   </div>
 
   <div class="card success-card success-nuevo hidden" id="success-card-nuevo">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo" class="success-nuevo-logo">
-    <h3>¡Bienvenido/a!</h3>
+    <h3 id="bienvenido-title">¡Bienvenido/a!</h3>
     <p class="success-nuevo-note">Va a ser un placer tenerte en el consultorio.</p>
-    <p id="success-text-nuevo"></p>
+    <p id="success-text-nuevo" class="success-highlight"></p>
     <p class="success-nuevo-note">Ante cualquier consulta, escribinos por WhatsApp.</p>
     <a class="contact-btn whatsapp success-nuevo-wa" id="success-nuevo-wa-link" target="_blank" rel="noopener noreferrer">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
@@ -218,7 +251,8 @@
 
   <div class="card hidden" id="post-actions-card">
     <div class="post-actions-row">
-      <button class="post-action-btn" id="btn-agregar-calendario">📅 Agregar al calendario</button>
+      <a class="post-action-btn" id="btn-agregar-apple" href="#">📅 Agregar a Apple Calendar</a>
+      <a class="post-action-btn" id="btn-agregar-google" href="#" target="_blank" rel="noopener noreferrer">📅 Agregar a Google Calendar</a>
       <button class="post-action-btn" id="btn-cambiar-turno">Cambiar día y horario</button>
       <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelar turno</button>
     </div>
@@ -446,12 +480,17 @@
             document.getElementById('success-text-nuevo').textContent = res.message;
             document.getElementById('success-nuevo-wa-link').href =
               'https://wa.me/5403442457764?text=' + encodeURIComponent('Hola! Acabo de reservar mi primer turno y tengo una consulta');
-            successCardNuevo.classList.remove('hidden');
+            mostrarCardAnimada(successCardNuevo);
+            reproducirBounceBienvenido();
+            dispararConfeti();
           } else {
             successTextEl.textContent = res.message;
-            successCard.classList.remove('hidden');
+            mostrarCardAnimada(successCard);
           }
-          if (ultimoEventId) postActionsCard.classList.remove('hidden');
+          if (ultimoEventId) {
+            actualizarLinksCalendario();
+            postActionsCard.classList.remove('hidden');
+          }
         } else {
           showFormMsg(res.message, 'error');
           seleccionarDia(parseInt(fechaSeleccionada.split('-')[2], 10));
@@ -475,22 +514,79 @@
     if (!text) el.classList.add('hidden'); else el.classList.remove('hidden');
   }
 
-  // ---------- Agregar al calendario del dispositivo (.ics, sin librerías) ----------
-  function construirICS(fechaStr, horaStr) {
+  // ---------- Animaciones de la pantalla de éxito ----------
+  // Transición de entrada (fade + leve movimiento) hacia una tarjeta de éxito:
+  // saca .hidden, fuerza reflow para poder retriggerear la transición aunque la
+  // tarjeta ya se haya mostrado antes en esta misma carga de página (reprogramar
+  // vuelve a pasar por acá), y agrega .card-visible en el frame siguiente.
+  function mostrarCardAnimada(el) {
+    el.classList.remove('hidden');
+    el.classList.remove('card-visible');
+    void el.offsetWidth;
+    requestAnimationFrame(() => el.classList.add('card-visible'));
+  }
+
+  // Rebote del título "¡Bienvenido/a!" (solo paciente nuevo) — mismo truco de
+  // quitar/forzar reflow/poner la clase para poder repetir la animación.
+  function reproducirBounceBienvenido() {
+    const el = document.getElementById('bienvenido-title');
+    el.classList.remove('pop-in');
+    void el.offsetWidth;
+    el.classList.add('pop-in');
+  }
+
+  // Ráfaga corta de confeti (solo paciente nuevo), colores de la marca. Sutil:
+  // pocas piezas, 1-2s, pointer-events: none para no tapar ni bloquear botones.
+  // Los nodos se sacan del DOM apenas termina, no quedan acumulando.
+  const CONFETI_COLORES = ['#1E3A5F', '#D4A24C', '#FFFFFF'];
+  function dispararConfeti() {
+    const contenedor = document.createElement('div');
+    contenedor.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 26; i++) {
+      const pieza = document.createElement('div');
+      pieza.className = 'confetti-piece';
+      pieza.style.left = (15 + Math.random() * 70) + '%';
+      pieza.style.background = CONFETI_COLORES[i % CONFETI_COLORES.length];
+      if (Math.random() > 0.5) pieza.style.borderRadius = '50%';
+      pieza.style.setProperty('--drift', (Math.random() * 80 - 40) + 'px');
+      pieza.style.setProperty('--fall', (140 + Math.random() * 90) + 'px');
+      pieza.style.setProperty('--rot', (180 + Math.random() * 360) + 'deg');
+      pieza.style.setProperty('--dur', (0.9 + Math.random() * 0.6) + 's');
+      pieza.style.setProperty('--delay', (Math.random() * 0.25) + 's');
+      contenedor.appendChild(pieza);
+    }
+    document.body.appendChild(contenedor);
+    setTimeout(() => contenedor.remove(), 2000);
+  }
+
+  // ---------- Agregar al calendario del dispositivo ----------
+  // Dos opciones, sin librerías ni ruta de API nueva:
+  // - Apple Calendar: .ics generado en el cliente, SIN atributo download — se
+  //   navega directo al blob (Content-Type text/calendar), que es lo que hace
+  //   que iOS Safari abra la pantalla nativa "Agregar evento" en vez de forzar
+  //   una descarga a la app Archivos. Ver decisions.md.
+  // - Google Calendar: link directo a calendar.google.com/calendar/render con
+  //   los datos del turno, sin ningún archivo de por medio.
+  function limitesUTC(fechaStr, horaStr) {
     const [y, m, d] = fechaStr.split('-').map(Number);
     const [hh, mm] = horaStr.split(':').map(Number);
     // Argentina es siempre UTC-3 (sin horario de verano): UTC = hora Argentina + 3.
     const startUTC = new Date(Date.UTC(y, m - 1, d, hh + 3, mm, 0));
     const endUTC = new Date(startUTC.getTime() + 30 * 60000);
-    const fmt = (dt) => dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    return { startUTC, endUTC };
+  }
+  const fmtUTC = (dt) => dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  function construirICS(fechaStr, horaStr) {
+    const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
     const uid = `turno-${fechaStr}-${horaStr.replace(':', '')}-${Math.random().toString(36).slice(2)}@odontologofrancovinzon`;
     return [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Franco Vinzon Odontologo//Turnos//ES', 'CALSCALE:GREGORIAN',
       'BEGIN:VEVENT',
       `UID:${uid}`,
-      `DTSTAMP:${fmt(new Date())}`,
-      `DTSTART:${fmt(startUTC)}`,
-      `DTEND:${fmt(endUTC)}`,
+      `DTSTAMP:${fmtUTC(new Date())}`,
+      `DTSTART:${fmtUTC(startUTC)}`,
+      `DTEND:${fmtUTC(endUTC)}`,
       'SUMMARY:Turno odontológico - Franco Vinzón',
       'LOCATION:Ameghino 410\\, Concepción del Uruguay',
       'DESCRIPTION:Turno en el Consultorio Odontológico Franco Vinzón.',
@@ -498,15 +594,33 @@
     ].join('\r\n');
   }
 
-  document.getElementById('btn-agregar-calendario').addEventListener('click', () => {
+  function armarLinkGoogleCalendar(fechaStr, horaStr) {
+    const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: 'Turno odontológico - Franco Vinzón',
+      dates: `${fmtUTC(startUTC)}/${fmtUTC(endUTC)}`,
+      details: 'Turno en el Consultorio Odontológico Franco Vinzón.',
+      location: 'Ameghino 410, Concepción del Uruguay',
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  }
+
+  const btnAgregarApple = document.getElementById('btn-agregar-apple');
+  const btnAgregarGoogle = document.getElementById('btn-agregar-google');
+  let ultimoIcsUrl = null;
+
+  // Arma los dos links con los datos del turno recién confirmado (o
+  // reprogramado) — se llama cada vez que se muestra post-actions-card, porque
+  // la fecha/hora puede cambiar entre una reserva y una reprogramación.
+  function actualizarLinksCalendario() {
     if (!fechaSeleccionada || !horarioSeleccionado) return;
+    if (ultimoIcsUrl) URL.revokeObjectURL(ultimoIcsUrl);
     const blob = new Blob([construirICS(fechaSeleccionada, horarioSeleccionado)], { type: 'text/calendar;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'turno-odontologico.ics';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+    ultimoIcsUrl = URL.createObjectURL(blob);
+    btnAgregarApple.href = ultimoIcsUrl;
+    btnAgregarGoogle.href = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado);
+  }
 
   // ---------- Cambiar día/horario o cancelar el turno recién confirmado ----------
   document.getElementById('btn-cambiar-turno').addEventListener('click', () => {
@@ -533,7 +647,8 @@
           reprogramarCard.classList.add('hidden');
           successTextEl.textContent = res.message;
           document.getElementById('success-title').textContent = '¡Turno reprogramado!';
-          successCard.classList.remove('hidden');
+          mostrarCardAnimada(successCard);
+          actualizarLinksCalendario();
           postActionsCard.classList.remove('hidden');
           renderCalendar();
         } else {

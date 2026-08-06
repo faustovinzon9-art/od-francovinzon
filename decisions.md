@@ -189,6 +189,32 @@ se renombró a "Reorganizar turnos del [fecha]" para reflejar ambos casos.
   siempre UTC-3 fijo, así que el `DTSTART`/`DTEND` del `.ics` se arman sumando 3 horas a
   la hora Argentina para obtener UTC — mismo principio que `toArgDate()` del lado
   servidor, sin necesitar esa función en el cliente.
+
+### "Agregar al calendario": dos botones, sin `download`, más Google Calendar (2026-08-06)
+
+**El botón único original forzaba la descarga del `.ics`** (atributo `download` en el
+link) — en iPhone eso manda el archivo a la app Archivos en vez de abrir Calendar
+directamente, que era el objetivo. Se cambió a dos opciones:
+
+- **"Agregar a Apple Calendar"**: mismo `.ics` de siempre, pero SIN `download` — se
+  navega directo al blob (`Content-Type: text/calendar;charset=utf-8`), que según el
+  comportamiento documentado de iOS Safari debería interceptar la navegación y abrir la
+  pantalla nativa "Agregar evento" en vez de descargar. **No se pudo confirmar en un
+  iPhone real ni en el Simulador** (esta máquina no tiene Xcode completo, solo Command
+  Line Tools) — ver `tasks.md`. Si en un iPhone real sigue yendo a Archivos (o similar)
+  en vez de abrir Calendar directo, **sacar este botón** y dejar solo el de Google
+  Calendar, que no tiene esta incertidumbre.
+- **"Agregar a Google Calendar"**: link directo a
+  `calendar.google.com/calendar/render?action=TEMPLATE&...` con los datos del turno
+  (mismo texto/ubicación/descripción que el `.ics`), sin ningún archivo de por medio —
+  abre Google Calendar (app o web) directo, en pestaña nueva.
+- **`limitesUTC(fechaStr, horaStr)` centraliza el cálculo UTC±3** usado tanto por
+  `construirICS()` como por `armarLinkGoogleCalendar()`, para no duplicar la lógica de
+  "Argentina es siempre UTC-3" en dos lugares.
+- **Los links se arman con `actualizarLinksCalendario()`** cada vez que se muestra
+  `post-actions-card` (al confirmar Y al reprogramar), no una sola vez al cargar la
+  página — la fecha/hora puede cambiar. El blob URL anterior se revoca
+  (`URL.revokeObjectURL`) antes de crear uno nuevo, para no acumular blobs sin usar.
 - **"Cambiar día y horario" / "Cancelar turno": sin link persistente, a propósito.**
   Se evaluó el esquema original que tenía pensado `tasks.md` (token en la URL o
   derivado del `eventId`, para volver a un turno después de haberse ido de la página) y
@@ -213,6 +239,34 @@ se renombró a "Reorganizar turnos del [fecha]" para reflejar ambos casos.
   - "Cambiar día y horario" reutiliza el mismo calendario/horarios que ya estaba
     visible en la página (no hace falta un formulario nuevo de nombre/teléfono/motivo,
     esos datos no cambian) — solo pide confirmar el nuevo horario elegido.
+
+### Resaltado del texto de confirmación, transición de entrada, y celebración para paciente nuevo (2026-08-06)
+
+- **"Turno confirmado para..." (`p#success-text` / `p#success-text-nuevo`) más grande,
+  negrita y en verde `--confirmado` (`#4F9A3C`)** — variable nueva, distinta de
+  `--success` (que ya usaba el ícono ✓ circular) y de `--gold`, para no pisar esos usos.
+  Aplica al mismo mensaje del backend en los dos casos (paciente nuevo y recurrente,
+  incluida la reprogramación) porque es el mismo elemento/clase (`.success-highlight`)
+  en los tres casos.
+- **Transición de entrada de las pantallas de éxito (fade + `translateY`, 220ms
+  `ease`)** reemplaza el aparecer/desaparecer instantáneo de `.hidden`. Se dispara con
+  `mostrarCardAnimada(el)`: saca `.hidden`, fuerza reflow (`el.offsetWidth`) y agrega
+  `.card-visible` en el frame siguiente — el reflow es necesario para poder repetir la
+  animación cada vez (ej. reprogramar pasa por la misma tarjeta más de una vez en la
+  misma carga de página).
+- **"¡Bienvenido/a!" con rebote sutil**: una sola animación `scale(0.4)→scale(1)` con
+  curva `cubic-bezier(0.34, 1.56, 0.64, 1)` (easeOutBack) — el overshoot de esa curva ya
+  da el efecto de "zoom-in y asentarse" sin necesitar keyframes de varios pasos. Se
+  retriggerea con el mismo truco de quitar/forzar reflow/poner la clase.
+- **Confeti solo para paciente nuevo**: ráfaga corta (26 piezas, ~1-1.5s, colores
+  navy/dorado/blanco de la marca) cayendo desde arriba de la pantalla, sin librería
+  (unos `div` con `@keyframes` + variables CSS por pieza para la aleatoriedad). A
+  propósito **sutil y corto** (pedido explícito: "no una lluvia larga") y con
+  `pointer-events: none` para que nunca tape ni bloquee los botones de abajo (WhatsApp,
+  agregar al calendario). Los nodos se sacan del DOM con `setTimeout` apenas termina, no
+  quedan acumulando en la página.
+- Ninguna de estas cuatro cosas toca la pantalla de "turno cancelado" ni el diálogo de
+  confirmación de cancelación — son específicas de las pantallas de éxito.
 
 ## Toasts, diálogo de confirmación propio y actualizaciones locales en `/gestion` (2026-08-06)
 

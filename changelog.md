@@ -2,6 +2,15 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (novena vuelta) — pantalla de confirmación de `/turnos`: resaltado, calendario, animaciones y confeti
+
+- **Texto de confirmación resaltado**: "Turno confirmado para..."/"Turno reprogramado para..." ahora se ve más grande, en negrita y en verde `--confirmado` (`#4F9A3C`, variable nueva) en vez del gris genérico. Aplica igual en las tres pantallas de éxito que comparten el mismo mensaje (paciente nuevo, recurrente, reprogramado).
+- **"Agregar al calendario" dividido en dos botones**: el botón único forzaba la descarga del `.ics` (atributo `download`), que en iPhone manda a la app Archivos en vez de abrir Calendar. Ahora "Agregar a Apple Calendar" navega directo al blob sin `download` (`Content-Type: text/calendar`), y se sumó "Agregar a Google Calendar" (link directo a `calendar.google.com/calendar/render`, sin archivo de por medio). **El comportamiento de Apple Calendar en iPhone real no se pudo verificar** — esta máquina no tiene Xcode completo (solo Command Line Tools), sin Simulador de iOS disponible, y sin iPhone físico a mano. Publicado igual con el consentimiento del usuario, a la espera de que lo pruebe en su iPhone; si "Agregar a Apple Calendar" sigue yendo a Archivos, hay que sacarlo y dejar solo Google Calendar (ver `tasks.md`, `decisions.md`).
+- **Transición de entrada más suave** (fade + leve movimiento, 220ms `ease`) al pasar del formulario a la pantalla de éxito, en vez del aparecer/desaparecer instantáneo.
+- **"¡Bienvenido/a!" con rebote sutil** (zoom-in con overshoot vía curva `easeOutBack`) para paciente nuevo.
+- **Confeti corto (colores navy/dorado/blanco)** para paciente nuevo, ~1-1.5s, sin bloquear los botones.
+- Probado en vivo con datos simulados (servidor estático local + `fetch` mockeado, sin credenciales de Google en esta máquina): los 4 puntos verificables en navegador confirmados (texto resaltado, transición de entrada, rebote de "¡Bienvenido/a!", confeti) con capturas de pantalla y verificación de código (`getAnimations()`, conteo de piezas de confeti, `href` de ambos links de calendario con fechas UTC correctas). El punto del comportamiento en iPhone real queda pendiente de que el usuario lo pruebe.
+
 ## 2026-08-06 (octava vuelta) — resumen compacto en mobile, modal de tareas y destacado "urgente"
 
 - **`/gestion`**: el bloque de saludo + turnos hoy + huecos libres, que antes solo existía en el sidebar de desktop (≥1000px), ahora también se ve en mobile — `.mobile-summary`, una franja horizontal compacta arriba de la agenda, con la misma identidad visual (mismos títulos, colores y tipografía del sidebar), no una columna lateral completa. Desktop no se tocó.
