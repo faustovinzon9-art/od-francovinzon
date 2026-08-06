@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/css/intlTelInput.min.css">
 <style>
   :root {
     --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
@@ -76,6 +77,17 @@
   .sidebar-summary { display: flex; flex-direction: column; gap: 9px; padding: 15px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 18px; }
   .summary-line { font-size: 13.5px; color: var(--text); line-height: 1.4; }
   .summary-line strong { color: var(--navy); font-weight: 700; }
+
+  .sidebar-tasks { padding-bottom: 15px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  .tasks-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 10px; }
+  .task-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+  .task-item + .task-item { border-top: 1px solid var(--line); }
+  .task-item-info { flex: 1; min-width: 0; }
+  .task-item-nombre { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task-item-detalle { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .task-item-btn { padding: 5px 11px; border-radius: 100px; border: 1.5px solid var(--gold); background: var(--white); color: var(--gold); font-size: 10.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .tasks-more { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: center; }
+
   .sidebar-search { margin-bottom: 4px; }
   .sidebar-search input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13.5px; }
   .sidebar-search input:focus { outline: none; border-color: var(--gold); background: var(--white); }
@@ -132,7 +144,7 @@
 
   .agenda { background: var(--white); border-radius: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); overflow: hidden; margin-bottom: 16px; }
   .agenda-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 13px; }
-  .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
   .row:last-child { border-bottom: none; }
   .row.row-nuevo { flex-wrap: wrap; background: rgba(212,162,76,.07); }
   .row .hora { font-weight: 700; color: var(--navy); width: 46px; flex-shrink: 0; font-size: 13px; }
@@ -152,8 +164,6 @@
   }
   .row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
   .add-tel-btn { padding: 5px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
-  .inline-tel-input { width: 110px; padding: 5px 8px; border: 1.5px solid var(--line); border-radius: 8px; font-size: 12px; background: var(--cream); }
-  .inline-tel-input:focus { outline: none; border-color: var(--gold); background: var(--white); }
   .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
   .icon-btn.wa-btn { background: #25D366; border-color: #25D366; color: var(--white); }
@@ -174,6 +184,16 @@
   .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
   .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
   .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .field .iti, .inline-tel-wrap .iti { width: 100%; }
+  .field .iti input, .inline-tel-wrap .iti input { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13px; }
+  .field .iti input:focus, .inline-tel-wrap .iti input:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .inline-tel-wrap { width: 100%; flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .inline-tel-wrap .iti { flex: 1; min-width: 190px; }
+  .tel-pendiente-badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    padding: 3px 8px; border-radius: 100px; flex-shrink: 0; color: #7A4A00;
+    background: rgba(212,162,76,.22); border: 1px solid rgba(212,162,76,.5); white-space: nowrap;
+  }
   .panel-actions { display: flex; gap: 8px; margin-top: 6px; }
   .panel-actions button { padding: 9px 18px; border-radius: 9px; font-weight: 600; font-size: 13px; border: none; }
   .btn-confirm { background: var(--gold); color: var(--white); }
@@ -208,6 +228,12 @@
       <div class="summary-line"><strong id="sum-turnos">–</strong> turnos hoy</div>
       <div class="summary-line"><strong id="sum-huecos">–</strong> huecos libres hoy</div>
       <div class="summary-line hidden" id="sum-bloqueo-line">Próximo día bloqueado: <strong id="sum-bloqueo-fecha"></strong></div>
+    </div>
+
+    <div class="sidebar-tasks hidden" id="sidebar-tasks">
+      <div class="tasks-title">Tareas pendientes</div>
+      <div id="sidebar-tasks-list"></div>
+      <div class="tasks-more hidden" id="sidebar-tasks-more"></div>
     </div>
 
     <div class="sidebar-search">
@@ -375,6 +401,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
 <script>
 (function () {
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
@@ -420,6 +447,19 @@
   const panelMover = document.getElementById('panel-mover');
   const panelBloqueoDia = document.getElementById('panel-bloqueo-dia');
   const todayBtn = document.getElementById('today-btn');
+
+  // Selector de país para los teléfonos de "Nuevo turno" y "Nuevo sobreturno". El de
+  // "Agregar/Editar teléfono" inline se inicializa al vuelo por fila, ver
+  // abrirAgregarTelefonoInline — ese campo no existe todavía en el HTML estático.
+  const itiMcTelefono = window.intlTelInput(document.getElementById('mc-telefono'), {
+    initialCountry: 'ar',
+    separateDialCode: true,
+  });
+  const itiTTelefono = window.intlTelInput(document.getElementById('t-telefono'), {
+    initialCountry: 'ar',
+    separateDialCode: true,
+  });
+  const inlineTelInstances = new Map(); // idx de fila -> instancia intl-tel-input
 
   function showOnly(panel) {
     [panelTurno, panelTurnoCalendario, panelHorario, panelMover, panelBloqueoDia].forEach((p) => p.classList.add('hidden'));
@@ -504,7 +544,8 @@
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/horarios-dia?date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
-    ]).then(([turnosHoy, huecosHoy, proximoBloqueo]) => {
+      fetch(`/api/gestion/buscar?modo=tareas-telefono&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], aRevisar: [] })),
+    ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareasTelefono]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
       document.getElementById('sum-turnos').textContent = cantidadTurnos;
       document.getElementById('sum-huecos').textContent = (huecosHoy || []).length;
@@ -517,7 +558,79 @@
       } else {
         lineaBloqueo.classList.add('hidden');
       }
+
+      renderTareasSidebar(tareasTelefono);
     }).catch(() => {});
+  }
+
+  // ---------- Lista de tareas inteligente (teléfonos a revisar / sin cargar) ----------
+  const TAREAS_MOSTRADAS_MAX = 6;
+  let sidebarTareas = [];
+
+  function renderTareasSidebar(tareas) {
+    const wrap = document.getElementById('sidebar-tasks');
+    const listEl = document.getElementById('sidebar-tasks-list');
+    const moreEl = document.getElementById('sidebar-tasks-more');
+
+    const items = [
+      ...(tareas && tareas.aRevisar ? tareas.aRevisar : []).map((t) => ({ ...t, modo: 'editar-tel', label: 'Confirmar teléfono' })),
+      ...(tareas && tareas.sinTelefono ? tareas.sinTelefono : []).map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' })),
+    ].sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    sidebarTareas = items;
+
+    if (items.length === 0) {
+      wrap.classList.add('hidden');
+      listEl.innerHTML = '';
+      moreEl.classList.add('hidden');
+      return;
+    }
+
+    const visibles = items.slice(0, TAREAS_MOSTRADAS_MAX);
+    listEl.innerHTML = visibles.map((t, i) => {
+      const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(new Date(t.start));
+      const btnLabel = t.modo === 'editar-tel' ? 'Editar' : 'Agregar';
+      return `
+        <div class="task-item">
+          <div class="task-item-info">
+            <div class="task-item-nombre">${escapeHtml(t.title || '(sin título)')}</div>
+            <div class="task-item-detalle">${t.label} · ${fecha}</div>
+          </div>
+          <button class="task-item-btn" data-task-idx="${i}">${btnLabel}</button>
+        </div>`;
+    }).join('');
+
+    const restantes = items.length - visibles.length;
+    if (restantes > 0) {
+      moreEl.textContent = `+${restantes} pendiente${restantes === 1 ? '' : 's'} más`;
+      moreEl.classList.remove('hidden');
+    } else {
+      moreEl.classList.add('hidden');
+    }
+
+    wrap.classList.remove('hidden');
+
+    listEl.querySelectorAll('[data-task-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => irYEditarTelefono(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]));
+    });
+  }
+
+  // Lleva a la secretaria al día del turno y abre ahí mismo el flujo de "Editar
+  // teléfono" que ya existe en la fila de la agenda — no hace falta buscar al
+  // paciente a mano.
+  function irYEditarTelefono(t) {
+    if (!t) return;
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t.start));
+    currentDate = fechaItem;
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    cambiarVista('dia').then(() => {
+      const idx = agendaItems.findIndex((it) => it.id === t.id && it.calendarId === t.calendarId);
+      if (idx === -1) return;
+      const rowEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"]`);
+      if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      abrirAgregarTelefonoInline(idx, t.modo);
+    });
   }
 
   // ---------- Vista Día / Semana / Búsqueda ----------
@@ -536,8 +649,9 @@
     viewDiaBtn.classList.toggle('active', view === 'dia');
     viewSemanaBtn.classList.toggle('active', view === 'semana');
     actualizarVisibilidadVista();
-    if (view === 'dia') cargarAgenda();
-    else if (view === 'semana') cargarSemana();
+    if (view === 'dia') return cargarAgenda();
+    if (view === 'semana') return cargarSemana();
+    return Promise.resolve();
   }
   viewDiaBtn.addEventListener('click', () => cambiarVista('dia'));
   viewSemanaBtn.addEventListener('click', () => cambiarVista('semana'));
@@ -546,7 +660,7 @@
   function cargarAgenda() {
     showOnly(null);
     agendaEl.innerHTML = '<div class="loading-note">Cargando agenda...</div>';
-    fetch(`/api/gestion/turnos-dia?date=${currentDate}&key=${encodeURIComponent(gestionKey)}`)
+    return fetch(`/api/gestion/turnos-dia?date=${currentDate}&key=${encodeURIComponent(gestionKey)}`)
       .then((r) => {
         if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
         return r.json();
@@ -785,6 +899,13 @@
 
     const nuevoBadge = esNuevo ? '<span class="badge-nuevo">✨ Nuevo paciente</span>' : '';
     const telefonoLine = esNuevo && it.telefono ? `<div class="detalle-telefono">${escapeHtml(it.telefono)}</div>` : '';
+    // Teléfono cargado antes del selector de país (o por el rescate de teléfonos
+    // sueltos): se sigue mostrando el WhatsApp de mejor esfuerzo, pero se marca para
+    // que se revise a mano en vez de darlo por válido a ciegas.
+    const pendienteRevision = it.tipo !== 'bloqueo' && !!it.telefono && !it.telefonoVerificado;
+    const pendienteBadge = pendienteRevision
+      ? '<span class="tel-pendiente-badge" title="Teléfono cargado antes del selector de país: confirmalo con Editar tel.">⚠ Tel. a revisar</span>'
+      : '';
 
     return `
       <div class="row${esNuevo ? ' row-nuevo' : ''}" data-row-idx="${idx}">
@@ -796,6 +917,7 @@
         </div>
         <span class="badge ${it.tipo}">${badgeLabel}</span>
         ${nuevoBadge}
+        ${pendienteBadge}
         ${acciones}
       </div>`;
   }
@@ -854,18 +976,43 @@
     const actionsEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"] .row-actions`);
     if (!actionsEl) return;
     actionsEl.innerHTML = `
-      <input type="tel" class="inline-tel-input" id="inline-tel-${idx}" data-modo="${modo}" placeholder="Teléfono" value="${escapeHtml(item && item.telefono ? item.telefono : '')}">
-      <button class="icon-btn" data-action="guardar-tel" data-idx="${idx}" title="Guardar">✓</button>
+      <div class="inline-tel-wrap">
+        <input type="tel" id="inline-tel-${idx}" data-modo="${modo}">
+        <button class="icon-btn" data-action="guardar-tel" data-idx="${idx}" title="Guardar">✓</button>
+      </div>
     `;
     const input = document.getElementById(`inline-tel-${idx}`);
-    if (input) { input.focus(); input.select(); }
+    if (!input) return;
+
+    const iti = window.intlTelInput(input, { initialCountry: 'ar', separateDialCode: true });
+    inlineTelInstances.set(idx, iti);
+
+    const prellenado = item && item.telefono ? item.telefono : '';
+    if (prellenado) {
+      // Verificado = ya es un E.164 limpio (con código de país); no verificado = texto
+      // legado, se lo pasa tal cual y que la librería lo interprete "mejor esfuerzo"
+      // con el país por default (Argentina).
+      iti.setNumber(item.telefonoVerificado ? `+${prellenado}` : prellenado);
+    }
+
+    input.focus();
+    input.select();
   }
 
   function guardarTelefonoInline(idx, item) {
     const input = document.getElementById(`inline-tel-${idx}`);
-    const telefono = input ? input.value.trim() : '';
+    const iti = inlineTelInstances.get(idx);
     const modo = input ? input.dataset.modo : 'agregar-tel';
-    if (!telefono && modo !== 'editar-tel') {
+    const tieneTexto = input ? input.value.trim().length > 0 : false;
+
+    let telefono = '';
+    if (tieneTexto) {
+      if (!iti || !iti.isValidNumber()) {
+        if (input) { input.style.borderColor = 'var(--bloqueo)'; input.focus(); }
+        return;
+      }
+      telefono = iti.getNumber();
+    } else if (modo !== 'editar-tel') {
       if (input) { input.style.borderColor = 'var(--bloqueo)'; input.placeholder = 'Obligatorio'; input.focus(); }
       return;
     }
@@ -876,7 +1023,7 @@
       body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId, telefono }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
-      .then((res) => { if (res.success) cargarAgenda(); })
+      .then((res) => { if (res.success) { inlineTelInstances.delete(idx); cargarAgenda(); } })
       .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
   }
 
@@ -892,7 +1039,8 @@
   document.getElementById('t-confirm').addEventListener('click', confirmarTurno);
 
   function abrirTurno() {
-    ['t-nombre', 't-apellido', 't-hora', 't-telefono', 't-motivo'].forEach((id) => document.getElementById(id).value = '');
+    ['t-nombre', 't-apellido', 't-hora', 't-motivo'].forEach((id) => document.getElementById(id).value = '');
+    itiTTelefono.setNumber('');
     setMsg('t-msg', '', '');
     showOnly(panelTurno);
   }
@@ -901,13 +1049,18 @@
     const nombre = document.getElementById('t-nombre').value.trim();
     const apellido = document.getElementById('t-apellido').value.trim();
     const hora = document.getElementById('t-hora').value;
-    const telefono = document.getElementById('t-telefono').value.trim();
+    const telefonoIngresado = document.getElementById('t-telefono').value.trim();
     const motivo = document.getElementById('t-motivo').value.trim();
 
-    if (!nombre || !motivo || !hora || !telefono) {
+    if (!nombre || !motivo || !hora || !telefonoIngresado) {
       setMsg('t-msg', 'Completá nombre, teléfono, hora y motivo.', 'error');
       return;
     }
+    if (!itiTTelefono.isValidNumber()) {
+      setMsg('t-msg', 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
+      return;
+    }
+    const telefono = itiTTelefono.getNumber();
 
     setMsg('t-msg', 'Guardando...', '');
     fetch('/api/gestion/crear-turno', {
@@ -943,7 +1096,8 @@
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
     document.getElementById('mc-datos-paciente').classList.remove('hidden');
-    ['mc-nombre', 'mc-apellido', 'mc-telefono', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    ['mc-nombre', 'mc-apellido', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    itiMcTelefono.setNumber('');
     document.getElementById('mc-title').textContent = 'Nuevo turno';
     document.getElementById('mc-confirm').textContent = 'Guardar';
     setMsg('mc-msg', '', '');
@@ -1078,13 +1232,18 @@
 
     const nombre = document.getElementById('mc-nombre').value.trim();
     const apellido = document.getElementById('mc-apellido').value.trim();
-    const telefono = document.getElementById('mc-telefono').value.trim();
+    const telefonoIngresado = document.getElementById('mc-telefono').value.trim();
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!nombre || !motivo || !telefono) {
+    if (!nombre || !motivo || !telefonoIngresado) {
       setMsg('mc-msg', 'Completá nombre, teléfono y motivo.', 'error');
       return;
     }
+    if (!itiMcTelefono.isValidNumber()) {
+      setMsg('mc-msg', 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
+      return;
+    }
+    const telefono = itiMcTelefono.getNumber();
 
     setMsg('mc-msg', 'Guardando...', '');
     fetch('/api/gestion/crear-turno', {
@@ -1284,7 +1443,10 @@
   }
 
   // ---------- Autocompletar teléfono al escribir el nombre ----------
-  function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId) {
+  // Los teléfonos que devuelve buscar.js?modo=telefono son valores ya guardados
+  // (dígitos con código de país, sin "+") — se los pasa a setNumber() con el "+"
+  // puesto para que la librería detecte bien el país y arme el flag correcto.
+  function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId, iti) {
     let debounce = null;
     function trigger() {
       clearTimeout(debounce);
@@ -1295,7 +1457,7 @@
         fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
           .then((r) => (r.ok ? r.json() : { telefono: null }))
           .then((data) => {
-            if (data.telefono && !telInput.value.trim()) telInput.value = data.telefono;
+            if (data.telefono && !telInput.value.trim()) iti.setNumber(`+${data.telefono}`);
           })
           .catch(() => {});
       }, 500);
@@ -1303,11 +1465,11 @@
     document.getElementById(nombreId).addEventListener('blur', trigger);
     document.getElementById(apellidoId).addEventListener('blur', trigger);
   }
-  wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono');
-  wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono');
+  wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono', itiTTelefono);
+  wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono', itiMcTelefono);
 
   // ---------- Dropdown de autocompletado de pacientes mientras se escribe ----------
-  function wireAutocompletePacientes(nombreId, dropdownId, apellidoId, telefonoId) {
+  function wireAutocompletePacientes(nombreId, dropdownId, apellidoId, telefonoId, iti) {
     const nombreInput = document.getElementById(nombreId);
     const dropdownEl = document.getElementById(dropdownId);
     let debounce = null;
@@ -1323,7 +1485,7 @@
       const partes = p.nombre.split(' ');
       document.getElementById(nombreId).value = partes.shift() || '';
       document.getElementById(apellidoId).value = partes.join(' ');
-      if (p.telefono) document.getElementById(telefonoId).value = p.telefono;
+      if (p.telefono) iti.setNumber(`+${p.telefono}`);
       cerrarDropdown();
     }
 
@@ -1358,8 +1520,8 @@
       if (e.target !== nombreInput && !dropdownEl.contains(e.target)) cerrarDropdown();
     });
   }
-  wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono');
-  wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono');
+  wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono', itiTTelefono);
+  wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono', itiMcTelefono);
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();

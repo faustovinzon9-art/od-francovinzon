@@ -2,6 +2,22 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (tercera vuelta) — lista de tareas inteligente en el sidebar
+
+- **Implementado el ítem 3 del pedido grande del 2026-08-06**, que había quedado pendiente: sección "Tareas pendientes" en el sidebar de `/gestion`, debajo del resumen del día. Dos tipos de tarea generadas de datos reales (nada hardcodeado): "Confirmar teléfono" (mismo criterio que el badge `⚠ Tel. a revisar`) y "Agregar teléfono" (turnos sin ninguna línea de teléfono), para turnos/sobreturnos de hoy en adelante (14 días, sin bloqueos).
+- Backend: nuevo modo `buscar.js?modo=tareas-telefono` (se fusionó en `buscar.js` en vez de sumar un archivo nuevo, mismo patrón que los otros modos — sigue en 11 de 12 funciones serverless).
+- Cada tarea tiene un botón de acción directa que navega al día del turno y abre ahí mismo el mismo flujo inline de "Editar/Agregar teléfono" que ya existía en la fila de la agenda — la secretaria no tiene que buscar al paciente a mano.
+- Se muestran hasta 6 tareas (las más próximas primero), con un contador "+N pendientes más" si hay más. Si no hay ninguna tarea, la sección entera queda oculta (no deja un cartel vacío ocupando espacio).
+- Probado con datos simulados (sin credenciales de Google en esta máquina): estado vacío, tarea "Agregar teléfono", y tarea "Confirmar teléfono" navegando a otro día y abriendo el editor con el país ya interpretado. Falta la prueba contra el Calendar real en producción — ver `tasks.md`.
+
+## 2026-08-06 (segunda vuelta) — corrección de enfoque en teléfonos
+
+- **Se reemplazó la normalización de teléfono que "adivinaba" el código de área por un selector de país explícito** (`intl-tel-input`, CDN, bandera + buscador, default Argentina) en los cuatro campos donde se carga un número nuevo: `/turnos`, y en `/gestion` nuevo turno, nuevo sobreturno, agregar/editar teléfono. El motivo: el enfoque viejo asumía Argentina/zona del consultorio para números cortos, lo cual está mal para pacientes de otras ciudades o países — ver `decisions.md`.
+- Backend nuevo: `telefonoParaWhatsApp()` en `lib/googleCalendar.js` toma el E.164 validado que entrega la librería y arma el número final para `wa.me`, agregando el `9` de Argentina (comprobado empíricamente que la librería no lo incluye — ver `decisions.md`). `reservar.js`, `crear-turno.js` y `agregar-telefono.js` migrados a esta función.
+- Los eventos nuevos marcan `Teléfono verificado: Sí` en la descripción. Los turnos viejos (incluido el rescate de teléfonos sueltos del 2026-08-05) no tienen esa marca: en `/gestion` se les sigue mostrando un WhatsApp de mejor esfuerzo (con la lógica vieja, `normalizarTelefonoWhatsApp()`, que se mantiene solo para esto) pero además un badge `⚠ Tel. a revisar`, para que la secretaria los confirme uno por uno en vez de darlos por válidos a ciegas.
+- Probado en vivo: número de Concepción del Uruguay (3442), Buenos Aires (11) y Córdoba (351) desde Argentina, y un número de Uruguay — los cuatro casos arman bien el E.164, y el link de WhatsApp resultante abre el chat con el número correcto (confirmado vía wa.me).
+- Fix chico de layout encontrado en el camino: en `/gestion`, a ancho de mobile angosto, el badge de tipo (Turno/Sobreturno/Bloqueado) quedaba superpuesto sobre el nombre del paciente cuando el nombre envolvía a una segunda línea (bug preexistente, no introducido por este cambio, pero se hacía más visible con el badge nuevo de "pendiente de revisión"). Se corrigió con `align-items: flex-start` en `.row`.
+
 ## 2026-08-06
 
 - Botón "Mover": ícono cambiado a 🔄 (antes ✎, se confundía con "editar"), y ahora permite editar el motivo desde el mismo modal, tanto para turnos como sobreturnos.

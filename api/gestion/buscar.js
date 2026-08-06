@@ -1,13 +1,15 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
-  eventBounds, extraerTelefono, normalizarTexto, isValidGestionKey,
+  eventBounds, extraerTelefono, extraerTelefonoVerificado, normalizarTexto,
+  isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 
 const MESES_RANGO = 6;
 
-// Búsqueda del sidebar (por defecto), autocompletado de teléfono (?modo=telefono) y
-// autocompletado de pacientes en vivo (?modo=pacientes) comparten ruta para no
-// pasarnos del límite de funciones serverless del plan gratuito.
+// Búsqueda del sidebar (por defecto), autocompletado de teléfono (?modo=telefono),
+// autocompletado de pacientes en vivo (?modo=pacientes) y la lista de tareas de
+// teléfono del sidebar (?modo=tareas-telefono) comparten ruta para no pasarnos del
+// límite de funciones serverless del plan gratuito.
 export default async function handler(req, res) {
   if (!isValidGestionKey(req.query.key)) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -18,6 +20,9 @@ export default async function handler(req, res) {
   }
   if (req.query.modo === 'pacientes') {
     return buscarPacientes(req, res);
+  }
+  if (req.query.modo === 'tareas-telefono') {
+    return tareasTelefono(req, res);
   }
 
   try {
@@ -207,5 +212,73 @@ async function buscarPacientes(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json([]);
+  }
+}
+
+const RANGO_TAREAS_DIAS = 14;
+
+// Alimenta la "lista de tareas inteligente" del sidebar de /gestion: turnos/sobreturnos
+// de HOY en adelante (no eventos pasados, no bloqueos) sin ninguna línea de teléfono
+// cargada, o con teléfono cargado pero sin la marca "Teléfono verificado: Sí" (mismo
+// criterio que el badge "⚠ Tel. a revisar" de la agenda — ver decisions.md).
+async function tareasTelefono(req, res) {
+  try {
+    const desde = toArgDate(formatArgDay(new Date()), '00:00');
+    const hasta = new Date(desde.getTime() + RANGO_TAREAS_DIAS * 24 * 60 * 60000);
+
+    const calendar = getCalendarClient();
+
+    const [principal, sobreturnos] = await Promise.all([
+      calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: desde.toISOString(),
+        timeMax: hasta.toISOString(),
+        singleEvents: true,
+        maxResults: 2500,
+      }),
+      calendar.events.list({
+        calendarId: SOBRETURNOS_CALENDAR_ID,
+        timeMin: desde.toISOString(),
+        timeMax: hasta.toISOString(),
+        singleEvents: true,
+        maxResults: 2500,
+      }),
+    ]);
+
+    const todos = [
+      ...(principal.data.items || []).map((ev) => ({ ev, calendarId: CALENDAR_ID })),
+      ...(sobreturnos.data.items || []).map((ev) => ({ ev, calendarId: SOBRETURNOS_CALENDAR_ID })),
+    ];
+
+    const sinTelefono = [];
+    const aRevisar = [];
+
+    todos.forEach(({ ev, calendarId }) => {
+      const allDay = !ev.start.dateTime;
+      if (allDay || (ev.description || '').includes(BLOCK_MARKER)) return; // bloqueo, no es turno
+
+      const telefono = extraerTelefono(ev.description);
+      const item = {
+        id: ev.id,
+        calendarId,
+        title: ev.summary || '',
+        start: eventBounds(ev).start.toISOString(),
+      };
+
+      if (!telefono) {
+        sinTelefono.push(item);
+      } else if (!extraerTelefonoVerificado(ev.description)) {
+        aRevisar.push({ ...item, telefono });
+      }
+    });
+
+    const porFecha = (a, b) => new Date(a.start) - new Date(b.start);
+    sinTelefono.sort(porFecha);
+    aRevisar.sort(porFecha);
+
+    res.status(200).json({ sinTelefono, aRevisar });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ sinTelefono: [], aRevisar: [] });
   }
 }

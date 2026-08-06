@@ -1,6 +1,7 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
   toArgDate, eventBounds, isValidGestionKey, extraerTelefono, extraerEsNuevoPaciente,
+  extraerTelefonoVerificado,
 } from '../../lib/googleCalendar.js';
 
 export default async function handler(req, res) {
@@ -47,6 +48,7 @@ export default async function handler(req, res) {
         allDay,
         telefono: extraerTelefono(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
+        telefonoVerificado: extraerTelefonoVerificado(ev.description),
       });
     });
 
@@ -63,6 +65,7 @@ export default async function handler(req, res) {
         allDay: !ev.start.dateTime,
         telefono: extraerTelefono(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
+        telefonoVerificado: extraerTelefonoVerificado(ev.description),
       });
     });
 

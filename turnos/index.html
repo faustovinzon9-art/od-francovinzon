@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/css/intlTelInput.min.css">
 <style>
   :root {
     --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
@@ -64,6 +65,9 @@
     width: 100%; padding: 12px 14px; border: 1.5px solid #E9E4D8; border-radius: 13px; font-size: 14.5px; font-family: 'Inter', sans-serif; background: var(--cream); color: var(--text);
   }
   input:focus, textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .iti { width: 100%; }
+  .iti input[type=tel] { width: 100%; }
+  .iti__dial-code { color: var(--muted); }
   .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
   .checkbox-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--navy); flex-shrink: 0; }
   .checkbox-row label { display: inline; margin: 0; font-size: 13.5px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--text); }
@@ -146,7 +150,7 @@
     </div>
 
     <label>Teléfono</label>
-    <input type="tel" id="f-telefono" placeholder="Ej: 3442 123456">
+    <input type="tel" id="f-telefono">
 
     <label>Motivo de la consulta</label>
     <textarea id="f-motivo" rows="2" placeholder="Contanos brevemente qué necesitás"></textarea>
@@ -174,6 +178,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
 <script>
 (function () {
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -207,6 +212,13 @@
   const successCard = document.getElementById('success-card');
   const successTextEl = document.getElementById('success-text');
   const confirmBtn = document.getElementById('confirm-btn');
+
+  // Selector de país para el teléfono: el paciente elige el país (default Argentina)
+  // y escribe solo su número local; al enviar se usa el E.164 que arma la librería.
+  const itiTelefono = window.intlTelInput(document.getElementById('f-telefono'), {
+    initialCountry: 'ar',
+    separateDialCode: true,
+  });
 
   prevBtn.addEventListener('click', () => cambiarMes(-1));
   nextBtn.addEventListener('click', () => cambiarMes(1));
@@ -303,17 +315,22 @@
   function confirmarTurno() {
     const nombreCompleto = document.getElementById('f-nombre').value.trim();
     const esNuevo = document.getElementById('f-nuevo').checked;
-    const telefono = document.getElementById('f-telefono').value.trim();
+    const telefonoIngresado = document.getElementById('f-telefono').value.trim();
     const motivo = document.getElementById('f-motivo').value.trim();
 
     if (!horarioSeleccionado) {
       showFormMsg('Elegí un horario primero.', 'error');
       return;
     }
-    if (!nombreCompleto || !telefono) {
+    if (!nombreCompleto || !telefonoIngresado) {
       showFormMsg('Completá al menos nombre y teléfono.', 'error');
       return;
     }
+    if (!itiTelefono.isValidNumber()) {
+      showFormMsg('Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
+      return;
+    }
+    const telefono = itiTelefono.getNumber();
 
     const partes = nombreCompleto.split(' ');
     const nombre = partes.shift();

@@ -1,25 +1,26 @@
 # Pendientes activos
 
-Último pedido grande (2026-08-06) traía 8 puntos. Se implementaron el 1 y el 2 completos; el resto se dejó explícitamente sin tocar por tamaño/complejidad, a la espera de que el usuario priorice. Están acá en el mismo orden en que se pidieron.
+Último pedido grande (2026-08-06) traía 8 puntos. Se implementaron el 1, el 2 y el 3 completos; el resto se dejó explícitamente sin tocar por tamaño/complejidad, a la espera de que el usuario priorice. Están acá en el mismo orden en que se pidieron.
 
 ## Hecho y desplegado (no son pendientes, solo referencia)
 
 - ✅ Ítem 1 — Botón "Mover": ícono cambiado a 🔄, permite editar motivo desde el mismo modal (turno y sobreturno). Desplegado y funcionando.
 - ✅ Ítem 2 — Teléfonos: normalización compartida, WhatsApp con ícono real y mensaje dinámico, teléfono inválido = "sin teléfono", "Editar tel." permite vacío. Desplegado, probado en vivo con 5 formatos distintos (con 15, con 0, con espacios, con guiones, con +54) — los cinco normalizan igual. Bug de colisión con código de país de España (34) encontrado y corregido en la misma vuelta.
+- ✅ **Selector de país en vez de adivinar el código de área** (2026-08-06): `intl-tel-input` en los 4 campos de teléfono nuevo, `telefonoParaWhatsApp()` a partir del E.164 real, marca `Teléfono verificado: Sí`, badge `⚠ Tel. a revisar` para teléfonos legado. Ver `decisions.md`.
+- ✅ **Ítem 3 — Lista de tareas inteligente en el sidebar** (2026-08-06): implementada. Ver detalle abajo — ya no es un pendiente.
 
 ## Pendiente: verificación floja (no bloqueante, pero sin confirmar)
 
 - El flujo de "Editar tel." guardando **vacío** (para borrar un número) se implementó y se revisó el código, pero no se probó en vivo end-to-end (sí se probó extensamente el camino de guardar un número válido). Antes de confiar en que funciona 100%, probarlo una vez desde la interfaz.
+- **Selector de país (2026-08-06): probado a fondo del lado del cliente y con datos simulados** (servidor estático local, sin las credenciales de la cuenta de servicio de Google disponibles en esta máquina) — el selector, la búsqueda de país, el cálculo del E.164, el agregado del "9" para Argentina, el badge de "pendiente de revisión" y el payload final que se manda a cada ruta se verificaron uno por uno. **No se probó todavía contra el Calendar real en producción** (crear un turno de punta a punta desde `/turnos` o `/gestion` desplegado, ver el evento real en el calendario, click real al WhatsApp resultante desde el teléfono). Conviene hacer una pasada así después de desplegar, antes de darlo por 100% confirmado en producción.
+- **Lista de tareas del sidebar (2026-08-06): probada con datos simulados** (mismo motivo — sin credenciales de Google en esta máquina), incluyendo el estado vacío (sección oculta), la tarea "Agregar teléfono" y la tarea "Confirmar teléfono" navegando a otro día y abriendo el editor inline automáticamente. **No probada contra el Calendar real** ni con volumen real de turnos (para confirmar que el límite de 6 tareas visibles + "+N más" se ve bien con una agenda cargada de verdad).
 
-## Pendiente: ítems 3 a 8 del pedido del 2026-08-06 (sin empezar)
+## Pendiente: ítems 4 a 8 del pedido del 2026-08-06 (sin empezar)
 
-En orden de pedido, no de prioridad — falta que el usuario diga cuáles quiere primero.
-
-### 3. Lista de tareas inteligente en el sidebar
-Debajo del resumen (turnos hoy / huecos libres), lista de tareas tipo "Agregar teléfono a pacientes sin número", "Corregir teléfonos inválidos", con acción directa (editar teléfono sin tener que buscar al paciente a mano). Necesita: una ruta que calcule "pacientes sin teléfono / con teléfono inválido" del día o de un rango, y UI nueva en el sidebar. Ver el límite de funciones antes de sumar una ruta — candidato a fusionar en `buscar.js` con un modo nuevo, o resolver 100% con datos que ya trae `turnos-dia.js`.
+En orden de pedido, no de prioridad — falta que el usuario diga cuáles quiere primero. (El ítem 3 — lista de tareas inteligente — ya está hecho, ver arriba.)
 
 ### 4. Feriados argentinos + tarea "¿Se atiende este día?"
-Detección automática de feriados (necesita una fuente de feriados — no hay ninguna cargada todavía, evaluar una API pública gratuita o una lista fija actualizada a mano por año) + una tarea con ciclo de vida con estado (Sí → se borra; No → ofrece bloquear el día, y si bloquea crea OTRA tarea "Mover pacientes del día bloqueado" que solo desaparece cuando no queda nadie asignado ese día). Es la pieza más compleja de las 6 pendientes — necesita persistencia de estado de tareas en algún lado (hoy no hay ninguna base de datos ni storage propio, todo vive en eventos de Calendar; probablemente haya que "codificar" el estado de la tarea como un evento marcador en el calendario, similar a como se marcan los bloqueos con `BLOCK_MARKER`).
+Detección automática de feriados (necesita una fuente de feriados — no hay ninguna cargada todavía, evaluar una API pública gratuita o una lista fija actualizada a mano por año) + una tarea con ciclo de vida con estado (Sí → se borra; No → ofrece bloquear el día, y si bloquea crea OTRA tarea "Mover pacientes del día bloqueado" que solo desaparece cuando no queda nadie asignado ese día). Es la pieza más compleja de las 5 pendientes — necesita persistencia de estado de tareas en algún lado (hoy no hay ninguna base de datos ni storage propio, todo vive en eventos de Calendar; probablemente haya que "codificar" el estado de la tarea como un evento marcador en el calendario, similar a como se marcan los bloqueos con `BLOCK_MARKER`).
 
 ### 5. "Agregar al calendario del dispositivo" después de confirmar un turno
 En `/turnos`, después de la confirmación. El pedido explícito fue "solo si es simple, sin herramientas externas ni procesos largos" — la opción simple es generar un archivo `.ics` al vuelo (texto plano, sin librerías) y ofrecerlo para descargar/abrir. No necesita ruta de API nueva, se puede armar 100% en el cliente.
