@@ -14,6 +14,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
   }
 
+  if (!telefono || !telefono.trim()) {
+    return res.status(200).json({ success: false, message: 'El teléfono es obligatorio.' });
+  }
+
   try {
     const calendarId = sobreturno ? SOBRETURNOS_CALENDAR_ID : CALENDAR_ID;
     const duration = sobreturno ? SOBRETURNO_MINUTES : SLOT_MINUTES;

@@ -161,7 +161,16 @@
   .panel { background: var(--white); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .panel h2 { font-size: 15px; margin-bottom: 12px; }
   .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .field { flex: 1; min-width: 130px; margin-bottom: 10px; }
+  .field { position: relative; flex: 1; min-width: 130px; margin-bottom: 10px; }
+  .autocomplete-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+    background: var(--white); border: 1.5px solid var(--line); border-radius: 10px;
+    margin-top: 4px; box-shadow: 0 8px 24px rgba(30,58,95,.15);
+    max-height: 220px; overflow-y: auto;
+  }
+  .autocomplete-item { padding: 9px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover { background: var(--cream); }
   .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
   .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
   .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
@@ -255,11 +264,11 @@
 
     <div id="mc-form-wrap" class="hidden">
       <div class="field-row">
-        <div class="field"><label>Nombre</label><input type="text" id="mc-nombre"></div>
+        <div class="field"><label>Nombre</label><input type="text" id="mc-nombre" autocomplete="off"><div class="autocomplete-dropdown hidden" id="mc-nombre-dropdown"></div></div>
         <div class="field"><label>Apellido</label><input type="text" id="mc-apellido"></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>Teléfono (opcional)</label><input type="text" id="mc-telefono"></div>
+        <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
       </div>
       <div class="field"><label>Motivo</label><input type="text" id="mc-motivo"></div>
     </div>
@@ -274,12 +283,12 @@
   <div id="panel-turno" class="panel hidden">
     <h2>Nuevo sobreturno</h2>
     <div class="field-row">
-      <div class="field"><label>Nombre</label><input type="text" id="t-nombre"></div>
+      <div class="field"><label>Nombre</label><input type="text" id="t-nombre" autocomplete="off"><div class="autocomplete-dropdown hidden" id="t-nombre-dropdown"></div></div>
       <div class="field"><label>Apellido</label><input type="text" id="t-apellido"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Hora</label><input type="time" id="t-hora" step="900"></div>
-      <div class="field"><label>Teléfono (opcional)</label><input type="text" id="t-telefono"></div>
+      <div class="field"><label>Teléfono</label><input type="text" id="t-telefono"></div>
     </div>
     <div class="field"><label>Motivo</label><input type="text" id="t-motivo"></div>
     <div class="panel-actions">
@@ -854,8 +863,8 @@
     const telefono = document.getElementById('t-telefono').value.trim();
     const motivo = document.getElementById('t-motivo').value.trim();
 
-    if (!nombre || !motivo || !hora) {
-      setMsg('t-msg', 'Completá nombre, hora y motivo.', 'error');
+    if (!nombre || !motivo || !hora || !telefono) {
+      setMsg('t-msg', 'Completá nombre, teléfono, hora y motivo.', 'error');
       return;
     }
 
@@ -1027,8 +1036,8 @@
     const telefono = document.getElementById('mc-telefono').value.trim();
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!nombre || !motivo) {
-      setMsg('mc-msg', 'Completá nombre y motivo.', 'error');
+    if (!nombre || !motivo || !telefono) {
+      setMsg('mc-msg', 'Completá nombre, teléfono y motivo.', 'error');
       return;
     }
 
@@ -1249,6 +1258,61 @@
   }
   wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono');
   wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono');
+
+  // ---------- Dropdown de autocompletado de pacientes mientras se escribe ----------
+  function wireAutocompletePacientes(nombreId, dropdownId, apellidoId, telefonoId) {
+    const nombreInput = document.getElementById(nombreId);
+    const dropdownEl = document.getElementById(dropdownId);
+    let debounce = null;
+    let resultadosActuales = [];
+
+    function cerrarDropdown() {
+      dropdownEl.classList.add('hidden');
+      dropdownEl.innerHTML = '';
+      resultadosActuales = [];
+    }
+
+    function aplicarSeleccion(p) {
+      const partes = p.nombre.split(' ');
+      document.getElementById(nombreId).value = partes.shift() || '';
+      document.getElementById(apellidoId).value = partes.join(' ');
+      if (p.telefono) document.getElementById(telefonoId).value = p.telefono;
+      cerrarDropdown();
+    }
+
+    function renderDropdown(resultados) {
+      resultadosActuales = resultados || [];
+      if (resultadosActuales.length === 0) { cerrarDropdown(); return; }
+      dropdownEl.innerHTML = resultadosActuales
+        .map((p, i) => `<div class="autocomplete-item" data-idx="${i}">${escapeHtml(p.nombre)}</div>`)
+        .join('');
+      dropdownEl.classList.remove('hidden');
+      dropdownEl.querySelectorAll('.autocomplete-item').forEach((el) => {
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          aplicarSeleccion(resultadosActuales[parseInt(el.dataset.idx, 10)]);
+        });
+      });
+    }
+
+    nombreInput.addEventListener('input', () => {
+      clearTimeout(debounce);
+      const q = nombreInput.value.trim();
+      if (q.length < 3) { cerrarDropdown(); return; }
+      debounce = setTimeout(() => {
+        fetch(`/api/gestion/buscar?modo=pacientes&q=${encodeURIComponent(q)}&key=${encodeURIComponent(gestionKey)}`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then(renderDropdown)
+          .catch(() => cerrarDropdown());
+      }, 300);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target !== nombreInput && !dropdownEl.contains(e.target)) cerrarDropdown();
+    });
+  }
+  wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono');
+  wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono');
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();
