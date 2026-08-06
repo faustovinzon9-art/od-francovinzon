@@ -1807,9 +1807,17 @@
   }
 
   // ---------- Autocompletar teléfono al escribir el nombre ----------
-  // Los teléfonos que devuelve buscar.js?modo=telefono son valores ya guardados
-  // (dígitos con código de país, sin "+") — se los pasa a setNumber() con el "+"
-  // puesto para que la librería detecte bien el país y arme el flag correcto.
+  // Mismo criterio que abrirAgregarTelefonoInline al editar un teléfono existente:
+  // si viene marcado como verificado (E.164 limpio, cargado con el selector de país)
+  // se le antepone "+"; si es texto legado sin esa marca, se pasa TAL CUAL para que
+  // la librería lo interprete con el país por default (Argentina) — anteponerle un
+  // "+" a ciegas a un número legado sin código de país rompe la detección (ej. un
+  // número que arranca con "34" se confunde con España). Bug real corregido acá.
+  function setNumeroAutocompletado(iti, telefono, verificado) {
+    if (!telefono) return;
+    iti.setNumber(verificado ? `+${telefono}` : telefono);
+  }
+
   function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId, iti) {
     let debounce = null;
     function trigger() {
@@ -1821,7 +1829,7 @@
         fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
           .then((r) => (r.ok ? r.json() : { telefono: null }))
           .then((data) => {
-            if (data.telefono && !telInput.value.trim()) iti.setNumber(`+${data.telefono}`);
+            if (data.telefono && !telInput.value.trim()) setNumeroAutocompletado(iti, data.telefono, data.telefonoVerificado);
           })
           .catch(() => {});
       }, 500);
@@ -1849,7 +1857,7 @@
       const partes = p.nombre.split(' ');
       document.getElementById(nombreId).value = partes.shift() || '';
       document.getElementById(apellidoId).value = partes.join(' ');
-      if (p.telefono) iti.setNumber(`+${p.telefono}`);
+      setNumeroAutocompletado(iti, p.telefono, p.telefonoVerificado);
       cerrarDropdown();
     }
 

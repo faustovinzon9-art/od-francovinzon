@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (décima vuelta) — fix: autocompletar teléfono mostraba España en vez de Argentina
+
+- `buscar.js?modo=telefono` y `?modo=pacientes` ahora también devuelven `telefonoVerificado`; el autocompletado en "Nuevo turno"/"Nuevo sobreturno" (`setNumeroAutocompletado()`) antepone "+" solo si el teléfono está verificado, igual que ya hacía "Editar tel." — antes le anteponía "+" a ciegas a números legados sin código de país, y `+3442641639` se confundía con España. Probado en vivo: paciente con teléfono legado (`3442641639`, sin verificar) autocompleta correcto como 🇦🇷 +54, y uno verificado (`5493442641639`) también.
+
 ## 2026-08-06 (novena vuelta) — pantalla de confirmación de `/turnos`: resaltado, calendario, animaciones y confeti
 
 - **Texto de confirmación resaltado**: "Turno confirmado para..."/"Turno reprogramado para..." ahora se ve más grande, en negrita y en verde `--confirmado` (`#4F9A3C`, variable nueva) en vez del gris genérico. Aplica igual en las tres pantallas de éxito que comparten el mismo mensaje (paciente nuevo, recurrente, reprogramado).

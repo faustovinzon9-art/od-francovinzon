@@ -1,6 +1,6 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
-  eventBounds, extraerTelefono, normalizarTexto,
+  eventBounds, extraerTelefono, extraerTelefonoVerificado, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 
@@ -130,11 +130,17 @@ async function buscarTelefono(req, res) {
     const nombreNorm = normalizarTexto(nombre);
     const candidatos = [...(principal.data.items || []), ...(sobreturnos.data.items || [])]
       .filter((ev) => normalizarTexto(ev.summary).includes(nombreNorm))
-      .map((ev) => ({ start: eventBounds(ev).start, telefono: extraerTelefono(ev.description) }))
+      .map((ev) => ({
+        start: eventBounds(ev).start,
+        telefono: extraerTelefono(ev.description),
+        telefonoVerificado: extraerTelefonoVerificado(ev.description),
+      }))
       .filter((c) => c.telefono)
       .sort((a, b) => b.start - a.start);
 
-    res.status(200).json({ telefono: candidatos.length ? candidatos[0].telefono : null });
+    res.status(200).json(candidatos.length
+      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado }
+      : { telefono: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ telefono: null });
@@ -189,7 +195,7 @@ async function buscarPacientes(req, res) {
 
       const start = eventBounds(ev).start;
       const telefono = extraerTelefono(ev.description);
-      const g = grupos.get(tituloNorm) || { nombre: titulo, nombreStart: start, telefono: '', telStart: null };
+      const g = grupos.get(tituloNorm) || { nombre: titulo, nombreStart: start, telefono: '', telefonoVerificado: false, telStart: null };
 
       if (start > g.nombreStart) {
         g.nombre = titulo;
@@ -197,6 +203,7 @@ async function buscarPacientes(req, res) {
       }
       if (telefono && (!g.telStart || start > g.telStart)) {
         g.telefono = telefono;
+        g.telefonoVerificado = extraerTelefonoVerificado(ev.description);
         g.telStart = start;
       }
 
@@ -206,7 +213,7 @@ async function buscarPacientes(req, res) {
     const resultados = [...grupos.values()]
       .sort((a, b) => b.nombreStart - a.nombreStart)
       .slice(0, PACIENTES_LIMITE)
-      .map(({ nombre, telefono }) => ({ nombre, telefono: telefono || '' }));
+      .map(({ nombre, telefono, telefonoVerificado }) => ({ nombre, telefono: telefono || '', telefonoVerificado }));
 
     res.status(200).json(resultados);
   } catch (err) {
