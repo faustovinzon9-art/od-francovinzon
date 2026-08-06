@@ -150,7 +150,10 @@
     background: linear-gradient(135deg, #FFE9B3, var(--gold));
     box-shadow: 0 0 0 1px rgba(212,162,76,.5), 0 2px 8px rgba(212,162,76,.55);
   }
-  .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .add-tel-btn { padding: 5px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .inline-tel-input { width: 110px; padding: 5px 8px; border: 1.5px solid var(--line); border-radius: 8px; font-size: 12px; background: var(--cream); }
+  .inline-tel-input:focus { outline: none; border-color: var(--gold); background: var(--white); }
   .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
   .icon-btn.wa-btn { background: #25D366; border-color: #25D366; color: var(--white); }
@@ -724,7 +727,11 @@
     const waLink = it.tipo !== 'bloqueo' ? armarLinkWhatsApp(it.telefono) : null;
 
     const botones = [];
-    if (waLink) botones.push(`<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`);
+    if (waLink) {
+      botones.push(`<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></a>`);
+    } else if (it.tipo !== 'bloqueo') {
+      botones.push(`<button class="add-tel-btn" data-action="agregar-tel" data-idx="${idx}">+ Agregar teléfono</button>`);
+    }
     if (it.tipo !== 'bloqueo') {
       botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>`);
       botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>`);
@@ -735,7 +742,7 @@
     const telefonoLine = esNuevo && it.telefono ? `<div class="detalle-telefono">${escapeHtml(it.telefono)}</div>` : '';
 
     return `
-      <div class="row${esNuevo ? ' row-nuevo' : ''}">
+      <div class="row${esNuevo ? ' row-nuevo' : ''}" data-row-idx="${idx}">
         <div class="hora">${hora}</div>
         <div class="info">
           <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
@@ -774,18 +781,53 @@
     }
 
     agendaEl.innerHTML = rows.join('');
+  }
 
-    agendaEl.querySelectorAll('[data-action]').forEach((btn) => {
-      const item = agendaItems[parseInt(btn.dataset.idx, 10)];
-      btn.addEventListener('click', () => {
-        if (btn.dataset.action === 'mover') {
-          if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
-          else abrirMover(item);
-        } else {
-          cancelarItem(item);
-        }
-      });
-    });
+  // Delegación de eventos: un solo listener cubre botones ya renderizados
+  // y los que se inyectan dinámicamente después (ej. "Guardar" del teléfono inline).
+  agendaEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.idx, 10);
+    const item = agendaItems[idx];
+    const action = btn.dataset.action;
+
+    if (action === 'mover') {
+      if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
+      else abrirMover(item);
+    } else if (action === 'cancelar') {
+      cancelarItem(item);
+    } else if (action === 'agregar-tel') {
+      abrirAgregarTelefonoInline(idx);
+    } else if (action === 'guardar-tel') {
+      guardarTelefonoInline(idx, item);
+    }
+  });
+
+  function abrirAgregarTelefonoInline(idx) {
+    const actionsEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"] .row-actions`);
+    if (!actionsEl) return;
+    actionsEl.innerHTML = `
+      <input type="tel" class="inline-tel-input" id="inline-tel-${idx}" placeholder="Teléfono">
+      <button class="icon-btn" data-action="guardar-tel" data-idx="${idx}" title="Guardar">✓</button>
+    `;
+    const input = document.getElementById(`inline-tel-${idx}`);
+    if (input) input.focus();
+  }
+
+  function guardarTelefonoInline(idx, item) {
+    const input = document.getElementById(`inline-tel-${idx}`);
+    const telefono = input ? input.value.trim() : '';
+    if (!telefono) return;
+
+    fetch('/api/gestion/agregar-telefono', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId, telefono }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => { if (res.success) cargarAgenda(); })
+      .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
   }
 
   function escapeHtml(str) {
@@ -1184,6 +1226,29 @@
     el.className = 'panel-msg' + (type ? ' ' + type : '');
     if (!text) el.classList.add('hidden'); else el.classList.remove('hidden');
   }
+
+  // ---------- Autocompletar teléfono al escribir el nombre ----------
+  function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId) {
+    let debounce = null;
+    function trigger() {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        const nombreCompleto = (document.getElementById(nombreId).value + ' ' + document.getElementById(apellidoId).value).trim();
+        const telInput = document.getElementById(telefonoId);
+        if (!nombreCompleto || telInput.value.trim()) return;
+        fetch(`/api/gestion/buscar-telefono?nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
+          .then((r) => (r.ok ? r.json() : { telefono: null }))
+          .then((data) => {
+            if (data.telefono && !telInput.value.trim()) telInput.value = data.telefono;
+          })
+          .catch(() => {});
+      }, 500);
+    }
+    document.getElementById(nombreId).addEventListener('blur', trigger);
+    document.getElementById(apellidoId).addEventListener('blur', trigger);
+  }
+  wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono');
+  wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono');
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();
