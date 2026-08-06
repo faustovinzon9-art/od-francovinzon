@@ -1060,6 +1060,8 @@
       abrirAgregarTelefonoInline(idx, action);
     } else if (action === 'guardar-tel') {
       guardarTelefonoInline(idx, item);
+    } else if (action === 'cancelar-tel') {
+      cancelarTelefonoInline(idx);
     }
   });
 
@@ -1070,6 +1072,7 @@
     actionsEl.innerHTML = `
       <div class="inline-tel-wrap">
         <input type="tel" id="inline-tel-${idx}" data-modo="${modo}">
+        <button class="icon-btn trash" data-action="cancelar-tel" data-idx="${idx}" title="Cancelar">✕</button>
         <button class="icon-btn" data-action="guardar-tel" data-idx="${idx}" title="Guardar">✓</button>
       </div>
     `;
@@ -1126,6 +1129,14 @@
         toast('✅ Cambios guardados');
       })
       .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
+  }
+
+  // Cierra el editor inline sin tocar el backend ni agendaItems: como no se modificó
+  // el estado en memoria, renderAgenda() vuelve a mostrar la fila tal cual estaba antes
+  // de abrir "Agregar/Editar teléfono" (con su número previo, o sin ninguno).
+  function cancelarTelefonoInline(idx) {
+    inlineTelInstances.delete(idx);
+    renderAgenda();
   }
 
   function escapeHtml(str) {

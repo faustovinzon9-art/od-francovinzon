@@ -2,6 +2,12 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (sexta vuelta) — botón cancelar en "Agregar/Editar teléfono" de `/gestion`
+
+- **`/gestion`**: el editor inline de teléfono (fila de la agenda, "Agregar teléfono"/"Editar tel.") ahora muestra dos botones junto al input: ✕ (Cancelar) y ✓ (Guardar). Antes solo existía ✓, sin forma de cerrar el editor sin guardar. ✕ no llama al backend — descarta la instancia de `intl-tel-input` de esa fila y vuelve a renderizar la agenda desde `agendaItems` (que no se modificó), así la fila queda exactamente como estaba: con su teléfono anterior si tenía uno, o vacía si no tenía ninguno.
+- El selector de país con bandera + buscador (`intl-tel-input`) para este campo específico ya estaba implementado (ver "segunda vuelta" más abajo) — no fue necesario tocarlo, solo se verificó que sigue precargando bien el país a partir del número guardado (E.164 con `+` para teléfonos verificados, texto tal cual para legados).
+- Probado en vivo con servidor estático local y `fetch` mockeado (sin credenciales de Google en esta máquina): (1) editar el teléfono de un turno que ya tenía uno cargado, cambiar el valor, cancelar con ✕ — el teléfono y el link de WhatsApp quedan intactos, sin ningún request a `agregar-telefono`; (2) agregar teléfono a un turno sin ninguno, escribir un número, cancelar con ✕ — vuelve a "+ Agregar teléfono" vacío, sin request. También se re-confirmó que "Guardar" (✓) sigue guardando bien (toast, resaltado de fila, botón de WhatsApp actualizado). No probado contra el Calendar real en producción.
+
 ## 2026-08-06 (quinta vuelta) — ítems 5/6/8 del pedido grande + mejoras de `/gestion`
 
 - **`/turnos`**: después de confirmar un turno, tres acciones nuevas en la pantalla de éxito — "Agregar al calendario" (`.ics` generado en el cliente, sin librerías), "Cambiar día y horario" (reutiliza el calendario/horarios ya visible, sin repetir nombre/teléfono/motivo) y "Cancelar turno" (diálogo de confirmación propio). Alcance acotado a propósito respecto de lo que decía `tasks.md`: sin login, sin link persistente para volver más tarde — el `eventId` vive solo en memoria durante esa carga de página. `reservar.js` (público) suma `accion: 'mover'|'cancelar'`. Ver `decisions.md`.
