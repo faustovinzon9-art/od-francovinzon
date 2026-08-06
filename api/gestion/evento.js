@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: 'Turno cancelado.' });
     }
 
-    const { nuevaFecha, nuevaHora } = req.body;
+    const { nuevaFecha, nuevaHora, motivo } = req.body;
 
     const { data: original } = await calendar.events.get({ calendarId, eventId });
     const { start: origStart, end: origEnd } = eventBounds(original);
@@ -47,14 +47,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: false, message: 'Ese horario ya está ocupado.' });
     }
 
-    await calendar.events.patch({
-      calendarId,
-      eventId,
-      requestBody: {
-        start: { dateTime: newStart.toISOString(), timeZone: TIME_ZONE },
-        end: { dateTime: newEnd.toISOString(), timeZone: TIME_ZONE },
-      },
-    });
+    const requestBody = {
+      start: { dateTime: newStart.toISOString(), timeZone: TIME_ZONE },
+      end: { dateTime: newEnd.toISOString(), timeZone: TIME_ZONE },
+    };
+    if (motivo && motivo.trim()) {
+      const desc = original.description || '';
+      requestBody.description = /Motivo:\s*[^\n]*/i.test(desc)
+        ? desc.replace(/Motivo:\s*[^\n]*/i, `Motivo: ${motivo.trim()}`)
+        : `${desc.replace(/\s+$/, '')}\nMotivo: ${motivo.trim()}`;
+    }
+
+    await calendar.events.patch({ calendarId, eventId, requestBody });
 
     res.status(200).json({ success: true, message: `Movido al ${nuevaFecha} a las ${nuevaHora} hs.` });
   } catch (err) {

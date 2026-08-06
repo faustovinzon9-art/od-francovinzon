@@ -1,6 +1,6 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, CLINIC_ADDRESS, TIME_ZONE,
-  SLOT_MINUTES, SOBRETURNO_MINUTES, toArgDate, eventBounds, isValidGestionKey,
+  SLOT_MINUTES, SOBRETURNO_MINUTES, toArgDate, eventBounds, isValidGestionKey, normalizarTelefonoWhatsApp,
 } from '../../lib/googleCalendar.js';
 
 export default async function handler(req, res) {
@@ -16,6 +16,10 @@ export default async function handler(req, res) {
 
   if (!telefono || !telefono.trim()) {
     return res.status(200).json({ success: false, message: 'El teléfono es obligatorio.' });
+  }
+  const telNormalizado = normalizarTelefonoWhatsApp(telefono);
+  if (!telNormalizado) {
+    return res.status(200).json({ success: false, message: 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.' });
   }
 
   try {
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
 
     const title = `${nombre} ${apellido || ''}`.trim();
     const description =
-      `Teléfono: ${telefono || '-'}\n` +
+      `Teléfono: ${telNormalizado}\n` +
       `Motivo: ${motivo}\n` +
       'Cargado manualmente desde el panel de gestión.';
 

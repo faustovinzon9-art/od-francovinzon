@@ -263,12 +263,14 @@
     </div>
 
     <div id="mc-form-wrap" class="hidden">
-      <div class="field-row">
-        <div class="field"><label>Nombre</label><input type="text" id="mc-nombre" autocomplete="off"><div class="autocomplete-dropdown hidden" id="mc-nombre-dropdown"></div></div>
-        <div class="field"><label>Apellido</label><input type="text" id="mc-apellido"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
+      <div id="mc-datos-paciente">
+        <div class="field-row">
+          <div class="field"><label>Nombre</label><input type="text" id="mc-nombre" autocomplete="off"><div class="autocomplete-dropdown hidden" id="mc-nombre-dropdown"></div></div>
+          <div class="field"><label>Apellido</label><input type="text" id="mc-apellido"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
+        </div>
       </div>
       <div class="field"><label>Motivo</label><input type="text" id="mc-motivo"></div>
     </div>
@@ -329,6 +331,7 @@
       <div class="field"><label>Nueva fecha</label><input type="date" id="m-fecha"></div>
       <div class="field"><label>Nueva hora</label><input type="time" id="m-hora" step="900"></div>
     </div>
+    <div class="field"><label>Motivo</label><input type="text" id="m-motivo"></div>
     <div class="panel-actions">
       <button class="btn-confirm" id="m-confirm">Mover</button>
       <button class="btn-cancel" id="m-cancel">Cancelar</button>
@@ -673,7 +676,7 @@
     const acciones = it.tipo === 'bloqueo'
       ? ''
       : `<div class="row-actions">
-           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
+           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>
            <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
          </div>`;
     return `
@@ -721,11 +724,41 @@
     return motivo || 'Sin motivo especificado';
   }
 
+  const PREFIJOS_PAIS = ['54', '598', '595', '56', '55', '591', '51', '57', '52', '34', '1'];
+  function normalizarTelefonoWhatsApp(raw) {
+    let digitos = (raw || '').replace(/\D/g, '');
+    if (!digitos) return null;
+    const yaConCodigo = PREFIJOS_PAIS.some((p) => digitos.startsWith(p));
+    if (!yaConCodigo) {
+      if (digitos.startsWith('0')) digitos = digitos.slice(1);
+      for (const largoArea of [4, 3, 2]) {
+        if (digitos.slice(largoArea, largoArea + 2) === '15') {
+          digitos = digitos.slice(0, largoArea) + digitos.slice(largoArea + 2);
+          break;
+        }
+      }
+      digitos = '549' + digitos;
+    }
+    if (digitos.length < 10 || digitos.length > 15) return null;
+    return digitos;
+  }
+
+  function mensajeRecordatorio(it) {
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(it.start));
+    const hoy = todayStr();
+    const [hy, hm, hd] = hoy.split('-').map(Number);
+    const mananaDt = new Date(Date.UTC(hy, hm - 1, hd + 1));
+    const manana = `${mananaDt.getUTCFullYear()}-${pad2(mananaDt.getUTCMonth() + 1)}-${pad2(mananaDt.getUTCDate())}`;
+    let cuando;
+    if (fechaItem === hoy) cuando = 'hoy';
+    else if (fechaItem === manana) cuando = 'mañana';
+    else { const [, m, d] = fechaItem.split('-').map(Number); cuando = `el ${d} de ${MESES[m - 1]}`; }
+    return `¡Hola! 😊🦷 Te escribimos para recordarte tu turno de ${cuando} a las ${fmtHora(it.start)}.`;
+  }
+
   function armarLinkWhatsApp(telefonoRaw) {
-    const digits = (telefonoRaw || '').replace(/\D/g, '');
-    if (!digits) return null;
-    const conPrefijo = digits.startsWith('54') ? digits : '549' + digits;
-    return `https://wa.me/${conPrefijo}`;
+    const normalizado = normalizarTelefonoWhatsApp(telefonoRaw);
+    return normalizado ? `https://wa.me/${normalizado}` : null;
   }
 
   function renderRow(it, idx) {
@@ -733,7 +766,8 @@
     const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
     const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
     const esNuevo = !!it.esNuevoPaciente;
-    const waLink = it.tipo !== 'bloqueo' ? armarLinkWhatsApp(it.telefono) : null;
+    const waLinkBase = it.tipo !== 'bloqueo' ? armarLinkWhatsApp(it.telefono) : null;
+    const waLink = waLinkBase ? `${waLinkBase}?text=${encodeURIComponent(mensajeRecordatorio(it))}` : null;
 
     const botones = [];
     if (waLink) {
@@ -743,7 +777,7 @@
       botones.push(`<button class="add-tel-btn" data-action="agregar-tel" data-idx="${idx}">+ Agregar teléfono</button>`);
     }
     if (it.tipo !== 'bloqueo') {
-      botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>`);
+      botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>`);
       botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>`);
     }
     const acciones = botones.length ? `<div class="row-actions">${botones.join('')}</div>` : '';
@@ -808,18 +842,18 @@
     } else if (action === 'cancelar') {
       cancelarItem(item);
     } else if (action === 'agregar-tel' || action === 'editar-tel') {
-      abrirAgregarTelefonoInline(idx);
+      abrirAgregarTelefonoInline(idx, action);
     } else if (action === 'guardar-tel') {
       guardarTelefonoInline(idx, item);
     }
   });
 
-  function abrirAgregarTelefonoInline(idx) {
+  function abrirAgregarTelefonoInline(idx, modo) {
     const item = agendaItems[idx];
     const actionsEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"] .row-actions`);
     if (!actionsEl) return;
     actionsEl.innerHTML = `
-      <input type="tel" class="inline-tel-input" id="inline-tel-${idx}" placeholder="Teléfono" value="${escapeHtml(item && item.telefono ? item.telefono : '')}">
+      <input type="tel" class="inline-tel-input" id="inline-tel-${idx}" data-modo="${modo}" placeholder="Teléfono" value="${escapeHtml(item && item.telefono ? item.telefono : '')}">
       <button class="icon-btn" data-action="guardar-tel" data-idx="${idx}" title="Guardar">✓</button>
     `;
     const input = document.getElementById(`inline-tel-${idx}`);
@@ -829,7 +863,8 @@
   function guardarTelefonoInline(idx, item) {
     const input = document.getElementById(`inline-tel-${idx}`);
     const telefono = input ? input.value.trim() : '';
-    if (!telefono) {
+    const modo = input ? input.dataset.modo : 'agregar-tel';
+    if (!telefono && modo !== 'editar-tel') {
       if (input) { input.style.borderColor = 'var(--bloqueo)'; input.placeholder = 'Obligatorio'; input.focus(); }
       return;
     }
@@ -906,6 +941,7 @@
     mcFecha = null; mcHora = null;
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
+    document.getElementById('mc-datos-paciente').classList.remove('hidden');
     ['mc-nombre', 'mc-apellido', 'mc-telefono', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
     document.getElementById('mc-title').textContent = 'Nuevo turno';
     document.getElementById('mc-confirm').textContent = 'Guardar';
@@ -923,6 +959,8 @@
     mcFecha = null; mcHora = null;
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
+    document.getElementById('mc-datos-paciente').classList.add('hidden');
+    document.getElementById('mc-motivo').value = extraerMotivo(item.description, item.tipo);
     document.getElementById('mc-title').textContent = 'Mover turno';
     document.getElementById('mc-confirm').textContent = 'Mover';
     setMsg('mc-msg', '', '');
@@ -999,7 +1037,7 @@
       btn.addEventListener('click', () => {
         mcHora = btn.dataset.hora;
         renderMCSlots(slots);
-        if (mcMode === 'crear') document.getElementById('mc-form-wrap').classList.remove('hidden');
+        document.getElementById('mc-form-wrap').classList.remove('hidden');
       });
     });
   }
@@ -1011,11 +1049,12 @@
     }
 
     if (mcMode === 'mover') {
+      const motivo = document.getElementById('mc-motivo').value.trim();
       setMsg('mc-msg', 'Moviendo...', '');
       fetch('/api/gestion/evento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora }),
+        body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora, motivo }),
       })
         .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
         .then((res) => {
@@ -1191,6 +1230,7 @@
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.start));
     document.getElementById('m-fecha').value = fechaItem;
     document.getElementById('m-hora').value = fmtHora(item.start);
+    document.getElementById('m-motivo').value = extraerMotivo(item.description, item.tipo);
     setMsg('m-msg', '', '');
     showOnly(panelMover);
   }
@@ -1198,13 +1238,14 @@
   document.getElementById('m-confirm').addEventListener('click', () => {
     const nuevaFecha = document.getElementById('m-fecha').value;
     const nuevaHora = document.getElementById('m-hora').value;
+    const motivo = document.getElementById('m-motivo').value.trim();
     if (!nuevaFecha || !nuevaHora || !moverContext) return;
 
     setMsg('m-msg', 'Moviendo...', '');
     fetch('/api/gestion/evento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora }),
+      body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora, motivo }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {

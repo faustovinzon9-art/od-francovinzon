@@ -1,6 +1,6 @@
 import {
   getCalendarClient, CALENDAR_ID, SLOT_MINUTES, CLINIC_ADDRESS, TIME_ZONE,
-  toArgDate, eventBounds,
+  toArgDate, eventBounds, normalizarTelefonoWhatsApp,
 } from '../lib/googleCalendar.js';
 
 export default async function handler(req, res) {
@@ -10,6 +10,14 @@ export default async function handler(req, res) {
 
   try {
     const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
+
+    if (!telefono || !telefono.trim()) {
+      return res.status(200).json({ success: false, message: 'El teléfono es obligatorio.' });
+    }
+    const telNormalizado = normalizarTelefonoWhatsApp(telefono);
+    if (!telNormalizado) {
+      return res.status(200).json({ success: false, message: 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.' });
+    }
 
     const start = toArgDate(date, time);
     const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
@@ -37,7 +45,7 @@ export default async function handler(req, res) {
 
     const title = `${nombre} ${apellido || ''}`.trim();
     const description =
-      `Teléfono: ${telefono || '-'}\n` +
+      `Teléfono: ${telNormalizado}\n` +
       `Motivo: ${motivo || '-'}\n` +
       `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
       'Reservado desde el formulario propio (hora Argentina fija, sin depender del dispositivo del paciente).';

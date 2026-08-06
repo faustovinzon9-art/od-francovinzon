@@ -1,4 +1,4 @@
-import { getCalendarClient, isValidGestionKey } from '../../lib/googleCalendar.js';
+import { getCalendarClient, isValidGestionKey, normalizarTelefonoWhatsApp } from '../../lib/googleCalendar.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -10,8 +10,16 @@ export default async function handler(req, res) {
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
   }
-  if (!telefono || !telefono.trim()) {
-    return res.status(200).json({ success: false, message: 'Ingresá un teléfono.' });
+
+  // Vacío = borrar el número (permitido solo acá, no al crear un turno nuevo).
+  const crudo = (telefono || '').trim();
+  let valorGuardar = '-';
+  if (crudo) {
+    const normalizado = normalizarTelefonoWhatsApp(crudo);
+    if (!normalizado) {
+      return res.status(200).json({ success: false, message: 'Ese número no parece válido. Revisalo e intentá de nuevo.' });
+    }
+    valorGuardar = normalizado;
   }
 
   try {
@@ -23,11 +31,12 @@ export default async function handler(req, res) {
 
     let nuevaDescripcion;
     if (yaTieneLinea) {
-      // Editar: reemplaza la línea existente en el lugar, sin duplicarla.
-      nuevaDescripcion = descActual.replace(/Tel[eé]fono:\s*[^\n]*/i, `Teléfono: ${telefono.trim()}`);
-    } else {
+      nuevaDescripcion = descActual.replace(/Tel[eé]fono:\s*[^\n]*/i, `Teléfono: ${valorGuardar}`);
+    } else if (valorGuardar !== '-') {
       const limpia = descActual.replace(/\s+$/, '');
-      nuevaDescripcion = limpia ? `${limpia}\nTeléfono: ${telefono.trim()}` : `Teléfono: ${telefono.trim()}`;
+      nuevaDescripcion = limpia ? `${limpia}\nTeléfono: ${valorGuardar}` : `Teléfono: ${valorGuardar}`;
+    } else {
+      return res.status(200).json({ success: true, message: 'Sin cambios.' });
     }
 
     await calendar.events.patch({
@@ -36,7 +45,7 @@ export default async function handler(req, res) {
       requestBody: { description: nuevaDescripcion },
     });
 
-    res.status(200).json({ success: true, message: yaTieneLinea ? 'Teléfono actualizado.' : 'Teléfono agregado.' });
+    res.status(200).json({ success: true, message: crudo ? 'Teléfono actualizado.' : 'Teléfono borrado.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'No se pudo guardar el teléfono.' });
