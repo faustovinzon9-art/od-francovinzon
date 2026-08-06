@@ -2,8 +2,6 @@ import { getCalendarClient, CALENDAR_ID, isValidGestionKey } from '../../lib/goo
 
 // Utilidad de un solo uso: renombra eventos viejos con título "Turnos (Nombre)"
 // dejando solo "Nombre". Si no encuentra ninguno, no hace nada (idempotente).
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
