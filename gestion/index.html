@@ -724,11 +724,12 @@
     return motivo || 'Sin motivo especificado';
   }
 
-  const PREFIJOS_PAIS = ['54', '598', '595', '56', '55', '591', '51', '57', '52', '34', '1'];
   function normalizarTelefonoWhatsApp(raw) {
     let digitos = (raw || '').replace(/\D/g, '');
     if (!digitos) return null;
-    const yaConCodigo = PREFIJOS_PAIS.some((p) => digitos.startsWith(p));
+    const yaConCodigo =
+      (digitos.startsWith('54') && digitos.length >= 12 && digitos.length <= 13) ||
+      (digitos.startsWith('598') && digitos.length >= 11 && digitos.length <= 12);
     if (!yaConCodigo) {
       if (digitos.startsWith('0')) digitos = digitos.slice(1);
       for (const largoArea of [4, 3, 2]) {
