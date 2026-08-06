@@ -2,6 +2,14 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (octava vuelta) — resumen compacto en mobile, modal de tareas y destacado "urgente"
+
+- **`/gestion`**: el bloque de saludo + turnos hoy + huecos libres, que antes solo existía en el sidebar de desktop (≥1000px), ahora también se ve en mobile — `.mobile-summary`, una franja horizontal compacta arriba de la agenda, con la misma identidad visual (mismos títulos, colores y tipografía del sidebar), no una columna lateral completa. Desktop no se tocó.
+- **Botón "Tareas pendientes (N)"** en ese bloque compacto (oculto si no hay tareas): abre un modal (`#tasks-modal-overlay`, mismo estilo que `confirmDialog()`) con la lista COMPLETA de tareas — mismo contenido, mismo orden de prioridad y mismos botones de acción que el sidebar de desktop, pero sin el tope de 6 que tiene ahí. Se cierra con el botón ✕, clickeando el fondo, o automáticamente al tocar la acción de una tarea (antes de navegar).
+- **Destacado visual "urgente" para "Reorganizar turnos"**: recuadro con fondo rojo suave (`rgba(193,68,55,.07)`, deliberadamente no saturado) + ícono ❗, tanto en el sidebar de desktop como en el modal de mobile — para que se note que hay que resolverlas antes que "Agregar teléfono" (que queda con el estilo neutro de siempre). Renderizado con un helper compartido (`renderTaskItemHtml()`) para que ambos lugares se vean idénticos.
+- Ajuste chico encontrado en el camino: el título "Reorganizar turnos del [fecha]" se truncaba con "…" en el sidebar angosto de desktop (heredaba el `white-space:nowrap` pensado para nombres de pacientes) — se corrigió para que haga wrap a dos líneas.
+- Probado en vivo con datos simulados (servidor estático local + `fetch` mockeado, sin credenciales de Google en esta máquina) en viewport mobile (375×812) y desktop (800×450): bloque compacto completo y prolijo, botón con el conteo correcto, modal con las 3 tareas en el orden correcto y el destacado rojo en las 2 de "Reorganizar turnos", navegación y cierre del modal funcionando, y el sidebar de desktop sin cambios salvo el destacado rojo. No probado contra el Calendar real en producción.
+
 ## 2026-08-06 (séptima vuelta) — "Reorganizar turnos" cubre horarios parciales y va siempre primero
 
 - **`api/gestion/buscar.js` (`?modo=tareas`)**: la tarea que antes solo se generaba para días bloqueados por completo ahora también se genera para bloqueos de rango horario puntual (`bloquear-horario.js`). Una tarea POR CADA bloqueo (no por día): si un mismo día tiene dos bloqueos con turnos superpuestos, son dos tareas separadas. El solapamiento se calcula con los límites reales del bloqueo (`eventBounds`) contra los turnos/sobreturnos reales, no por "mismo día calendario" — un turno fuera del rango horario bloqueado no genera tarea. El campo de la respuesta se renombró de `diasBloqueados` a `reorganizar`.

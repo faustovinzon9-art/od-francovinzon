@@ -147,6 +147,30 @@ se renombró a "Reorganizar turnos del [fecha]" para reflejar ambos casos.
   categorías (antes sí, ordenadas todas juntas por fecha). Dentro de cada categoría
   se sigue ordenando por fecha ascendente.
 
+### Destacado visual "urgente" para "Reorganizar turnos" + resumen compacto en mobile (2026-08-06)
+
+- **Las tareas "Reorganizar turnos" se destacan con un rojo suave, a propósito NO
+  saturado/agresivo** (`rgba(193,68,55,.07)` de fondo, borde `rgba(193,68,55,.2)`,
+  título en `var(--bloqueo)`) más un ícono ❗ al lado — pedido explícito: que se note
+  que hay que resolverlas antes que "Agregar teléfono", sin invadir la vista. "Agregar
+  teléfono" queda con el estilo neutro de siempre — el destacado es exclusivo de
+  `.task-item.urgent` (`t.modo === 'ir-dia'`). Se aplica igual en el sidebar de
+  desktop y en el modal de mobile, mismo helper `renderTaskItemHtml()`.
+- **El resumen del sidebar (saludo, turnos hoy, huecos libres) antes solo existía en
+  desktop (≥1000px)** — en mobile no se veía nada de eso. Se agregó `.mobile-summary`:
+  misma identidad visual (mismos títulos/colores/tipografía) pero como franja
+  horizontal compacta arriba de la agenda, no como columna lateral — así no ocupa
+  media pantalla. La lista de tareas completa NO se repite ahí (sería demasiado alto
+  para una franja compacta): en su lugar, un botón "Tareas pendientes (N)" que abre
+  un modal (`#tasks-modal-overlay`, mismo patrón visual que `confirmDialog()`) con la
+  lista COMPLETA de tareas — a propósito sin el tope de 6 que tiene el sidebar de
+  desktop, porque en el modal no hay problema de espacio vertical (tiene scroll
+  propio). Botón oculto si no hay tareas pendientes.
+- **Desktop (≥1000px) no se tocó**: `.mobile-summary` se oculta con
+  `@media (min-width: 1000px)`, igual que `.search-mobile`. El único cambio visible
+  en desktop es el destacado rojo de "Reorganizar turnos" en el sidebar, que también
+  se pidió ahí explícitamente.
+
 ## Título y descripción de eventos
 
 - **Título del evento: solo `"Nombre Apellido"`**, sin prefijo "Turnos" ni paréntesis (se limpiaron ~242 eventos viejos con formato `"Turnos (Nombre)"` en una migración de un solo uso).

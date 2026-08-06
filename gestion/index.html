@@ -46,6 +46,25 @@
   @media (min-width: 1000px) {
     .search-mobile { display: none; }
   }
+
+  /* Resumen compacto (mobile/vertical): misma identidad visual que el sidebar de
+     desktop (saludo, turnos hoy, huecos libres) pero como franja horizontal chica
+     arriba de la agenda, en vez de columna lateral. Oculto en desktop, donde el
+     sidebar ya cubre lo mismo. */
+  .mobile-summary { background: var(--white); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .mobile-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .mobile-summary h2 { font-size: 17px; margin-bottom: 2px; }
+  .mobile-summary-date { color: var(--muted); font-size: 12px; text-transform: capitalize; }
+  .mobile-summary-stats { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 12.5px; color: var(--text); margin-top: 8px; }
+  .mobile-summary-stats strong { color: var(--navy); font-weight: 700; }
+  .mobile-summary-stats span:not(:first-child)::before { content: '· '; color: var(--muted); }
+  .mobile-tasks-btn {
+    flex-shrink: 0; padding: 8px 13px; border-radius: 100px; border: 1.5px solid var(--gold);
+    background: var(--white); color: var(--gold); font-size: 12px; font-weight: 700; white-space: nowrap;
+  }
+  @media (min-width: 1000px) {
+    .mobile-summary { display: none; }
+  }
   .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
 
   .sidebar { display: none; }
@@ -87,6 +106,25 @@
   .task-item-detalle { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .task-item-btn { padding: 5px 11px; border-radius: 100px; border: 1.5px solid var(--gold); background: var(--white); color: var(--gold); font-size: 10.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
   .tasks-more { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: center; }
+
+  /* Tareas "Reorganizar turnos": destacadas como urgentes con un rojo suave (no
+     saturado) — se resuelven antes que "Agregar teléfono", que queda con el estilo
+     neutro de siempre. */
+  .task-item.urgent,
+  .task-item.urgent + .task-item {
+    border-top: none;
+  }
+  .task-item.urgent {
+    background: rgba(193,68,55,.07);
+    border: 1px solid rgba(193,68,55,.2);
+    border-radius: 9px;
+    padding: 7px 9px;
+    margin-bottom: 6px;
+  }
+  .task-item-icon { flex-shrink: 0; font-size: 12.5px; line-height: 1; }
+  /* "Reorganizar turnos del [fecha]" es más largo que un nombre de paciente típico —
+     se deja hacer wrap a dos líneas en vez de truncar con "…" y perder la fecha. */
+  .task-item.urgent .task-item-nombre { color: var(--bloqueo); white-space: normal; overflow: visible; text-overflow: clip; }
 
   .sidebar-search { margin-bottom: 18px; }
   .sidebar-search input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13.5px; }
@@ -254,6 +292,16 @@
   .confirm-actions button { flex: 1; padding: 11px; border-radius: 100px; font-weight: 700; font-size: 13.5px; border: none; }
   .confirm-actions .btn-cancel { background: var(--cream); color: var(--navy); }
   .confirm-actions .btn-danger { background: var(--bloqueo); color: var(--white); }
+
+  /* Modal de tareas pendientes (mobile): mismo overlay que confirm-overlay, caja
+     más ancha y con scroll propio porque acá va la lista completa (sin el tope de
+     6 que tiene el sidebar de desktop). */
+  .tasks-modal-box { max-width: 420px; max-height: 82vh; display: flex; flex-direction: column; }
+  .tasks-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-shrink: 0; }
+  .tasks-modal-header h3 { margin: 0; }
+  .tasks-modal-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--cream); color: var(--navy); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tasks-modal-list { overflow-y: auto; }
+  .tasks-modal-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 0; }
 </style>
 </head>
 <body>
@@ -299,6 +347,21 @@
   <div class="topbar">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <button class="logout-btn" id="logout-btn">Salir</button>
+  </div>
+
+  <div class="mobile-summary">
+    <div class="mobile-summary-top">
+      <div>
+        <h2>Hola, Ayelen</h2>
+        <div class="mobile-summary-date" id="mobile-summary-date"></div>
+      </div>
+      <button class="mobile-tasks-btn hidden" id="mobile-tasks-btn">Tareas pendientes</button>
+    </div>
+    <div class="mobile-summary-stats" id="mobile-summary-stats">
+      <span><strong id="sum-turnos-m">–</strong> turnos hoy</span>
+      <span><strong id="sum-huecos-m">–</strong> huecos libres hoy</span>
+      <span class="hidden" id="sum-bloqueo-line-m">Próximo bloqueo: <strong id="sum-bloqueo-fecha-m"></strong></span>
+    </div>
   </div>
 
   <div class="search-mobile">
@@ -468,6 +531,16 @@
   </div>
 </div>
 
+<div class="confirm-overlay hidden" id="tasks-modal-overlay">
+  <div class="confirm-box tasks-modal-box">
+    <div class="tasks-modal-header">
+      <h3>Tareas pendientes</h3>
+      <button class="tasks-modal-close" id="tasks-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="tasks-modal-list" id="tasks-modal-list"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
 <script>
 (function () {
@@ -570,8 +643,9 @@
     requestAnimationFrame(() => requestAnimationFrame(() => appEl.classList.add('fade-in')));
     dateInput.value = currentDate;
     updateTodayBtn();
-    document.getElementById('sidebar-date').textContent =
-      new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+    const fechaHoyLarga = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+    document.getElementById('sidebar-date').textContent = fechaHoyLarga;
+    document.getElementById('mobile-summary-date').textContent = fechaHoyLarga;
     cargarAgenda();
     cargarResumenSidebar();
   }
@@ -615,16 +689,27 @@
       fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], reorganizar: [] })),
     ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
+      const cantidadHuecos = (huecosHoy || []).length;
       document.getElementById('sum-turnos').textContent = cantidadTurnos;
-      document.getElementById('sum-huecos').textContent = (huecosHoy || []).length;
+      document.getElementById('sum-huecos').textContent = cantidadHuecos;
+      document.getElementById('sum-turnos-m').textContent = cantidadTurnos;
+      document.getElementById('sum-huecos-m').textContent = cantidadHuecos;
 
+      // El resumen compacto de mobile (.mobile-summary) espeja el mismo dato que el
+      // sidebar de desktop — misma identidad visual, dos DOM distintos porque los ids
+      // no se pueden repetir (mismo patrón que el buscador duplicado, ver architecture.md).
       const lineaBloqueo = document.getElementById('sum-bloqueo-line');
+      const lineaBloqueoM = document.getElementById('sum-bloqueo-line-m');
       if (proximoBloqueo && proximoBloqueo.date) {
         const [y, m, d] = proximoBloqueo.date.split('-').map(Number);
-        document.getElementById('sum-bloqueo-fecha').textContent = `${d} de ${MESES[m - 1]}`;
+        const textoBloqueo = `${d} de ${MESES[m - 1]}`;
+        document.getElementById('sum-bloqueo-fecha').textContent = textoBloqueo;
+        document.getElementById('sum-bloqueo-fecha-m').textContent = textoBloqueo;
         lineaBloqueo.classList.remove('hidden');
+        lineaBloqueoM.classList.remove('hidden');
       } else {
         lineaBloqueo.classList.add('hidden');
+        lineaBloqueoM.classList.add('hidden');
       }
 
       renderTareasSidebar(tareas);
@@ -634,6 +719,31 @@
   // ---------- Lista de tareas inteligente (reorganizar turnos / agregar teléfono) ----------
   const TAREAS_MOSTRADAS_MAX = 6;
   let sidebarTareas = [];
+  const mobileTasksBtn = document.getElementById('mobile-tasks-btn');
+
+  // "Reorganizar turnos" (modo 'ir-dia') se marca como urgente: recuadro rojo suave
+  // + ícono de exclamación, para que se resuelva antes que "Agregar teléfono", que
+  // queda con el estilo neutro de siempre. Compartido entre el sidebar de desktop
+  // (tope de 6) y el modal de mobile (lista completa) para que se vean idénticas.
+  function renderTaskItemHtml(t, i) {
+    const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(new Date(t.start));
+    const urgente = t.modo === 'ir-dia';
+    const btnLabel = urgente ? 'Ir al día' : 'Agregar';
+    const nombre = urgente ? `Reorganizar turnos del ${fecha}` : escapeHtml(t.title || '(sin título)');
+    const detalle = urgente
+      ? `${t.cantidadTurnos} turno${t.cantidadTurnos === 1 ? '' : 's'}`
+      : `${t.label} · ${fecha}`;
+    const icono = urgente ? '<span class="task-item-icon" aria-hidden="true">❗</span>' : '';
+    return `
+      <div class="task-item${urgente ? ' urgent' : ''}">
+        ${icono}
+        <div class="task-item-info">
+          <div class="task-item-nombre">${nombre}</div>
+          <div class="task-item-detalle">${detalle}</div>
+        </div>
+        <button class="task-item-btn" data-task-idx="${i}">${btnLabel}</button>
+      </div>`;
+  }
 
   function renderTareasSidebar(tareas) {
     const wrap = document.getElementById('sidebar-tasks');
@@ -659,6 +769,15 @@
 
     sidebarTareas = items;
 
+    // Botón "Tareas pendientes (N)" del resumen compacto de mobile — oculto si no
+    // hay ninguna tarea.
+    if (items.length > 0) {
+      mobileTasksBtn.textContent = `Tareas pendientes (${items.length})`;
+      mobileTasksBtn.classList.remove('hidden');
+    } else {
+      mobileTasksBtn.classList.add('hidden');
+    }
+
     if (items.length === 0) {
       wrap.classList.add('hidden');
       listEl.innerHTML = '';
@@ -667,22 +786,7 @@
     }
 
     const visibles = items.slice(0, TAREAS_MOSTRADAS_MAX);
-    listEl.innerHTML = visibles.map((t, i) => {
-      const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(new Date(t.start));
-      const btnLabel = t.modo === 'ir-dia' ? 'Ir al día' : 'Agregar';
-      const nombre = t.modo === 'ir-dia' ? `Reorganizar turnos del ${fecha}` : escapeHtml(t.title || '(sin título)');
-      const detalle = t.modo === 'ir-dia'
-        ? `${t.cantidadTurnos} turno${t.cantidadTurnos === 1 ? '' : 's'}`
-        : `${t.label} · ${fecha}`;
-      return `
-        <div class="task-item">
-          <div class="task-item-info">
-            <div class="task-item-nombre">${nombre}</div>
-            <div class="task-item-detalle">${detalle}</div>
-          </div>
-          <button class="task-item-btn" data-task-idx="${i}">${btnLabel}</button>
-        </div>`;
-    }).join('');
+    listEl.innerHTML = visibles.map((t, i) => renderTaskItemHtml(t, i)).join('');
 
     const restantes = items.length - visibles.length;
     if (restantes > 0) {
@@ -704,6 +808,44 @@
     if (t.modo === 'ir-dia') irADia(t.fecha);
     else irYEditarTelefono(t);
   }
+
+  // ---------- Modal de tareas pendientes (mobile) ----------
+  // Mismo contenido y mismo orden que el sidebar de desktop, pero SIN el tope de 6
+  // (lista completa) — se arma a partir de sidebarTareas, que ya guarda todos los
+  // ítems (el tope de 6 solo se aplica al recortar lo que se pinta en el sidebar).
+  const tasksModalOverlay = document.getElementById('tasks-modal-overlay');
+  const tasksModalList = document.getElementById('tasks-modal-list');
+
+  function renderTareasModal() {
+    if (sidebarTareas.length === 0) {
+      tasksModalList.innerHTML = '<div class="tasks-modal-empty">No hay tareas pendientes.</div>';
+      return;
+    }
+    tasksModalList.innerHTML = sidebarTareas.map((t, i) => renderTaskItemHtml(t, i)).join('');
+    tasksModalList.querySelectorAll('[data-task-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cerrarModalTareas();
+        manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]);
+      });
+    });
+  }
+
+  function abrirModalTareas() {
+    renderTareasModal();
+    tasksModalOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => tasksModalOverlay.classList.add('show'));
+  }
+
+  function cerrarModalTareas() {
+    tasksModalOverlay.classList.remove('show');
+    setTimeout(() => tasksModalOverlay.classList.add('hidden'), 180);
+  }
+
+  mobileTasksBtn.addEventListener('click', abrirModalTareas);
+  document.getElementById('tasks-modal-close').addEventListener('click', cerrarModalTareas);
+  tasksModalOverlay.addEventListener('click', (e) => {
+    if (e.target === tasksModalOverlay) cerrarModalTareas();
+  });
 
   function irADia(fecha) {
     currentDate = fecha;
