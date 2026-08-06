@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: 'Turno cancelado.' });
     }
 
-    const { nuevaFecha, nuevaHora, motivo } = req.body;
+    const { nuevaFecha, nuevaHora, motivo, nombre, apellido } = req.body;
 
     const { data: original } = await calendar.events.get({ calendarId, eventId });
     const { start: origStart, end: origEnd } = eventBounds(original);
@@ -51,6 +51,11 @@ export default async function handler(req, res) {
       start: { dateTime: newStart.toISOString(), timeZone: TIME_ZONE },
       end: { dateTime: newEnd.toISOString(), timeZone: TIME_ZONE },
     };
+    // Título del evento: solo "Nombre Apellido" (ver decisions.md) — permite
+    // corregir un nombre mal tipeado desde el mismo flujo de mover/editar.
+    if (nombre && nombre.trim()) {
+      requestBody.summary = `${nombre.trim()} ${(apellido || '').trim()}`.trim();
+    }
     if (motivo && motivo.trim()) {
       const desc = original.description || '';
       requestBody.description = /Motivo:\s*[^\n]*/i.test(desc)

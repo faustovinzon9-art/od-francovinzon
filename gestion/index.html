@@ -403,11 +403,13 @@
     </div>
 
     <div id="mc-form-wrap" class="hidden">
-      <div id="mc-datos-paciente">
+      <div id="mc-datos-nombre">
         <div class="field-row">
           <div class="field"><label>Nombre</label><input type="text" id="mc-nombre" autocomplete="off"><div class="autocomplete-dropdown hidden" id="mc-nombre-dropdown"></div></div>
           <div class="field"><label>Apellido</label><input type="text" id="mc-apellido"></div>
         </div>
+      </div>
+      <div id="mc-datos-paciente">
         <div class="field-row">
           <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
         </div>
@@ -471,6 +473,10 @@
 
   <div id="panel-mover" class="panel hidden">
     <h2>Mover</h2>
+    <div class="field-row">
+      <div class="field"><label>Nombre</label><input type="text" id="m-nombre"></div>
+      <div class="field"><label>Apellido</label><input type="text" id="m-apellido"></div>
+    </div>
     <div class="field-row">
       <div class="field"><label>Nueva fecha</label><input type="date" id="m-fecha"></div>
       <div class="field"><label>Nueva hora</label><input type="time" id="m-hora" step="900"></div>
@@ -671,7 +677,15 @@
 
   function cambiarDia(delta) {
     const [y, m, d] = currentDate.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, m - 1, d + delta));
+    let dt = new Date(Date.UTC(y, m - 1, d + delta));
+    // Navegación día por día (no semana): saltear sábado (6) y domingo (0) — el
+    // consultorio no atiende esos días (WEEKLY_SCHEDULE en lib/googleCalendar.js),
+    // así que de un viernes va directo al lunes siguiente y viceversa.
+    if (Math.abs(delta) === 1) {
+      while (dt.getUTCDay() === 0 || dt.getUTCDay() === 6) {
+        dt = new Date(dt.getTime() + delta * 24 * 60 * 60000);
+      }
+    }
     currentDate = `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
     dateInput.value = currentDate;
     updateTodayBtn();
@@ -1439,6 +1453,12 @@
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
     document.getElementById('mc-datos-paciente').classList.add('hidden');
+    // Nombre/apellido sí quedan editables al mover (para corregir un error de
+    // tipeo), a diferencia de teléfono/"Paciente nuevo" (mc-datos-paciente), que
+    // no se tocan acá.
+    const partesNombreMover = (item.title || '').trim().split(' ');
+    document.getElementById('mc-nombre').value = partesNombreMover.shift() || '';
+    document.getElementById('mc-apellido').value = partesNombreMover.join(' ');
     document.getElementById('mc-motivo').value = extraerMotivo(item.description, item.tipo);
     document.getElementById('mc-title').textContent = 'Mover turno';
     document.getElementById('mc-confirm').textContent = 'Mover';
@@ -1529,11 +1549,17 @@
 
     if (mcMode === 'mover') {
       const motivo = document.getElementById('mc-motivo').value.trim();
+      const nombreMover = document.getElementById('mc-nombre').value.trim();
+      const apellidoMover = document.getElementById('mc-apellido').value.trim();
+      if (!nombreMover) {
+        setMsg('mc-msg', 'El nombre es obligatorio.', 'error');
+        return;
+      }
       setMsg('mc-msg', 'Moviendo...', '');
       fetch('/api/gestion/evento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora, motivo }),
+        body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora, motivo, nombre: nombreMover, apellido: apellidoMover }),
       })
         .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
         .then((res) => {
@@ -1722,6 +1748,9 @@
   function abrirMover(item) {
     moverContext = { eventId: item.id, calendarId: item.calendarId };
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.start));
+    const partesNombreMover = (item.title || '').trim().split(' ');
+    document.getElementById('m-nombre').value = partesNombreMover.shift() || '';
+    document.getElementById('m-apellido').value = partesNombreMover.join(' ');
     document.getElementById('m-fecha').value = fechaItem;
     document.getElementById('m-hora').value = fmtHora(item.start);
     document.getElementById('m-motivo').value = extraerMotivo(item.description, item.tipo);
@@ -1733,13 +1762,19 @@
     const nuevaFecha = document.getElementById('m-fecha').value;
     const nuevaHora = document.getElementById('m-hora').value;
     const motivo = document.getElementById('m-motivo').value.trim();
+    const nombreMover = document.getElementById('m-nombre').value.trim();
+    const apellidoMover = document.getElementById('m-apellido').value.trim();
     if (!nuevaFecha || !nuevaHora || !moverContext) return;
+    if (!nombreMover) {
+      setMsg('m-msg', 'El nombre es obligatorio.', 'error');
+      return;
+    }
 
     setMsg('m-msg', 'Moviendo...', '');
     fetch('/api/gestion/evento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora, motivo }),
+      body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora, motivo, nombre: nombreMover, apellido: apellidoMover }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {

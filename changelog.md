@@ -2,6 +2,12 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (duodécima vuelta) — más confeti, saltear fin de semana al navegar, editar nombre al mover un turno
+
+- Confeti de bienvenida (`/turnos`, paciente nuevo): 26→42 piezas, duración ~1.1-1.9s (antes ~0.9-1.5s), sigue sutil y se limpia sola.
+- `/gestion`: las flechas de día en día ahora saltean sábado y domingo (`cambiarDia()`, solo en vista Día) — de un viernes va directo al lunes siguiente y viceversa, no toca la navegación por semana.
+- `/gestion`: "Mover" (turnos y sobreturnos) ahora permite corregir Nombre/Apellido además de fecha/horario/motivo — `evento.js` actualiza el título del evento (`"Nombre Apellido"`) si vienen esos campos en el body.
+
 ## 2026-08-06 (undécima vuelta) — migración de motivo corrida en producción, bug de reversión encontrado y corregido en la misma vuelta
 
 - Se disparó `migrar-motivo-titulo.js` contra producción: 45 eventos migrados en ambos calendarios. Caso puntual "Axel Martin (se le salio brackets)" confirmado: título limpio + `Motivo: se le salio brackets`. **3 de los 45 quedaron mal** (patrón viejo `"Turnos (Nombre)"` de Apps Script, no `"Nombre (motivo)"` — el regex los interpretó al revés y dejó "Turnos" de título con el nombre real del paciente en `Motivo:`). Se agregó un modo de reversión puntual por `eventId` al mismo script, se corrió una vez, se confirmaron los 3 corregidos, y se borró el script del repo (de vuelta a 11/12 funciones serverless).

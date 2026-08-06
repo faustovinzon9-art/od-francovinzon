@@ -536,27 +536,27 @@
   }
 
   // Ráfaga corta de confeti (solo paciente nuevo), colores de la marca. Sutil:
-  // pocas piezas, 1-2s, pointer-events: none para no tapar ni bloquear botones.
+  // pocas piezas, ~1.5-2.5s, pointer-events: none para no tapar ni bloquear botones.
   // Los nodos se sacan del DOM apenas termina, no quedan acumulando.
   const CONFETI_COLORES = ['#1E3A5F', '#D4A24C', '#FFFFFF'];
   function dispararConfeti() {
     const contenedor = document.createElement('div');
     contenedor.setAttribute('aria-hidden', 'true');
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 42; i++) {
       const pieza = document.createElement('div');
       pieza.className = 'confetti-piece';
       pieza.style.left = (15 + Math.random() * 70) + '%';
       pieza.style.background = CONFETI_COLORES[i % CONFETI_COLORES.length];
       if (Math.random() > 0.5) pieza.style.borderRadius = '50%';
       pieza.style.setProperty('--drift', (Math.random() * 80 - 40) + 'px');
-      pieza.style.setProperty('--fall', (140 + Math.random() * 90) + 'px');
+      pieza.style.setProperty('--fall', (160 + Math.random() * 110) + 'px');
       pieza.style.setProperty('--rot', (180 + Math.random() * 360) + 'deg');
-      pieza.style.setProperty('--dur', (0.9 + Math.random() * 0.6) + 's');
-      pieza.style.setProperty('--delay', (Math.random() * 0.25) + 's');
+      pieza.style.setProperty('--dur', (1.1 + Math.random() * 0.8) + 's');
+      pieza.style.setProperty('--delay', (Math.random() * 0.35) + 's');
       contenedor.appendChild(pieza);
     }
     document.body.appendChild(contenedor);
-    setTimeout(() => contenedor.remove(), 2000);
+    setTimeout(() => contenedor.remove(), 2600);
   }
 
   // ---------- Agregar al calendario del dispositivo ----------
