@@ -12,12 +12,53 @@ import { getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, isValidGestion
 // motivo que ya esté bien cargado) y deja el título limpio como solo "Nombre".
 const PATRON_TITULO = /^(.+?)\s*\(([^)]+)\)\s*$/;
 
+// La primera corrida (2026-08-06) migró 45 eventos, pero 3 de ellos tenían el
+// patrón VIEJO "Turnos (Nombre)" de la limpieza de Apps Script (decisions.md —
+// "Turnos" era un prefijo genérico, no un nombre) en vez de "Nombre (motivo)". El
+// regex no distingue los dos casos, así que a esos 3 les invirtió título/motivo:
+// quedó "Turnos" de título y el nombre real del paciente en Motivo. Se revierten acá
+// puntualmente por eventId (no con el mismo regex, para no arriesgar falsos
+// positivos nuevos) antes de borrar el script.
+const EVENTOS_A_REVERTIR = [
+  { calendarId: 'odontologofrancovinzon@gmail.com', eventId: 'dfun8nppp09totrap7164u214s' }, // "Turnos Odontólogo Franco Vinzón" -> "Nicolas Gomez"
+  { calendarId: 'odontologofrancovinzon@gmail.com', eventId: '8hlfijoth12d9d7fcvshookj7k' }, // "Turnos" -> "Cecilia  Romani"
+  { calendarId: 'odontologofrancovinzon@gmail.com', eventId: 'dd379uusolab8a343pc5e3udec' }, // "Turnos" -> "Camila Daniela Rodriguez"
+];
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
   if (!isValidGestionKey(req.body.key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
+  }
+
+  if (req.body.accion === 'revertir-turnos-genericos') {
+    try {
+      const calendar = getCalendarClient();
+      const resultados = [];
+      for (const { calendarId, eventId } of EVENTOS_A_REVERTIR) {
+        const { data: ev } = await calendar.events.get({ calendarId, eventId });
+        const desc = ev.description || '';
+        const motivoActual = (desc.match(/Motivo:\s*([^\n]*)/i) || [])[1];
+        const nombreReal = motivoActual ? motivoActual.trim() : null;
+        if (!nombreReal) {
+          resultados.push({ calendarId, eventId, saltado: true, razon: 'sin línea Motivo: para recuperar el nombre' });
+          continue;
+        }
+        const descripcionRevertida = desc.replace(/\n?Motivo:\s*[^\n]*/i, '').replace(/\s+$/, '');
+        await calendar.events.patch({
+          calendarId,
+          eventId,
+          requestBody: { summary: nombreReal, description: descripcionRevertida },
+        });
+        resultados.push({ calendarId, eventId, tituloRevertidoA: nombreReal });
+      }
+      return res.status(200).json({ success: true, revertidos: resultados.length, detalle: resultados });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ success: false, message: 'Error al revertir: ' + err.message });
+    }
   }
 
   try {
