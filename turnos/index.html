@@ -78,6 +78,10 @@
   .success-card .check { width: 56px; height: 56px; border-radius: 50%; background: var(--success); color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
   .success-card h3 { font-size: 18px; margin-bottom: 8px; }
   .success-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
+  .success-nuevo-logo { width: 200px; max-width: 70%; height: auto; margin: 0 auto 18px; display: block; }
+  .success-nuevo p#success-text-nuevo { margin-bottom: 14px; }
+  .success-nuevo-note { margin-bottom: 16px !important; }
+  .success-nuevo-wa { display: inline-flex; }
   .empty-day { text-align: center; color: var(--muted); font-size: 13.5px; padding: 6px 0 2px; display: block; }
   .hidden { display: none !important; }
 </style>
@@ -141,7 +145,7 @@
       <label for="f-nuevo">Soy paciente nuevo</label>
     </div>
 
-    <label>Teléfono <span class="label-opt">(opcional)</span></label>
+    <label>Teléfono</label>
     <input type="tel" id="f-telefono" placeholder="Ej: 3442 123456">
 
     <label>Motivo de la consulta</label>
@@ -155,6 +159,17 @@
     <div class="check">✓</div>
     <h3>¡Turno confirmado!</h3>
     <p id="success-text"></p>
+  </div>
+
+  <div class="card success-card success-nuevo hidden" id="success-card-nuevo">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo" class="success-nuevo-logo">
+    <h3>¡Bienvenido/a a Franco Vinzón!</h3>
+    <p id="success-text-nuevo"></p>
+    <p class="success-nuevo-note">Ante cualquier consulta, escribinos por WhatsApp.</p>
+    <a class="contact-btn whatsapp success-nuevo-wa" id="success-nuevo-wa-link" target="_blank" rel="noopener noreferrer">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
+      Escribinos por WhatsApp
+    </a>
   </div>
 </div>
 
@@ -294,12 +309,8 @@
       showFormMsg('Elegí un horario primero.', 'error');
       return;
     }
-    if (!nombreCompleto) {
-      showFormMsg('Completá al menos tu nombre.', 'error');
-      return;
-    }
-    if (esNuevo && !telefono) {
-      showFormMsg('Completá el teléfono: es obligatorio para pacientes nuevos.', 'error');
+    if (!nombreCompleto || !telefono) {
+      showFormMsg('Completá al menos nombre y teléfono.', 'error');
       return;
     }
 
@@ -320,8 +331,15 @@
         confirmBtn.disabled = false;
         if (res.success) {
           formCard.classList.add('hidden');
-          successTextEl.textContent = res.message;
-          successCard.classList.remove('hidden');
+          if (esNuevo) {
+            document.getElementById('success-text-nuevo').textContent = res.message;
+            document.getElementById('success-nuevo-wa-link').href =
+              'https://wa.me/5403442457764?text=' + encodeURIComponent('Hola! Acabo de reservar mi primer turno y tengo una consulta');
+            document.getElementById('success-card-nuevo').classList.remove('hidden');
+          } else {
+            successTextEl.textContent = res.message;
+            successCard.classList.remove('hidden');
+          }
         } else {
           showFormMsg(res.message, 'error');
           seleccionarDia(parseInt(fechaSeleccionada.split('-')[2], 10));

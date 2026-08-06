@@ -721,7 +721,7 @@
     const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
     const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
     const esNuevo = !!it.esNuevoPaciente;
-    const waLink = esNuevo ? armarLinkWhatsApp(it.telefono) : null;
+    const waLink = it.tipo !== 'bloqueo' ? armarLinkWhatsApp(it.telefono) : null;
 
     const botones = [];
     if (waLink) botones.push(`<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`);
