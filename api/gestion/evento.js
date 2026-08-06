@@ -62,3 +62,4 @@ export default async function handler(req, res) {
     res.status(500).json({ success: false, message: 'Error al procesar el turno.' });
   }
 }
+
