@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (undécima vuelta) — migración de motivo corrida en producción, bug de reversión encontrado y corregido en la misma vuelta
+
+- Se disparó `migrar-motivo-titulo.js` contra producción: 45 eventos migrados en ambos calendarios. Caso puntual "Axel Martin (se le salio brackets)" confirmado: título limpio + `Motivo: se le salio brackets`. **3 de los 45 quedaron mal** (patrón viejo `"Turnos (Nombre)"` de Apps Script, no `"Nombre (motivo)"` — el regex los interpretó al revés y dejó "Turnos" de título con el nombre real del paciente en `Motivo:`). Se agregó un modo de reversión puntual por `eventId` al mismo script, se corrió una vez, se confirmaron los 3 corregidos, y se borró el script del repo (de vuelta a 11/12 funciones serverless).
+
 ## 2026-08-06 (décima vuelta) — 5 arreglos en `/gestion`: ícono, sidebar, auto-refresh, bug de "Reorganizar turnos" y migración de motivo
 
 - Ícono de cancelar turno: emoji 🗑 → tacho de contorno SVG. Sidebar de desktop ensanchado (340px→390px) para que las tareas no se corten en dos líneas. Auto-refresh de la agenda cada 60s, se salta el ciclo si hay algo abierto/con foco. **Fix real**: `buscar.js?modo=tareas` limitaba la detección de bloqueos a 14 días (igual que "Agregar teléfono"), por eso "Reorganizar turnos" no aparecía para un bloqueo cargado con más anticipación (ej. 16 de noviembre bloqueado hoy) — ahora esa ventana es de 120 días (igual que `proximo-bloqueo.js`), sin tocar los 14 días de "Agregar teléfono". Sumado `api/gestion/migrar-motivo-titulo.js` (script de un solo uso, sin correr todavía — necesita disparo manual con credenciales que no hay en esta máquina, ver `tasks.md`) para rescatar el motivo de sobreturnos viejos con título `"Nombre (motivo)"`.
