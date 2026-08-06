@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (decimocuarta vuelta) — sección "Horarios de atención" en la home
+
+- Nueva sección en `index.html`, entre el bloque de botones/WhatsApp/dirección y "Tratamientos": horarios reales tomados de `WEEKLY_SCHEDULE` (`lib/googleCalendar.js`), día por día en una tarjeta con el estilo navy/dorado del resto del sitio, más una frase invitando a acercarse presencialmente en esos horarios.
+
 ## 2026-08-06 (decimotercera vuelta) — toasts al cancelar/reprogramar en `/turnos`
 
 - `/turnos` no tenía ningún componente de toast — se copió tal cual (mismo CSS `#toast-container`/`.toast`, misma función `toast()`) el que ya usa `/gestion`, sin inventar uno nuevo. "✅ Turno cancelado correctamente" al eliminar el turno desde la pantalla de confirmación, "✅ Turno modificado correctamente" al cambiar día/horario.

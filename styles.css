@@ -123,6 +123,33 @@ h1, h2, h3 {
 .hero-actions > a.btn { align-self: flex-start; }
 .hero-cta-note { font-size: .78rem; color: var(--navy-light); }
 
+/* Horarios */
+.horarios { padding: 100px 24px; text-align: center; }
+.horarios h2 { font-size: 2.2rem; margin-bottom: 40px; }
+.horarios-card {
+  max-width: 460px;
+  margin: 0 auto;
+  background: var(--white);
+  border: 1px solid rgba(30,58,95,.08);
+  border-radius: 20px;
+  padding: 8px 32px;
+  box-shadow: 0 20px 40px rgba(30,58,95,.1);
+  text-align: left;
+}
+.horario-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 15px 0;
+  border-bottom: 1px solid rgba(30,58,95,.08);
+}
+.horario-row:last-child { border-bottom: none; }
+.horario-dia { font-weight: 600; color: var(--navy); }
+.horario-rango { color: var(--navy-light); font-size: .92rem; text-align: right; }
+.horario-cerrado .horario-rango { font-style: italic; }
+.horarios-nota { margin: 28px auto 0; max-width: 460px; color: var(--navy-light); font-size: .82rem; }
+
 /* Servicios */
 .servicios { padding: 100px 24px; text-align: center; }
 .servicios h2 { font-size: 2.2rem; }
