@@ -144,6 +144,18 @@
   .post-action-btn.danger:hover { background: rgba(193, 68, 55, 0.06); }
   .reprogramar-note { font-size: 13px; color: var(--navy-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
 
+  /* Toast: mismo componente/estilo que /gestion, ver decisions.md. */
+  #toast-container {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999;
+    display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none;
+  }
+  .toast {
+    background: var(--navy); color: var(--white); padding: 11px 20px; border-radius: 100px;
+    font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(30,58,95,.28);
+    opacity: 0; transform: translateY(-10px); transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
   .confirm-overlay {
     position: fixed; inset: 0; background: rgba(30, 58, 95, 0.35); display: flex; align-items: center; justify-content: center;
     padding: 20px; z-index: 100; opacity: 0; transition: opacity .18s ease;
@@ -271,6 +283,8 @@
   </div>
 </div>
 
+<div id="toast-container" aria-live="polite"></div>
+
 <div class="confirm-overlay hidden" id="confirm-overlay">
   <div class="confirm-box">
     <h3>Cancelar turno</h3>
@@ -323,6 +337,20 @@
   const canceladoCard = document.getElementById('cancelado-card');
   const successCardNuevo = document.getElementById('success-card-nuevo');
   const confirmOverlay = document.getElementById('confirm-overlay');
+
+  // ---------- Toast: mismo componente/estilo que /gestion (ver decisions.md) ----------
+  const toastContainer = document.getElementById('toast-container');
+  function toast(mensaje) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = mensaje;
+    toastContainer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, 2600);
+  }
 
   function ocultarTodasLasCards() {
     [slotsCard, formCard, successCard, successCardNuevo, postActionsCard, reprogramarCard, canceladoCard]
@@ -651,6 +679,7 @@
           actualizarLinksCalendario();
           postActionsCard.classList.remove('hidden');
           renderCalendar();
+          toast('✅ Turno modificado correctamente');
         } else {
           showMsg('reprogramar-msg', res.message, 'error');
         }
@@ -679,6 +708,7 @@
           ultimoEventId = null;
           ocultarTodasLasCards();
           canceladoCard.classList.remove('hidden');
+          toast('✅ Turno cancelado correctamente');
         }
       })
       .catch(() => mostrarConfirmCancelar(false));

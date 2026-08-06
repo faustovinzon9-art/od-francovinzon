@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (decimotercera vuelta) — toasts al cancelar/reprogramar en `/turnos`
+
+- `/turnos` no tenía ningún componente de toast — se copió tal cual (mismo CSS `#toast-container`/`.toast`, misma función `toast()`) el que ya usa `/gestion`, sin inventar uno nuevo. "✅ Turno cancelado correctamente" al eliminar el turno desde la pantalla de confirmación, "✅ Turno modificado correctamente" al cambiar día/horario.
+
 ## 2026-08-06 (duodécima vuelta) — más confeti, saltear fin de semana al navegar, editar nombre al mover un turno
 
 - Confeti de bienvenida (`/turnos`, paciente nuevo): 26→42 piezas, duración ~1.1-1.9s (antes ~0.9-1.5s), sigue sutil y se limpia sola.
