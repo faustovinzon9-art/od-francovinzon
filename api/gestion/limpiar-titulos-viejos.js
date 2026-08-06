@@ -53,6 +53,11 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: 'Error al limpiar títulos.' });
+    res.status(500).json({
+      success: false,
+      message: 'Error al limpiar títulos.',
+      debug: err && err.message ? err.message : String(err),
+      debugData: err && err.response && err.response.data ? err.response.data : null,
+    });
   }
 }
