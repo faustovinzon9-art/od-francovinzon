@@ -120,12 +120,32 @@ hace falta que además genere una tarea separada en el sidebar — sería redund
 - La lista de tareas ahora tiene exactamente dos categorías, ambas de datos reales
   (`buscar.js?modo=tareas`, ver `architecture.md`):
   - **"Agregar teléfono"**: turnos/sobreturnos sin ninguna línea de teléfono cargada.
-  - **"Mover N turnos" (día bloqueado)**: días bloqueados por completo (con la función
-    "Bloquear un día completo" que ya existía) que todavía tienen turnos o sobreturnos
-    asignados ese mismo día. Botón "Ir al día" — no abre ningún editor, solo navega:
-    mover/cancelar cada turno se hace con las acciones que ya existen en la fila de la
-    agenda.
+  - **"Reorganizar turnos" (bloqueo con turnos)**: cada bloqueo —día completo con
+    "Bloquear un día completo" O rango horario puntual con "Bloquear un horario"— que
+    todavía tiene turnos o sobreturnos superpuestos en su rango real. Botón "Ir al día"
+    — no abre ningún editor, solo navega: mover/cancelar cada turno se hace con las
+    acciones que ya existen en la fila de la agenda.
 - Rango: hoy en adelante, 14 días — igual que antes.
+
+### "Reorganizar turnos" también para horarios parciales, y siempre primero (2026-08-06)
+
+**Se extendió la tarea "Mover N turnos" (que solo cubría días bloqueados por completo)
+para que también cubra bloqueos de rango horario puntual** (`bloquear-horario.js`), y
+se renombró a "Reorganizar turnos del [fecha]" para reflejar ambos casos.
+
+- **Una tarea por cada bloqueo, no por día**: si el mismo día tiene dos bloqueos
+  distintos con turnos superpuestos (ej. dos horarios puntuales separados), son dos
+  tareas separadas, cada una navegando al mismo día. No se agrupan por fecha porque
+  cada bloqueo es una acción de reorganización independiente.
+- **El solapamiento se calcula con los límites reales del bloqueo** (`eventBounds`:
+  hora exacta para un bloqueo de horario puntual, 00:00→00:00 del día siguiente para
+  uno de día completo), no por "mismo día calendario" — así un turno a las 8:00 no
+  genera una tarea de reorganización si el bloqueo puntual es de 14:00 a 16:00 y no
+  hay ningún turno en ese rango.
+- **Prioridad fija en el sidebar**: las tareas "Reorganizar turnos" van siempre
+  primero, antes que "Agregar teléfono" — ya no se mezclan cronológicamente entre
+  categorías (antes sí, ordenadas todas juntas por fecha). Dentro de cada categoría
+  se sigue ordenando por fecha ascendente.
 
 ## Título y descripción de eventos
 

@@ -2,6 +2,12 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (séptima vuelta) — "Reorganizar turnos" cubre horarios parciales y va siempre primero
+
+- **`api/gestion/buscar.js` (`?modo=tareas`)**: la tarea que antes solo se generaba para días bloqueados por completo ahora también se genera para bloqueos de rango horario puntual (`bloquear-horario.js`). Una tarea POR CADA bloqueo (no por día): si un mismo día tiene dos bloqueos con turnos superpuestos, son dos tareas separadas. El solapamiento se calcula con los límites reales del bloqueo (`eventBounds`) contra los turnos/sobreturnos reales, no por "mismo día calendario" — un turno fuera del rango horario bloqueado no genera tarea. El campo de la respuesta se renombró de `diasBloqueados` a `reorganizar`.
+- **`/gestion`**: texto de la tarea unificado a "Reorganizar turnos del [fecha]" (antes "Mover N turnos", solo para días completos), con la cantidad de turnos afectados como detalle. Las tareas de "Reorganizar turnos" ahora aparecen siempre primero en la lista del sidebar, antes que las de "Agregar teléfono" — antes se mezclaban todas cronológicamente por fecha.
+- Probado en vivo con datos simulados (servidor estático local + `fetch` mockeado, sin credenciales de Google en esta máquina): bloqueo de día completo con 2 turnos, bloqueo de horario parcial (14–16h) con 1 turno adentro y 1 turno afuera el mismo día (cuenta bien solo el que se solapa), y el orden de prioridad en el sidebar con tres tareas de fechas intercaladas. No probado contra el Calendar real en producción.
+
 ## 2026-08-06 (sexta vuelta) — botón cancelar en "Agregar/Editar teléfono" de `/gestion`
 
 - **`/gestion`**: el editor inline de teléfono (fila de la agenda, "Agregar teléfono"/"Editar tel.") ahora muestra dos botones junto al input: ✕ (Cancelar) y ✓ (Guardar). Antes solo existía ✓, sin forma de cerrar el editor sin guardar. ✕ no llama al backend — descarta la instancia de `intl-tel-input` de esa fila y vuelve a renderizar la agenda desde `agendaItems` (que no se modificó), así la fila queda exactamente como estaba: con su teléfono anterior si tenía uno, o vacía si no tenía ninguno.

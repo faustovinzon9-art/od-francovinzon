@@ -612,7 +612,7 @@
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/horarios-dia?date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
-      fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], diasBloqueados: [] })),
+      fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], reorganizar: [] })),
     ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
       document.getElementById('sum-turnos').textContent = cantidadTurnos;
@@ -631,7 +631,7 @@
     }).catch(() => {});
   }
 
-  // ---------- Lista de tareas inteligente (sin teléfono / días bloqueados con turnos) ----------
+  // ---------- Lista de tareas inteligente (reorganizar turnos / agregar teléfono) ----------
   const TAREAS_MOSTRADAS_MAX = 6;
   let sidebarTareas = [];
 
@@ -640,19 +640,22 @@
     const listEl = document.getElementById('sidebar-tasks-list');
     const moreEl = document.getElementById('sidebar-tasks-more');
 
-    const itemsSinTelefono = (tareas && tareas.sinTelefono ? tareas.sinTelefono : [])
-      .map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' }));
-
-    const itemsDiaBloqueado = (tareas && tareas.diasBloqueados ? tareas.diasBloqueados : [])
-      .map((d) => ({
+    // "Reorganizar turnos" siempre va primero, antes que "Agregar teléfono" — no se
+    // mezclan por fecha entre categorías, cada una se ordena por fecha puesta adentro.
+    const itemsReorganizar = (tareas && tareas.reorganizar ? tareas.reorganizar : [])
+      .map((b) => ({
         modo: 'ir-dia',
-        fecha: d.fecha,
-        start: `${d.fecha}T00:00:00-03:00`,
-        title: 'Día bloqueado',
-        label: `Mover ${d.cantidadTurnos} turno${d.cantidadTurnos === 1 ? '' : 's'}`,
-      }));
+        fecha: b.fecha,
+        start: `${b.fecha}T00:00:00-03:00`,
+        cantidadTurnos: b.cantidadTurnos,
+      }))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    const items = [...itemsSinTelefono, ...itemsDiaBloqueado].sort((a, b) => new Date(a.start) - new Date(b.start));
+    const itemsSinTelefono = (tareas && tareas.sinTelefono ? tareas.sinTelefono : [])
+      .map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' }))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    const items = [...itemsReorganizar, ...itemsSinTelefono];
 
     sidebarTareas = items;
 
@@ -667,11 +670,15 @@
     listEl.innerHTML = visibles.map((t, i) => {
       const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(new Date(t.start));
       const btnLabel = t.modo === 'ir-dia' ? 'Ir al día' : 'Agregar';
+      const nombre = t.modo === 'ir-dia' ? `Reorganizar turnos del ${fecha}` : escapeHtml(t.title || '(sin título)');
+      const detalle = t.modo === 'ir-dia'
+        ? `${t.cantidadTurnos} turno${t.cantidadTurnos === 1 ? '' : 's'}`
+        : `${t.label} · ${fecha}`;
       return `
         <div class="task-item">
           <div class="task-item-info">
-            <div class="task-item-nombre">${escapeHtml(t.title || '(sin título)')}</div>
-            <div class="task-item-detalle">${t.label} · ${fecha}</div>
+            <div class="task-item-nombre">${nombre}</div>
+            <div class="task-item-detalle">${detalle}</div>
           </div>
           <button class="task-item-btn" data-task-idx="${i}">${btnLabel}</button>
         </div>`;

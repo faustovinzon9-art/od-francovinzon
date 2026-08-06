@@ -219,11 +219,16 @@ const RANGO_TAREAS_DIAS = 14;
 
 // Alimenta la "lista de tareas inteligente" del sidebar de /gestion, de HOY en
 // adelante (14 días). Dos categorías, ambas de datos reales:
+// - reorganizar: cada bloqueo (día completo, bloqueo-dia.js, O rango horario puntual,
+//   bloquear-horario.js — ambos solo en CALENDAR_ID) que TODAVÍA tiene algún turno o
+//   sobreturno superpuesto en su rango — hay que reubicarlos. Una tarea POR BLOQUEO,
+//   no por día: si un mismo día tiene dos bloqueos con turnos (ej. dos horarios
+//   puntuales distintos), son dos tareas separadas. El solapamiento se calcula con los
+//   límites reales del bloqueo (eventBounds ya da 00:00→00:00 del día siguiente para
+//   uno de día completo, así que la misma comparación sirve para los dos casos).
 // - sinTelefono: turnos/sobreturnos sin ninguna línea de teléfono cargada.
-// - diasBloqueados: días bloqueados por completo (bloqueo-dia.js, todo el día, en
-//   CALENDAR_ID) que TODAVÍA tienen turnos o sobreturnos asignados ese mismo día —
-//   hay que reubicarlos. No incluye teléfonos con formato inválido: ese caso ya no
-//   genera tarea, solo el badge visual de la fila (ver decisions.md).
+// No incluye teléfonos con formato inválido: ese caso ya no genera tarea, solo el
+// badge visual de la fila (ver decisions.md).
 async function tareas(req, res) {
   try {
     const desde = toArgDate(formatArgDay(new Date()), '00:00');
@@ -254,22 +259,25 @@ async function tareas(req, res) {
     ];
 
     const sinTelefono = [];
-    const diasBloqueadosSet = new Set();
-    const turnosPorDia = new Map();
+    const bloqueos = [];
+    const turnos = [];
 
     todos.forEach(({ ev, calendarId }) => {
       const allDay = !ev.start.dateTime;
       const esBloqueo = allDay || (ev.description || '').includes(BLOCK_MARKER);
 
       if (esBloqueo) {
-        // Los bloqueos de día completo (los que importan acá) solo se crean en
-        // CALENDAR_ID — ver bloqueo-dia.js / architecture.md.
-        if (allDay && calendarId === CALENDAR_ID) diasBloqueadosSet.add(ev.start.date);
+        // Los bloqueos (día completo u horario puntual) solo se crean en CALENDAR_ID
+        // — ver bloqueo-dia.js / bloquear-horario.js / architecture.md.
+        if (calendarId === CALENDAR_ID) {
+          const { start, end } = eventBounds(ev);
+          bloqueos.push({ start, end, fecha: formatArgDay(start) });
+        }
         return;
       }
 
-      const fecha = formatArgDay(eventBounds(ev).start);
-      turnosPorDia.set(fecha, (turnosPorDia.get(fecha) || 0) + 1);
+      const { start, end } = eventBounds(ev);
+      turnos.push({ start, end });
 
       const telefono = extraerTelefono(ev.description);
       if (!telefono) {
@@ -277,21 +285,24 @@ async function tareas(req, res) {
           id: ev.id,
           calendarId,
           title: ev.summary || '',
-          start: eventBounds(ev).start.toISOString(),
+          start: start.toISOString(),
         });
       }
     });
 
-    const diasBloqueados = [...diasBloqueadosSet]
-      .filter((fecha) => turnosPorDia.get(fecha) > 0)
-      .sort()
-      .map((fecha) => ({ fecha, cantidadTurnos: turnosPorDia.get(fecha) }));
+    const reorganizar = bloqueos
+      .map((b) => ({
+        fecha: b.fecha,
+        cantidadTurnos: turnos.filter((t) => t.start < b.end && t.end > b.start).length,
+      }))
+      .filter((b) => b.cantidadTurnos > 0)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
     sinTelefono.sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    res.status(200).json({ sinTelefono, diasBloqueados });
+    res.status(200).json({ sinTelefono, reorganizar });
   } catch (err) {
     console.error(err);
-    res.status(200).json({ sinTelefono: [], diasBloqueados: [] });
+    res.status(200).json({ sinTelefono: [], reorganizar: [] });
   }
 }
