@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-06 (cuarta vuelta) — tres correcciones sobre teléfonos y lista de tareas
+
+- **Badge de la fila corregido**: pasó de "cualquier teléfono sin `Teléfono verificado: Sí`" a **"⚠ Tel. inválido"**, mostrado únicamente cuando el teléfono guardado no pasa la validación real de formato (mismo chequeo que arma el link de `wa.me`). Un teléfono legado sin la marca pero con formato válido ya no se marca — el criterio anterior era demasiado agresivo. `Teléfono verificado`/`extraerTelefonoVerificado()` se siguen usando, pero solo para decidir el prellenado del selector de país al editar (no para el badge).
+- **Lista de tareas del sidebar corregida**: se sacó la categoría "confirmar teléfono a revisar" (quedaba redundante con el badge). Ahora son exactamente dos categorías: "Agregar teléfono" (turnos sin ningún teléfono cargado) y **"Mover N turnos" (nueva)**: días bloqueados por completo (con "Bloquear un día completo") que todavía tienen turnos/sobreturnos asignados, con botón "Ir al día" que navega ahí para reubicarlos con las acciones que ya existen en la agenda. Backend: el modo `buscar.js?modo=tareas-telefono` se renombró a `?modo=tareas` y devuelve `{ sinTelefono, diasBloqueados }`.
+- **Emoji sacados del mensaje precargado de WhatsApp** (`mensajeRecordatorio()`, antes tenía 😊🦷): comprobado empíricamente que `wa.me`/`api.whatsapp.com` los reemplaza por el carácter de reemplazo Unicode "�" — la corrupción ya está en el `href` que arma la propia página de WhatsApp hacia `web.whatsapp.com`, antes de llegar al chat. No era un problema de nuestro `encodeURIComponent` (se verificó que codifica bien, y que el archivo fuente no tiene mojibake). Se probó con 5 emoji distintos (BMP y astral), los cinco fallan igual — no es un caso puntual de un emoji raro.
+- Las tres correcciones probadas en vivo con datos simulados (sin credenciales de Google en esta máquina). Ver `decisions.md` para el detalle de cada una.
+
 ## 2026-08-06 (tercera vuelta) — lista de tareas inteligente en el sidebar
 
 - **Implementado el ítem 3 del pedido grande del 2026-08-06**, que había quedado pendiente: sección "Tareas pendientes" en el sidebar de `/gestion`, debajo del resumen del día. Dos tipos de tarea generadas de datos reales (nada hardcodeado): "Confirmar teléfono" (mismo criterio que el badge `⚠ Tel. a revisar`) y "Agregar teléfono" (turnos sin ninguna línea de teléfono), para turnos/sobreturnos de hoy en adelante (14 días, sin bloqueos).

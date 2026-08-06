@@ -54,21 +54,78 @@ genérica: la única fuente de verdad correcta es que la persona diga de qué pa
   (turnos históricos, incluidos los ~242 rescatados por el script de un solo uso — ver
   changelog 2026-08-05). Esos números no tienen selector de país porque ya fueron
   tipeados en su momento; se les sigue mostrando un botón de WhatsApp con el mejor
-  esfuerzo de siempre, pero además se marcan como **"pendiente de revisión manual"**
-  (badge `⚠ Tel. a revisar` en la fila de `/gestion`, ver `telefonoVerificado` más abajo)
-  en vez de darse por válidos a ciegas. La secretaria los puede confirmar o corregir
-  desde "Editar tel.", que ya usa el selector de país nuevo.
-- **Marca `Teléfono verificado: Sí` en la descripción del evento**: la agregan
-  `reservar.js`, `crear-turno.js` y `agregar-telefono.js` únicamente cuando el número
-  vino del selector de país (nunca al adivinar). `extraerTelefonoVerificado()` la lee;
-  su ausencia (todo lo cargado antes de este cambio) es la señal de "pendiente de
-  revisión". Si se borra el teléfono desde "Editar tel.", también se saca esta marca.
+  esfuerzo de siempre.
 - **Un teléfono guardado que no pasa la validación se trata como "sin teléfono"** en
   `/gestion`: no se muestra un botón de WhatsApp roto, se muestra "+ Agregar teléfono"
   para que se pueda corregir ahí mismo.
 - **El botón de WhatsApp de cada fila usa el ícono real del logo** (SVG, mismo path que "Escribinos por WhatsApp" del resto del sitio) — nunca un emoji de burbuja de mensaje genérica.
-- **Mensaje precargado del botón de WhatsApp (recordatorio, `/gestion`)**: cálido, con 🦷, y con la fecha/hora armada dinámicamente ("hoy" / "mañana" / "el X de mes") según el turno real. Explícitamente **sin** agregar "con el Dr. Franco Vinzón" ni "Te esperamos" — mantenerlo así salvo pedido en contra.
+- **Mensaje precargado del botón de WhatsApp (recordatorio, `/gestion`)**: cálido, y con la fecha/hora armada dinámicamente ("hoy" / "mañana" / "el X de mes") según el turno real. Explícitamente **sin** agregar "con el Dr. Franco Vinzón" ni "Te esperamos" — mantenerlo así salvo pedido en contra. **Sin emoji** (ver "WhatsApp: los emoji se corrompen en `wa.me`/`api.whatsapp.com`" más abajo — se probaron y se sacaron a propósito, no es un olvido).
 - **Botón de WhatsApp en TODAS las filas con teléfono válido**, no solo en las de "paciente nuevo". El badge dorado "Nuevo paciente" y el teléfono en tamaño grande siguen siendo exclusivos de `esNuevoPaciente: true`.
+
+### Badge "⚠ Tel. inválido": criterio es formato, no origen del dato (2026-08-06, corregido)
+
+**Se corrigió el criterio del badge de la fila de `/gestion`.** La primera versión lo
+mostraba en cualquier teléfono sin la marca `Teléfono verificado: Sí` — es decir,
+cualquier número cargado antes del selector de país, aunque estuviera perfectamente
+bien. Eso era demasiado agresivo: marcaba como "a revisar" pacientes cuyo teléfono
+legado ya funcionaba bien, solo por no haber pasado por el flujo nuevo.
+
+- **El badge ahora aparece únicamente cuando el teléfono guardado no pasa la
+  validación real de formato** — el mismo chequeo que arma el link de `wa.me`
+  (`armarLinkWhatsApp()` / `waLinkBase`, que a su vez usa `normalizarTelefonoWhatsApp()`
+  para los no verificados). Si el número tiene formato válido, no se muestra nada,
+  **tenga o no** la marca `Teléfono verificado: Sí` — el origen del dato (selector nuevo
+  vs. legado) ya no es parte del criterio.
+- Un número con formato válido pero un dígito equivocado (ej. un 3442 real pero mal
+  tipeado) **no** se marca preventivamente: eso se nota solo cuando la secretaria
+  intenta mandar el WhatsApp y no anda, no hace falta que el sistema lo adivine antes.
+- El texto del badge pasó de "⚠ Tel. a revisar" a **"⚠ Tel. inválido"**, más preciso
+  para el nuevo criterio.
+- `Teléfono verificado: Sí` / `extraerTelefonoVerificado()` **se siguen escribiendo y
+  leyendo**, pero ahora solo para una cosa: decidir, al abrir "Editar tel.", si el
+  teléfono guardado ya es un E.164 limpio (se le antepone `+` antes de `setNumber()`) o
+  si es texto legado (se pasa tal cual, para que la librería lo interprete con el país
+  por default). Ya no alimentan ningún badge ni ninguna tarea del sidebar.
+
+### WhatsApp: los emoji se corrompen en `wa.me`/`api.whatsapp.com` (2026-08-06)
+
+**Comprobado empíricamente, no es un problema de nuestro código.** El mensaje
+precargado del botón de WhatsApp de `/gestion` (`mensajeRecordatorio()`) tenía 😊🦷.
+Se armaba con `encodeURIComponent()` correctamente (verificado: produce el UTF-8
+percent-encoded correcto, `%F0%9F%98%8A` para 😊, etc. — el archivo fuente también
+tiene los bytes UTF-8 correctos, no hay mojibake). El problema aparece **después**, del
+lado de WhatsApp: se probó navegando a la URL real de `wa.me` con `?text=` conteniendo
+distintos emoji (😊, 🦷, ✅, ⏰, 👍 — mezcla de rango BMP y astral) y **los cinco**
+terminan reemplazados por el carácter de reemplazo Unicode "�", y esa corrupción ya
+está en el propio `href` que arma la página de WhatsApp hacia `web.whatsapp.com`
+(`text=...%EF%BF%BD...`) — o sea que pasa en el servidor/script de WhatsApp, antes de
+llegar al chat real. El texto sin emoji (acentos, signos de exclamación) se ve
+perfecto.
+
+- **Se sacaron los emoji del mensaje precargado.** No hay forma de garantizar que se
+  vean bien desde nuestro lado — es una limitación de la plataforma de WhatsApp, no
+  nuestra. Si en el futuro se quiere reintentar, probar primero a mano navegando a un
+  `wa.me/<numero>?text=<encodeURIComponent(mensaje)>` real antes de asumir que ya
+  funciona.
+- Los emoji que son **texto plano de la interfaz** (🔄 Mover, 🗑 Cancelar, ✨ Nuevo
+  paciente, badges) no se ven afectados — el bug es específico del parámetro `text` de
+  wa.me, no de emoji en general.
+
+### Lista de tareas del sidebar: solo "sin teléfono" y "días bloqueados con turnos" (2026-08-06, corregido)
+
+**Se sacó la categoría "corregir teléfono a revisar/inválido" de la lista de tareas.**
+Un teléfono con formato inválido ya se marca con el badge de la fila (ver arriba); no
+hace falta que además genere una tarea separada en el sidebar — sería redundante.
+
+- La lista de tareas ahora tiene exactamente dos categorías, ambas de datos reales
+  (`buscar.js?modo=tareas`, ver `architecture.md`):
+  - **"Agregar teléfono"**: turnos/sobreturnos sin ninguna línea de teléfono cargada.
+  - **"Mover N turnos" (día bloqueado)**: días bloqueados por completo (con la función
+    "Bloquear un día completo" que ya existía) que todavía tienen turnos o sobreturnos
+    asignados ese mismo día. Botón "Ir al día" — no abre ningún editor, solo navega:
+    mover/cancelar cada turno se hace con las acciones que ya existen en la fila de la
+    agenda.
+- Rango: hoy en adelante, 14 días — igual que antes.
 
 ## Título y descripción de eventos
 

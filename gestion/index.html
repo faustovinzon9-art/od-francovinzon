@@ -544,8 +544,8 @@
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/horarios-dia?date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
-      fetch(`/api/gestion/buscar?modo=tareas-telefono&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], aRevisar: [] })),
-    ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareasTelefono]) => {
+      fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], diasBloqueados: [] })),
+    ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
       document.getElementById('sum-turnos').textContent = cantidadTurnos;
       document.getElementById('sum-huecos').textContent = (huecosHoy || []).length;
@@ -559,11 +559,11 @@
         lineaBloqueo.classList.add('hidden');
       }
 
-      renderTareasSidebar(tareasTelefono);
+      renderTareasSidebar(tareas);
     }).catch(() => {});
   }
 
-  // ---------- Lista de tareas inteligente (teléfonos a revisar / sin cargar) ----------
+  // ---------- Lista de tareas inteligente (sin teléfono / días bloqueados con turnos) ----------
   const TAREAS_MOSTRADAS_MAX = 6;
   let sidebarTareas = [];
 
@@ -572,10 +572,19 @@
     const listEl = document.getElementById('sidebar-tasks-list');
     const moreEl = document.getElementById('sidebar-tasks-more');
 
-    const items = [
-      ...(tareas && tareas.aRevisar ? tareas.aRevisar : []).map((t) => ({ ...t, modo: 'editar-tel', label: 'Confirmar teléfono' })),
-      ...(tareas && tareas.sinTelefono ? tareas.sinTelefono : []).map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' })),
-    ].sort((a, b) => new Date(a.start) - new Date(b.start));
+    const itemsSinTelefono = (tareas && tareas.sinTelefono ? tareas.sinTelefono : [])
+      .map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' }));
+
+    const itemsDiaBloqueado = (tareas && tareas.diasBloqueados ? tareas.diasBloqueados : [])
+      .map((d) => ({
+        modo: 'ir-dia',
+        fecha: d.fecha,
+        start: `${d.fecha}T00:00:00-03:00`,
+        title: 'Día bloqueado',
+        label: `Mover ${d.cantidadTurnos} turno${d.cantidadTurnos === 1 ? '' : 's'}`,
+      }));
+
+    const items = [...itemsSinTelefono, ...itemsDiaBloqueado].sort((a, b) => new Date(a.start) - new Date(b.start));
 
     sidebarTareas = items;
 
@@ -589,7 +598,7 @@
     const visibles = items.slice(0, TAREAS_MOSTRADAS_MAX);
     listEl.innerHTML = visibles.map((t, i) => {
       const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short' }).format(new Date(t.start));
-      const btnLabel = t.modo === 'editar-tel' ? 'Editar' : 'Agregar';
+      const btnLabel = t.modo === 'ir-dia' ? 'Ir al día' : 'Agregar';
       return `
         <div class="task-item">
           <div class="task-item-info">
@@ -611,15 +620,27 @@
     wrap.classList.remove('hidden');
 
     listEl.querySelectorAll('[data-task-idx]').forEach((btn) => {
-      btn.addEventListener('click', () => irYEditarTelefono(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]));
+      btn.addEventListener('click', () => manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]));
     });
+  }
+
+  function manejarClickTarea(t) {
+    if (!t) return;
+    if (t.modo === 'ir-dia') irADia(t.fecha);
+    else irYEditarTelefono(t);
+  }
+
+  function irADia(fecha) {
+    currentDate = fecha;
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    cambiarVista('dia');
   }
 
   // Lleva a la secretaria al día del turno y abre ahí mismo el flujo de "Editar
   // teléfono" que ya existe en la fila de la agenda — no hace falta buscar al
   // paciente a mano.
   function irYEditarTelefono(t) {
-    if (!t) return;
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t.start));
     currentDate = fechaItem;
     dateInput.value = currentDate;
@@ -868,7 +889,11 @@
     if (fechaItem === hoy) cuando = 'hoy';
     else if (fechaItem === manana) cuando = 'mañana';
     else { const [, m, d] = fechaItem.split('-').map(Number); cuando = `el ${d} de ${MESES[m - 1]}`; }
-    return `¡Hola! 😊🦷 Te escribimos para recordarte tu turno de ${cuando} a las ${fmtHora(it.start)}.`;
+    // Sin emoji a propósito: wa.me/api.whatsapp.com corrompe cualquier emoji en el
+    // parámetro "text" (se comprobó con 😊🦷✅⏰👍, los cinco terminan como el
+    // carácter de reemplazo "�" ya en el propio href hacia web.whatsapp.com — no es
+    // un problema de nuestro encodeURIComponent). Ver decisions.md.
+    return `¡Hola! Te escribimos para recordarte tu turno de ${cuando} a las ${fmtHora(it.start)}.`;
   }
 
   function armarLinkWhatsApp(telefonoRaw) {
@@ -899,12 +924,13 @@
 
     const nuevoBadge = esNuevo ? '<span class="badge-nuevo">✨ Nuevo paciente</span>' : '';
     const telefonoLine = esNuevo && it.telefono ? `<div class="detalle-telefono">${escapeHtml(it.telefono)}</div>` : '';
-    // Teléfono cargado antes del selector de país (o por el rescate de teléfonos
-    // sueltos): se sigue mostrando el WhatsApp de mejor esfuerzo, pero se marca para
-    // que se revise a mano en vez de darlo por válido a ciegas.
-    const pendienteRevision = it.tipo !== 'bloqueo' && !!it.telefono && !it.telefonoVerificado;
+    // Teléfono cargado que NO pasa la validación real de formato (mismo chequeo que
+    // arma el link de WhatsApp, waLinkBase de arriba) — un número con formato válido
+    // pero un dígito equivocado no se marca acá: eso se nota solo cuando el WhatsApp
+    // no anda, no hace falta que el sistema lo adivine de antemano.
+    const pendienteRevision = it.tipo !== 'bloqueo' && !!it.telefono && !waLinkBase;
     const pendienteBadge = pendienteRevision
-      ? '<span class="tel-pendiente-badge" title="Teléfono cargado antes del selector de país: confirmalo con Editar tel.">⚠ Tel. a revisar</span>'
+      ? '<span class="tel-pendiente-badge" title="Este teléfono no tiene formato válido: confirmalo con Editar tel.">⚠ Tel. inválido</span>'
       : '';
 
     return `

@@ -1,14 +1,14 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
-  eventBounds, extraerTelefono, extraerTelefonoVerificado, normalizarTexto,
+  eventBounds, extraerTelefono, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 
 const MESES_RANGO = 6;
 
 // Búsqueda del sidebar (por defecto), autocompletado de teléfono (?modo=telefono),
-// autocompletado de pacientes en vivo (?modo=pacientes) y la lista de tareas de
-// teléfono del sidebar (?modo=tareas-telefono) comparten ruta para no pasarnos del
+// autocompletado de pacientes en vivo (?modo=pacientes) y la lista de tareas
+// inteligente del sidebar (?modo=tareas) comparten ruta para no pasarnos del
 // límite de funciones serverless del plan gratuito.
 export default async function handler(req, res) {
   if (!isValidGestionKey(req.query.key)) {
@@ -21,8 +21,8 @@ export default async function handler(req, res) {
   if (req.query.modo === 'pacientes') {
     return buscarPacientes(req, res);
   }
-  if (req.query.modo === 'tareas-telefono') {
-    return tareasTelefono(req, res);
+  if (req.query.modo === 'tareas') {
+    return tareas(req, res);
   }
 
   try {
@@ -217,11 +217,14 @@ async function buscarPacientes(req, res) {
 
 const RANGO_TAREAS_DIAS = 14;
 
-// Alimenta la "lista de tareas inteligente" del sidebar de /gestion: turnos/sobreturnos
-// de HOY en adelante (no eventos pasados, no bloqueos) sin ninguna línea de teléfono
-// cargada, o con teléfono cargado pero sin la marca "Teléfono verificado: Sí" (mismo
-// criterio que el badge "⚠ Tel. a revisar" de la agenda — ver decisions.md).
-async function tareasTelefono(req, res) {
+// Alimenta la "lista de tareas inteligente" del sidebar de /gestion, de HOY en
+// adelante (14 días). Dos categorías, ambas de datos reales:
+// - sinTelefono: turnos/sobreturnos sin ninguna línea de teléfono cargada.
+// - diasBloqueados: días bloqueados por completo (bloqueo-dia.js, todo el día, en
+//   CALENDAR_ID) que TODAVÍA tienen turnos o sobreturnos asignados ese mismo día —
+//   hay que reubicarlos. No incluye teléfonos con formato inválido: ese caso ya no
+//   genera tarea, solo el badge visual de la fila (ver decisions.md).
+async function tareas(req, res) {
   try {
     const desde = toArgDate(formatArgDay(new Date()), '00:00');
     const hasta = new Date(desde.getTime() + RANGO_TAREAS_DIAS * 24 * 60 * 60000);
@@ -251,34 +254,44 @@ async function tareasTelefono(req, res) {
     ];
 
     const sinTelefono = [];
-    const aRevisar = [];
+    const diasBloqueadosSet = new Set();
+    const turnosPorDia = new Map();
 
     todos.forEach(({ ev, calendarId }) => {
       const allDay = !ev.start.dateTime;
-      if (allDay || (ev.description || '').includes(BLOCK_MARKER)) return; // bloqueo, no es turno
+      const esBloqueo = allDay || (ev.description || '').includes(BLOCK_MARKER);
+
+      if (esBloqueo) {
+        // Los bloqueos de día completo (los que importan acá) solo se crean en
+        // CALENDAR_ID — ver bloqueo-dia.js / architecture.md.
+        if (allDay && calendarId === CALENDAR_ID) diasBloqueadosSet.add(ev.start.date);
+        return;
+      }
+
+      const fecha = formatArgDay(eventBounds(ev).start);
+      turnosPorDia.set(fecha, (turnosPorDia.get(fecha) || 0) + 1);
 
       const telefono = extraerTelefono(ev.description);
-      const item = {
-        id: ev.id,
-        calendarId,
-        title: ev.summary || '',
-        start: eventBounds(ev).start.toISOString(),
-      };
-
       if (!telefono) {
-        sinTelefono.push(item);
-      } else if (!extraerTelefonoVerificado(ev.description)) {
-        aRevisar.push({ ...item, telefono });
+        sinTelefono.push({
+          id: ev.id,
+          calendarId,
+          title: ev.summary || '',
+          start: eventBounds(ev).start.toISOString(),
+        });
       }
     });
 
-    const porFecha = (a, b) => new Date(a.start) - new Date(b.start);
-    sinTelefono.sort(porFecha);
-    aRevisar.sort(porFecha);
+    const diasBloqueados = [...diasBloqueadosSet]
+      .filter((fecha) => turnosPorDia.get(fecha) > 0)
+      .sort()
+      .map((fecha) => ({ fecha, cantidadTurnos: turnosPorDia.get(fecha) }));
 
-    res.status(200).json({ sinTelefono, aRevisar });
+    sinTelefono.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    res.status(200).json({ sinTelefono, diasBloqueados });
   } catch (err) {
     console.error(err);
-    res.status(200).json({ sinTelefono: [], aRevisar: [] });
+    res.status(200).json({ sinTelefono: [], diasBloqueados: [] });
   }
 }
