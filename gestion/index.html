@@ -134,17 +134,26 @@
   .agenda-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
   .row:last-child { border-bottom: none; }
+  .row.row-nuevo { flex-wrap: wrap; background: rgba(212,162,76,.07); }
   .row .hora { font-weight: 700; color: var(--navy); width: 46px; flex-shrink: 0; font-size: 13px; }
   .row .info { flex: 1; min-width: 0; }
   .row .nombre { font-weight: 600; font-size: 13.5px; }
   .row .detalle { color: var(--muted); font-size: 13px; font-weight: 500; }
+  .row .detalle-telefono { color: var(--navy); font-size: 16px; font-weight: 700; margin-top: 2px; letter-spacing: .2px; }
   .badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 3px 8px; border-radius: 100px; flex-shrink: 0; color: var(--white); }
   .badge.turno { background: var(--turno); }
   .badge.sobreturno { background: var(--sobreturno); }
   .badge.bloqueo { background: var(--bloqueo); }
+  .badge-nuevo {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    padding: 3px 9px; border-radius: 100px; flex-shrink: 0; color: #4a3208;
+    background: linear-gradient(135deg, #FFE9B3, var(--gold));
+    box-shadow: 0 0 0 1px rgba(212,162,76,.5), 0 2px 8px rgba(212,162,76,.55);
+  }
   .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
+  .icon-btn.wa-btn { background: #25D366; border-color: #25D366; color: var(--white); }
 
   .panel { background: var(--white); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .panel h2 { font-size: 15px; margin-bottom: 12px; }
@@ -700,24 +709,41 @@
     return motivo || 'Sin motivo especificado';
   }
 
+  function armarLinkWhatsApp(telefonoRaw) {
+    const digits = (telefonoRaw || '').replace(/\D/g, '');
+    if (!digits) return null;
+    const conPrefijo = digits.startsWith('54') ? digits : '549' + digits;
+    return `https://wa.me/${conPrefijo}`;
+  }
+
   function renderRow(it, idx) {
     const desc = extraerMotivo(it.description, it.tipo);
     const hora = it.allDay ? 'Todo el día' : fmtHora(it.start);
     const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
-    const acciones = it.tipo === 'bloqueo'
-      ? ''
-      : `<div class="row-actions">
-           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>
-           <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>
-         </div>`;
+    const esNuevo = !!it.esNuevoPaciente;
+    const waLink = esNuevo ? armarLinkWhatsApp(it.telefono) : null;
+
+    const botones = [];
+    if (waLink) botones.push(`<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`);
+    if (it.tipo !== 'bloqueo') {
+      botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">✎</button>`);
+      botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">🗑</button>`);
+    }
+    const acciones = botones.length ? `<div class="row-actions">${botones.join('')}</div>` : '';
+
+    const nuevoBadge = esNuevo ? '<span class="badge-nuevo">✨ Nuevo paciente</span>' : '';
+    const telefonoLine = esNuevo && it.telefono ? `<div class="detalle-telefono">${escapeHtml(it.telefono)}</div>` : '';
+
     return `
-      <div class="row">
+      <div class="row${esNuevo ? ' row-nuevo' : ''}">
         <div class="hora">${hora}</div>
         <div class="info">
           <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
           <div class="detalle">${escapeHtml(desc)}</div>
+          ${telefonoLine}
         </div>
         <span class="badge ${it.tipo}">${badgeLabel}</span>
+        ${nuevoBadge}
         ${acciones}
       </div>`;
   }

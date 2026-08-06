@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { date, time, nombre, apellido, email, telefono, motivo } = req.body;
+    const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
 
     const start = toArgDate(date, time);
     const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
@@ -37,9 +37,9 @@ export default async function handler(req, res) {
 
     const title = `${nombre} ${apellido || ''}`.trim();
     const description =
-      `Email: ${email || '-'}\n` +
-      `Teléfono: ${telefono}\n` +
+      `Teléfono: ${telefono || '-'}\n` +
       `Motivo: ${motivo || '-'}\n` +
+      `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
       'Reservado desde el formulario propio (hora Argentina fija, sin depender del dispositivo del paciente).';
 
     const eventBody = {

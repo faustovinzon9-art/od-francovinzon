@@ -60,10 +60,14 @@
   .slot-btn { padding: 9px 16px; border: 1.5px solid var(--navy-soft); border-radius: var(--radius-pill); background: var(--white); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; }
   .slot-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); box-shadow: 0 3px 10px rgba(30, 58, 95, 0.35); }
   label { display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); margin-top: 16px; margin-bottom: 6px; }
-  input[type=text], input[type=email], input[type=tel], textarea {
+  input[type=text], input[type=tel], textarea {
     width: 100%; padding: 12px 14px; border: 1.5px solid #E9E4D8; border-radius: 13px; font-size: 14.5px; font-family: 'Inter', sans-serif; background: var(--cream); color: var(--text);
   }
   input:focus, textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+  .checkbox-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--navy); flex-shrink: 0; }
+  .checkbox-row label { display: inline; margin: 0; font-size: 13.5px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--text); }
+  .label-opt { text-transform: none; font-weight: 500; color: var(--muted); }
   button.primary { width: 100%; padding: 15px; background: var(--gold); color: var(--white); border: none; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 700; margin-top: 22px; cursor: pointer; box-shadow: 0 3px 12px rgba(212, 162, 76, 0.3); }
   button.primary:disabled { background: var(--disabled); box-shadow: none; cursor: default; }
   .msg { margin-top: 14px; font-size: 13.5px; text-align: center; }
@@ -132,10 +136,12 @@
     <label>Nombre y apellido</label>
     <input type="text" id="f-nombre" placeholder="Tu nombre completo">
 
-    <label>Email</label>
-    <input type="email" id="f-email" placeholder="tumail@ejemplo.com">
+    <div class="checkbox-row">
+      <input type="checkbox" id="f-nuevo">
+      <label for="f-nuevo">Soy paciente nuevo</label>
+    </div>
 
-    <label>Teléfono</label>
+    <label>Teléfono <span class="label-opt">(opcional)</span></label>
     <input type="tel" id="f-telefono" placeholder="Ej: 3442 123456">
 
     <label>Motivo de la consulta</label>
@@ -280,7 +286,7 @@
 
   function confirmarTurno() {
     const nombreCompleto = document.getElementById('f-nombre').value.trim();
-    const email = document.getElementById('f-email').value.trim();
+    const esNuevo = document.getElementById('f-nuevo').checked;
     const telefono = document.getElementById('f-telefono').value.trim();
     const motivo = document.getElementById('f-motivo').value.trim();
 
@@ -288,8 +294,12 @@
       showFormMsg('Elegí un horario primero.', 'error');
       return;
     }
-    if (!nombreCompleto || !telefono) {
-      showFormMsg('Completá al menos nombre y teléfono.', 'error');
+    if (!nombreCompleto) {
+      showFormMsg('Completá al menos tu nombre.', 'error');
+      return;
+    }
+    if (esNuevo && !telefono) {
+      showFormMsg('Completá el teléfono: es obligatorio para pacientes nuevos.', 'error');
       return;
     }
 
@@ -303,7 +313,7 @@
     fetch('/api/reservar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: fechaSeleccionada, time: horarioSeleccionado, nombre, apellido, email, telefono, motivo }),
+      body: JSON.stringify({ date: fechaSeleccionada, time: horarioSeleccionado, nombre, apellido, telefono, motivo, esNuevo }),
     })
       .then((r) => r.json())
       .then((res) => {

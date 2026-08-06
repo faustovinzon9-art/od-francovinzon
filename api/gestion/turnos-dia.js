@@ -3,6 +3,19 @@ import {
   toArgDate, eventBounds, isValidGestionKey,
 } from '../../lib/googleCalendar.js';
 
+function extraerTelefono(description) {
+  const sinTags = (description || '').replace(/<[^>]*>/g, ' ');
+  const match = sinTags.match(/Tel[eé]fono\s*:?\s*\n?\s*([^\n]+)/i);
+  const tel = match ? match[1].replace(/<[^>]*>/g, '').trim() : '';
+  return tel && tel !== '-' ? tel : '';
+}
+
+function extraerEsNuevoPaciente(description) {
+  const sinTags = (description || '').replace(/<[^>]*>/g, ' ');
+  const match = sinTags.match(/Paciente nuevo\s*:?\s*\n?\s*(S[ií]|No)/i);
+  return !!match && /^s/i.test(match[1]);
+}
+
 export default async function handler(req, res) {
   if (!isValidGestionKey(req.query.key)) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -45,6 +58,8 @@ export default async function handler(req, res) {
         description: ev.description || '',
         tipo: isBloqueo ? 'bloqueo' : 'turno',
         allDay,
+        telefono: extraerTelefono(ev.description),
+        esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
       });
     });
 
@@ -59,6 +74,8 @@ export default async function handler(req, res) {
         description: ev.description || '',
         tipo: 'sobreturno',
         allDay: !ev.start.dateTime,
+        telefono: extraerTelefono(ev.description),
+        esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
       });
     });
 
