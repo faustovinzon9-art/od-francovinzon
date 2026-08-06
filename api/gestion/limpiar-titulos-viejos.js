@@ -2,6 +2,10 @@ import { getCalendarClient, CALENDAR_ID, isValidGestionKey } from '../../lib/goo
 
 // Utilidad de un solo uso: renombra eventos viejos con título "Turnos (Nombre)"
 // dejando solo "Nombre". Si no encuentra ninguno, no hace nada (idempotente).
+export const config = { maxDuration: 60 };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
@@ -40,11 +44,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, renombrados: 0, message: 'No quedaban títulos viejos para limpiar.' });
     }
 
-    await Promise.all(
-      aRenombrar.map((p) =>
-        calendar.events.patch({ calendarId: CALENDAR_ID, eventId: p.id, requestBody: { summary: p.nuevoTitulo } })
-      )
-    );
+    // Secuencial y con una pequeña pausa entre llamadas para no pisar la cuota
+    // de Google Calendar API (compartida con el resto de las rutas en uso).
+    for (const p of aRenombrar) {
+      await calendar.events.patch({ calendarId: CALENDAR_ID, eventId: p.id, requestBody: { summary: p.nuevoTitulo } });
+      await sleep(120);
+    }
 
     res.status(200).json({
       success: true,
