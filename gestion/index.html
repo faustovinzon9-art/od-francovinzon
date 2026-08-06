@@ -998,10 +998,10 @@
 
     if (mcMode === 'mover') {
       setMsg('mc-msg', 'Moviendo...', '');
-      fetch('/api/gestion/mover', {
+      fetch('/api/gestion/evento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: gestionKey, eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora }),
+        body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId, nuevaFecha: mcFecha, nuevaHora: mcHora }),
       })
         .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
         .then((res) => {
@@ -1115,10 +1115,10 @@
     const bloqueado = diaBloqueadoCompleto();
     if (bloqueado) {
       if (!confirm('¿Desbloquear este día?')) return;
-      fetch('/api/gestion/desbloquear-dia', {
+      fetch('/api/gestion/bloqueo-dia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: gestionKey, date: currentDate }),
+        body: JSON.stringify({ key: gestionKey, accion: 'desbloquear', date: currentDate }),
       })
         .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
         .then(() => cargarAgenda())
@@ -1143,10 +1143,10 @@
     }
 
     setMsg('b-msg', 'Bloqueando...', '');
-    fetch('/api/gestion/bloquear-dia', {
+    fetch('/api/gestion/bloqueo-dia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: fecha, motivo }),
+      body: JSON.stringify({ key: gestionKey, accion: 'bloquear', date: fecha, motivo }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -1187,10 +1187,10 @@
     if (!nuevaFecha || !nuevaHora || !moverContext) return;
 
     setMsg('m-msg', 'Moviendo...', '');
-    fetch('/api/gestion/mover', {
+    fetch('/api/gestion/evento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora }),
+      body: JSON.stringify({ key: gestionKey, accion: 'mover', eventId: moverContext.eventId, calendarId: moverContext.calendarId, nuevaFecha, nuevaHora }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -1206,10 +1206,10 @@
   // ---------- Cancelar ----------
   function cancelarItem(item) {
     if (!confirm(`¿Cancelar el turno de "${item.title}"?`)) return;
-    fetch('/api/gestion/cancelar', {
+    fetch('/api/gestion/evento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId }),
+      body: JSON.stringify({ key: gestionKey, accion: 'cancelar', eventId: item.id, calendarId: item.calendarId }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then(() => {
@@ -1236,7 +1236,7 @@
         const nombreCompleto = (document.getElementById(nombreId).value + ' ' + document.getElementById(apellidoId).value).trim();
         const telInput = document.getElementById(telefonoId);
         if (!nombreCompleto || telInput.value.trim()) return;
-        fetch(`/api/gestion/buscar-telefono?nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
+        fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
           .then((r) => (r.ok ? r.json() : { telefono: null }))
           .then((data) => {
             if (data.telefono && !telInput.value.trim()) telInput.value = data.telefono;

@@ -1,11 +1,13 @@
 import { getCalendarClient, TIME_ZONE, toArgDate, eventBounds, isValidGestionKey } from '../../lib/googleCalendar.js';
 
+// Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
+// para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
 
-  const { key, eventId, calendarId, nuevaFecha, nuevaHora } = req.body;
+  const { key, eventId, calendarId, accion } = req.body;
 
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
@@ -13,6 +15,13 @@ export default async function handler(req, res) {
 
   try {
     const calendar = getCalendarClient();
+
+    if (accion === 'cancelar') {
+      await calendar.events.delete({ calendarId, eventId });
+      return res.status(200).json({ success: true, message: 'Turno cancelado.' });
+    }
+
+    const { nuevaFecha, nuevaHora } = req.body;
 
     const { data: original } = await calendar.events.get({ calendarId, eventId });
     const { start: origStart, end: origEnd } = eventBounds(original);
@@ -50,6 +59,6 @@ export default async function handler(req, res) {
     res.status(200).json({ success: true, message: `Movido al ${nuevaFecha} a las ${nuevaHora} hs.` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: 'Error al mover el turno.' });
+    res.status(500).json({ success: false, message: 'Error al procesar el turno.' });
   }
 }
