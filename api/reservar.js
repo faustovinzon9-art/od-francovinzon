@@ -53,6 +53,14 @@ async function obtenerPropio(req, res) {
     }
     const calendar = getCalendarClient();
     const { data: ev } = await calendar.events.get({ calendarId: resolverCalendarId(calendarId), eventId });
+    // Un turno recién cancelado no siempre tira error en events.get de entrada —
+    // Google Calendar puede devolver el recurso igual con status: 'cancelled'
+    // (tombstone) en vez de un 404 inmediato. Bug real encontrado probando el QR
+    // de punta a punta: sin este chequeo, un turno ya cancelado seguía
+    // mostrándose como válido (con botones de Cambiar/Cancelar de nuevo).
+    if (ev.status === 'cancelled') {
+      return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
+    }
     const { start } = eventBounds(ev);
     res.status(200).json({
       success: true,
