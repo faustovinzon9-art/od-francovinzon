@@ -302,6 +302,50 @@
   .tasks-modal-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--cream); color: var(--navy); font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .tasks-modal-list { overflow-y: auto; }
   .tasks-modal-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 0; }
+
+  /* Asistente IA flotante (Gemini) — botón abajo a la derecha, visible en desktop y
+     mobile. Oculto hasta que hay sesión (mismo criterio que el resto del panel). */
+  #asistente-widget { position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 900; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+  .asistente-fab { width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(30,58,95,.35); flex-shrink: 0; }
+  .asistente-fab svg { width: 23px; height: 23px; }
+  .asistente-fab .icon-close { display: none; }
+  .asistente-fab.is-open .icon-chat { display: none; }
+  .asistente-fab.is-open .icon-close { display: block; }
+  .asistente-fab:hover { filter: brightness(1.1); }
+
+  .asistente-panel { width: min(340px, calc(100vw - 32px)); height: min(480px, calc(100vh - 120px)); background: var(--white); border-radius: 20px; box-shadow: 0 20px 50px rgba(30,58,95,.25); display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom right; transition: opacity .18s ease, transform .18s ease; }
+  .asistente-panel.show { opacity: 1; transform: scale(1) translateY(0); }
+
+  .asistente-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; background: var(--navy); flex-shrink: 0; }
+  .asistente-header-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .asistente-header-icon { font-size: 17px; flex-shrink: 0; }
+  .asistente-header h3 { color: var(--white); font-size: 14.5px; margin: 0; }
+  .asistente-header p { color: rgba(255,255,255,.72); font-size: 11px; margin: 2px 0 0; font-family: 'Inter', sans-serif; }
+  .asistente-header-close { width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(255,255,255,.14); color: var(--white); font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .asistente-header-close:hover { background: rgba(255,255,255,.26); }
+
+  .asistente-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 9px; background: var(--cream); }
+  .asistente-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  .asistente-msg-bot { align-self: flex-start; background: var(--white); color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(30,58,95,.08); }
+  .asistente-msg-user { align-self: flex-end; background: var(--navy); color: var(--white); border-bottom-right-radius: 4px; }
+
+  .asistente-typing { display: flex; gap: 4px; padding: 0 14px 10px; background: var(--cream); flex-shrink: 0; }
+  .asistente-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-soft); opacity: .5; animation: asistenteTypingBounce 1.1s infinite ease-in-out; }
+  .asistente-typing span:nth-child(2) { animation-delay: .15s; }
+  .asistente-typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes asistenteTypingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+  .asistente-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--white); flex-shrink: 0; }
+  .asistente-input-row input { flex: 1; border: 1.5px solid var(--line); border-radius: 100px; padding: 9px 14px; background: var(--cream); font-size: 13px; }
+  .asistente-input-row input:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .asistente-send-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--gold); color: var(--white); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .asistente-send-btn svg { width: 15px; height: 15px; }
+  .asistente-send-btn:disabled { opacity: .5; }
+  .asistente-send-btn:hover:not(:disabled) { filter: brightness(1.05); }
+
+  @media (max-width: 420px) {
+    #asistente-widget { right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
+  }
 </style>
 </head>
 <body>
@@ -547,6 +591,35 @@
   </div>
 </div>
 
+<div id="asistente-widget" class="hidden">
+  <div class="asistente-panel hidden" id="asistente-panel">
+    <div class="asistente-header">
+      <div class="asistente-header-title">
+        <span class="asistente-header-icon">✨</span>
+        <div>
+          <h3>Asistente del panel</h3>
+          <p>Preguntame cómo usar el sistema</p>
+        </div>
+      </div>
+      <button class="asistente-header-close" id="asistente-close" aria-label="Cerrar asistente">✕</button>
+    </div>
+    <div class="asistente-messages" id="asistente-messages">
+      <div class="asistente-msg asistente-msg-bot">¡Hola! Preguntame lo que necesites sobre cómo usar el panel: turnos, sobreturnos, bloqueos, teléfonos, tareas pendientes...</div>
+    </div>
+    <div class="asistente-typing hidden" id="asistente-typing"><span></span><span></span><span></span></div>
+    <form class="asistente-input-row" id="asistente-form">
+      <input type="text" id="asistente-input" placeholder="Escribí tu pregunta..." autocomplete="off">
+      <button type="submit" class="asistente-send-btn" id="asistente-send" aria-label="Enviar pregunta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+    </form>
+  </div>
+  <button class="asistente-fab" id="asistente-fab" aria-label="Abrir asistente" title="Ayuda del panel">
+    <svg class="icon-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+    <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+  </button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
 <script>
 (function () {
@@ -633,6 +706,7 @@
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     keyInput.value = '';
+    ocultarAsistente();
   }
   document.getElementById('logout-btn').addEventListener('click', logout);
   document.getElementById('logout-btn-desktop').addEventListener('click', logout);
@@ -643,6 +717,7 @@
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     loginError.textContent = 'Clave incorrecta.';
+    ocultarAsistente();
   }
 
   function verificarYArrancar() {
@@ -657,6 +732,7 @@
     document.getElementById('mobile-summary-date').textContent = fechaHoyLarga;
     cargarAgenda();
     cargarResumenSidebar();
+    asistenteWidget.classList.remove('hidden');
   }
 
   // ---------- Fecha ----------
@@ -1963,6 +2039,109 @@
     refrescarAgendaSilencioso();
     cargarResumenSidebar();
   }, 60000);
+
+  // ---------- Asistente IA (Gemini): ventana de chat flotante con ayuda del panel ----------
+  const asistenteWidget = document.getElementById('asistente-widget');
+  const asistenteFab = document.getElementById('asistente-fab');
+  const asistentePanel = document.getElementById('asistente-panel');
+  const asistenteMessages = document.getElementById('asistente-messages');
+  const asistenteForm = document.getElementById('asistente-form');
+  const asistenteInput = document.getElementById('asistente-input');
+  const asistenteSendBtn = document.getElementById('asistente-send');
+  const asistenteTyping = document.getElementById('asistente-typing');
+  const ASISTENTE_MSG_BIENVENIDA = asistenteMessages.innerHTML;
+
+  let asistenteHistorial = []; // [{ rol: 'usuario'|'asistente', texto }], solo en memoria de esta carga de página
+  let asistenteEnviando = false;
+
+  function abrirAsistente() {
+    asistentePanel.classList.remove('hidden');
+    requestAnimationFrame(() => asistentePanel.classList.add('show'));
+    asistenteFab.classList.add('is-open');
+    asistenteFab.setAttribute('aria-label', 'Cerrar asistente');
+    setTimeout(() => asistenteInput.focus(), 200);
+  }
+
+  function cerrarAsistente() {
+    asistentePanel.classList.remove('show');
+    asistenteFab.classList.remove('is-open');
+    asistenteFab.setAttribute('aria-label', 'Abrir asistente');
+    setTimeout(() => asistentePanel.classList.add('hidden'), 180);
+  }
+
+  // Al salir del panel (logout o clave rechazada): oculta el widget entero y reinicia
+  // la conversación, para que un próximo login no arrastre un historial de otra sesión.
+  function ocultarAsistente() {
+    cerrarAsistente();
+    asistenteWidget.classList.add('hidden');
+    asistenteHistorial = [];
+    asistenteMessages.innerHTML = ASISTENTE_MSG_BIENVENIDA;
+  }
+
+  asistenteFab.addEventListener('click', () => {
+    if (asistentePanel.classList.contains('show')) cerrarAsistente(); else abrirAsistente();
+  });
+  document.getElementById('asistente-close').addEventListener('click', cerrarAsistente);
+
+  function agregarMensajeAsistente(texto, rol) {
+    const el = document.createElement('div');
+    el.className = `asistente-msg asistente-msg-${rol === 'usuario' ? 'user' : 'bot'}`;
+    el.textContent = texto;
+    asistenteMessages.appendChild(el);
+    asistenteMessages.scrollTop = asistenteMessages.scrollHeight;
+  }
+
+  asistenteForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    enviarPreguntaAsistente();
+  });
+  // Explícito además del submit del <form>: mismo patrón que keyInput/searchInput
+  // en el resto del panel (no depender del envío implícito del navegador al tocar Enter).
+  asistenteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); enviarPreguntaAsistente(); }
+  });
+
+  function enviarPreguntaAsistente() {
+    const texto = asistenteInput.value.trim();
+    if (!texto || asistenteEnviando) return;
+
+    agregarMensajeAsistente(texto, 'usuario');
+    const historialPrevio = asistenteHistorial.slice();
+    asistenteHistorial.push({ rol: 'usuario', texto });
+    asistenteInput.value = '';
+    asistenteEnviando = true;
+    asistenteSendBtn.disabled = true;
+    asistenteTyping.classList.remove('hidden');
+    asistenteMessages.scrollTop = asistenteMessages.scrollHeight;
+
+    fetch('/api/gestion/asistente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, pregunta: texto, historial: historialPrevio }),
+    })
+      .then((r) => {
+        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+        return r.json();
+      })
+      .then((res) => {
+        if (res.success) {
+          agregarMensajeAsistente(res.respuesta, 'asistente');
+          asistenteHistorial.push({ rol: 'asistente', texto: res.respuesta });
+        } else {
+          agregarMensajeAsistente(res.message || 'No pude responder. Probá de nuevo.', 'asistente');
+        }
+      })
+      .catch((err) => {
+        if (err.message !== 'unauthorized') {
+          agregarMensajeAsistente('No pude conectarme. Probá de nuevo en un momento.', 'asistente');
+        }
+      })
+      .finally(() => {
+        asistenteEnviando = false;
+        asistenteSendBtn.disabled = false;
+        asistenteTyping.classList.add('hidden');
+      });
+  }
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();

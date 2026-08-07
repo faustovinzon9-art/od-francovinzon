@@ -51,6 +51,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 - `GOOGLE_CLIENT_EMAIL` — email de la cuenta de servicio.
 - `GOOGLE_PRIVATE_KEY` — clave privada de la cuenta de servicio (con `\n` escapados; se des-escapan en `getCalendarClient()`).
 - `GESTION_KEY` — clave de acceso al panel `/gestion` (la usa Ayelen). Se manda como `key` en cada request a `/api/gestion/*`, nunca queda logueada en el cliente salvo `sessionStorage`.
+- `GEMINI_API_KEY` — clave de la API de Gemini, usada solo server-side por `api/gestion/asistente.js` (asistente de ayuda del panel). Nunca se expone al frontend.
 
 ## Límite de 12 Serverless Functions (plan Hobby de Vercel)
 
@@ -58,7 +59,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 
 **Antes de agregar un archivo nuevo bajo `api/`**, contar cuántos hay y cuántos quedan libres. Si hace falta una ruta nueva y no hay margen, **fusionar en un archivo existente usando un campo `accion`/`modo` en el body o query** en vez de crear un archivo — patrón ya usado en `bloqueo-dia.js`, `evento.js` y `buscar.js` (ver `architecture.md`).
 
-Archivos actuales bajo `api/` (11 de 12 — **queda 1 libre**):
+Archivos actuales bajo `api/` (**12 de 12 — sin margen, el próximo endpoint nuevo requiere fusionar con uno existente**):
 
 ```
 api/disponibilidad-mes.js
@@ -72,6 +73,7 @@ api/gestion/evento.js
 api/gestion/buscar.js
 api/gestion/proximo-bloqueo.js
 api/gestion/agregar-telefono.js
+api/gestion/asistente.js
 ```
 
 Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el archivo, correrlo, **sacarlo del proyecto y hacer commit de la baja** ni bien confirma el resultado (patrón ya usado dos veces — limpieza de títulos viejos y rescate de teléfonos sueltos).
