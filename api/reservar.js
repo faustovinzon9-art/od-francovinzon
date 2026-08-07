@@ -1,6 +1,7 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
   toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
+  extraerTelefono, extraerMotivo, extraerEsNuevoPaciente,
 } from '../lib/googleCalendar.js';
 
 // El ticket térmico imprime un QR también para sobreturnos (ver gestion/index.html),
@@ -19,11 +20,11 @@ export default async function handler(req, res) {
   const { accion } = req.body;
   // Mover/cancelar/consultar el turno, sin key: solo alcanza con el eventId — mismo
   // modelo de seguridad para las tres (ver decisions.md, "Modificar turno desde la
-  // confirmación"). "mover" (reprogramar eligiendo día/horario del calendario
-  // principal) sigue fijo a CALENDAR_ID a propósito — los sobreturnos no tienen un
-  // selector de horarios propio en /turnos, así que esa acción no se ofrece para
-  // ellos del lado del cliente (ver gestion/index.html). "obtener"/"cancelar" sí
-  // aceptan un calendarId (whitelisteado) para poder mostrar/cancelar sobreturnos.
+  // confirmación"). El nuevo horario de "mover" siempre sale del calendario/duración
+  // normal (CALENDAR_ID, 30 min) — si el eventId que se mueve es un sobreturno
+  // (calendarId = SOBRETURNOS_CALENDAR_ID), esto convierte el sobreturno en turno
+  // común en vez de solo reprogramarlo (ver moverPropio). "obtener"/"cancelar" ya
+  // aceptaban un calendarId whitelisteado para poder mostrar/cancelar sobreturnos.
   if (accion === 'cancelar') return cancelarPropio(req, res);
   if (accion === 'mover') return moverPropio(req, res);
   if (accion === 'obtener') return obtenerPropio(req, res);
@@ -93,15 +94,19 @@ async function cancelarPropio(req, res) {
 
 async function moverPropio(req, res) {
   try {
-    const { eventId, date, time } = req.body;
+    const { eventId, date, time, calendarId } = req.body;
     if (!eventId || !date || !time) {
       return res.status(200).json({ success: false, message: 'Faltan datos para reprogramar.' });
     }
 
     const calendar = getCalendarClient();
+    const origenSobreturno = calendarId === SOBRETURNOS_CALENDAR_ID;
     const newStart = toArgDate(date, time);
     const newEnd = new Date(newStart.getTime() + SLOT_MINUTES * 60000);
 
+    // El horario elegido siempre es del calendario principal (30 min) — tanto para
+    // reprogramar un turno común como para convertir un sobreturno en uno — así que
+    // el chequeo de solapamiento es siempre contra CALENDAR_ID.
     const { data: existing } = await calendar.events.list({
       calendarId: CALENDAR_ID,
       timeMin: newStart.toISOString(),
@@ -119,6 +124,44 @@ async function moverPropio(req, res) {
       return res.status(200).json({ success: false, message: 'Justo se ocupó ese horario. Elegí otro disponible.' });
     }
 
+    if (origenSobreturno) {
+      // Convertir sobreturno -> turno común: el paciente eligió un horario del
+      // calendario normal (30 min) desde /turno, que no tiene selector de horarios
+      // de sobreturno (15 min) — no alcanza con mover fecha/hora, hay que recrear
+      // el evento en el otro calendario con la duración correcta. Se crea primero
+      // el turno nuevo y recién si sale bien se borra el sobreturno viejo, para no
+      // perder el turno si algo falla en el medio (ver decisions.md).
+      const { data: original } = await calendar.events.get({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId });
+      if (original.status === 'cancelled') {
+        return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
+      }
+
+      const partes = (original.summary || '').trim().split(/\s+/);
+      const nombre = partes.shift() || '';
+      const apellido = partes.join(' ');
+
+      const resultado = await crearTurno(calendar, {
+        date,
+        time,
+        nombre,
+        apellido,
+        telefono: extraerTelefono(original.description || ''),
+        motivo: extraerMotivo(original.description || ''),
+        esNuevo: extraerEsNuevoPaciente(original.description || ''),
+        origen: 'conversion-sobreturno',
+      });
+      if (!resultado.success) return res.status(200).json(resultado);
+
+      await calendar.events.delete({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId });
+
+      return res.status(200).json({
+        success: true,
+        message: `Turno reprogramado para el ${date} a las ${time} hs (hora Argentina).`,
+        eventId: resultado.eventId,
+        calendarId: CALENDAR_ID,
+      });
+    }
+
     await calendar.events.patch({
       calendarId: CALENDAR_ID,
       eventId,
@@ -132,6 +175,7 @@ async function moverPropio(req, res) {
       success: true,
       message: `Turno reprogramado para el ${date} a las ${time} hs (hora Argentina).`,
       eventId,
+      calendarId: CALENDAR_ID,
     });
   } catch (err) {
     console.error(err);

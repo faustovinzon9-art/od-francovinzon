@@ -38,6 +38,7 @@
      paleta navy/dorado/crema del resto del sitio, otro tratamiento visual. */
   .lookup-icon { width: 52px; height: 52px; border-radius: 50%; background: var(--cream-deep); color: var(--navy); font-size: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
   .lookup-card { text-align: center; padding: 26px 20px; }
+  .lookup-badge-sobreturno { display: inline-block; background: var(--gold); color: var(--white); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 4px 12px; border-radius: var(--radius-pill); margin-bottom: 10px; }
   .lookup-nombre { font-size: 19px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .lookup-fecha { font-size: 15px; font-weight: 700; color: var(--gold); background: rgba(212,162,76,.12); border-radius: var(--radius-pill); padding: 7px 16px; display: inline-block; }
 
@@ -162,6 +163,7 @@
 
   <div class="card lookup-card hidden" id="turno-lookup-card">
     <div class="lookup-icon">🦷</div>
+    <div class="lookup-badge-sobreturno hidden" id="lookup-badge-sobreturno">Sobreturno</div>
     <div class="lookup-nombre" id="lookup-nombre"></div>
     <div class="lookup-fecha" id="lookup-fecha"></div>
   </div>
@@ -255,6 +257,13 @@
   let horarioSeleccionado = null;
   let ultimoEventId = null;
   let ultimoCalendarId = null;
+  // Si el turno actual es un sobreturno: el selector de "Cambiar día y horario" de
+  // esta página es siempre el calendario/duración normal (30 min) — no existe un
+  // selector de horarios de sobreturno acá — así que reprogramar un sobreturno desde
+  // esta página SIEMPRE lo convierte en turno común. Se avisa en el texto de
+  // confirmación y se apaga esta bandera (y la etiqueta) apenas se confirma. Ver
+  // decisions.md.
+  let esSobreturnoActual = false;
 
   const monthLabelEl = document.getElementById('month-label');
   const calBodyEl = document.getElementById('cal-body');
@@ -413,7 +422,8 @@
     renderSlots(slots, false);
     const [, m, d] = fechaSeleccionada.split('-').map(Number);
     document.getElementById('reprogramar-note').textContent =
-      `Vas a mover tu turno al ${d} de ${MESES[m - 1]} a las ${horarioSeleccionado} hs.`;
+      `Vas a mover tu turno al ${d} de ${MESES[m - 1]} a las ${horarioSeleccionado} hs.` +
+      (esSobreturnoActual ? ' Al confirmar, va a quedar como turno común (no sobreturno).' : '');
     showMsg('reprogramar-msg', '', '');
     mostrarCardAnimada(reprogramarCard);
     reprogramarCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -492,11 +502,22 @@
     fetch('/api/reservar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'mover', eventId: ultimoEventId, date: fechaSeleccionada, time: horarioSeleccionado }),
+      // calendarId: de dónde sale el eventId actual — si es el de sobreturnos,
+      // api/reservar.js lo convierte en turno común en vez de solo moverlo (el
+      // selector de horarios de esta página es siempre el normal). Ver decisions.md.
+      body: JSON.stringify({ accion: 'mover', eventId: ultimoEventId, date: fechaSeleccionada, time: horarioSeleccionado, calendarId: ultimoCalendarId }),
     })
       .then((r) => r.json())
       .then((res) => {
         if (res.success) {
+          // Después de reprogramar desde acá, el turno siempre termina siendo un
+          // turno común (aunque haya arrancado como sobreturno) — se actualiza el
+          // estado para que Cancelar/una próxima reprogramación usen el calendario
+          // correcto, y se apaga la etiqueta "Sobreturno".
+          if (res.eventId) ultimoEventId = res.eventId;
+          ultimoCalendarId = null;
+          esSobreturnoActual = false;
+          document.getElementById('lookup-badge-sobreturno').classList.add('hidden');
           reprogramarCard.classList.add('hidden');
           calendarCard.classList.add('hidden');
           successTextEl.textContent = res.message;
@@ -559,16 +580,18 @@
         }
         ultimoEventId = eventId;
         ultimoCalendarId = calendarId;
+        esSobreturnoActual = esSobreturno;
         fechaSeleccionada = res.date;
         horarioSeleccionado = res.time;
         const [, m, d] = res.date.split('-').map(Number);
         document.getElementById('lookup-nombre').textContent = res.nombre;
         document.getElementById('lookup-fecha').textContent = `${d} de ${MESES[m - 1]} a las ${res.time} hs.`;
+        document.getElementById('lookup-badge-sobreturno').classList.toggle('hidden', !esSobreturno);
         mostrarCardAnimada(turnoLookupCard);
-        // El selector de "Cambiar día y horario" es el calendario/horarios del
-        // consultorio principal (30 min) — no tiene forma de mostrar disponibilidad
-        // de sobreturnos, así que esa acción no se ofrece acá (ver decisions.md).
-        document.getElementById('btn-cambiar-turno').classList.toggle('hidden', esSobreturno);
+        // "Cambiar día y horario" siempre visible, incluso para sobreturnos: el
+        // selector de esta página es siempre el calendario/horarios normales (30
+        // min) — para un sobreturno, reprogramar acá lo convierte en turno común
+        // (ver el handler de reprogramar-confirm-btn). Ver decisions.md.
         actualizarLinksCalendario();
         postActionsCard.classList.remove('hidden');
       })
