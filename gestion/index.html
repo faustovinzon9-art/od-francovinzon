@@ -126,6 +126,16 @@
      se deja hacer wrap a dos líneas en vez de truncar con "…" y perder la fecha. */
   .task-item.urgent .task-item-nombre { color: var(--bloqueo); white-space: normal; overflow: visible; text-overflow: clip; }
 
+  /* Botones "copiar link" debajo del saludo, mismos en desktop (sidebar) y
+     mobile (mobile-summary) — ver architecture.md. */
+  .copy-links-row { display: flex; gap: 7px; margin-bottom: 14px; }
+  .copy-link-btn {
+    flex: 1; min-width: 0; padding: 7px 9px; border-radius: 100px; border: 1.5px solid var(--line);
+    background: var(--cream); color: var(--navy-soft); font-size: 11px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .copy-link-btn:hover { border-color: var(--gold); color: var(--navy); background: var(--white); }
+
   .sidebar-search { margin-bottom: 18px; }
   .sidebar-search input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13.5px; }
   .sidebar-search input:focus { outline: none; border-color: var(--gold); background: var(--white); }
@@ -325,9 +335,18 @@
   .asistente-header-close:hover { background: rgba(255,255,255,.26); }
 
   .asistente-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 9px; background: var(--cream); }
-  .asistente-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
-  .asistente-msg-bot { align-self: flex-start; background: var(--white); color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(30,58,95,.08); }
-  .asistente-msg-user { align-self: flex-end; background: var(--navy); color: var(--white); border-bottom-right-radius: 4px; }
+  /* Entrada estilo iMessage: la burbuja aparece con un rebote/deslizamiento sutil,
+     creciendo desde su propia esquina (abajo-izquierda para el bot, abajo-derecha
+     para el usuario) en vez de aparecer instantánea. Mismo overshoot suave
+     (cubic-bezier tipo easeOutBack) que ya usamos en "¡Bienvenido/a!" de /turnos. */
+  @keyframes asistenteBurbujaEntrada {
+    0% { opacity: 0; transform: translateY(8px) scale(0.82); }
+    60% { opacity: 1; transform: translateY(-1px) scale(1.02); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .asistente-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; animation: asistenteBurbujaEntrada .32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .asistente-msg-bot { align-self: flex-start; background: var(--white); color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(30,58,95,.08); transform-origin: bottom left; }
+  .asistente-msg-user { align-self: flex-end; background: var(--navy); color: var(--white); border-bottom-right-radius: 4px; transform-origin: bottom right; }
 
   .asistente-typing { display: flex; gap: 4px; padding: 0 14px 10px; background: var(--cream); flex-shrink: 0; }
   .asistente-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-soft); opacity: .5; animation: asistenteTypingBounce 1.1s infinite ease-in-out; }
@@ -345,6 +364,27 @@
 
   @media (max-width: 420px) {
     #asistente-widget { right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
+  }
+
+  /* ---------- Radio en vivo ----------
+     Discreto, abajo a la izquierda (el asistente ya ocupa abajo a la derecha).
+     Vive fuera de #app, como el asistente y los overlays — el auto-refresh de 60s
+     (ver haySesionOcupada()/refrescarAgendaSilencioso() más abajo) nunca toca este
+     árbol del DOM, así que el audio no se corta aunque la agenda se actualice sola. */
+  #radio-widget { position: fixed; left: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 890; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .radio-fab { width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--white); color: var(--navy); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(30,58,95,.16); font-size: 19px; flex-shrink: 0; }
+  .radio-fab:hover { border-color: var(--gold); }
+  .radio-fab.is-playing { border-color: var(--gold); color: var(--gold); box-shadow: 0 6px 18px rgba(212,162,76,.35); }
+
+  .radio-panel { width: 200px; background: var(--white); border-radius: 14px; box-shadow: 0 12px 32px rgba(30,58,95,.18); padding: 10px; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom left; transition: opacity .18s ease, transform .18s ease; }
+  .radio-panel.show { opacity: 1; transform: scale(1) translateY(0); }
+  .radio-panel-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 2px 6px 7px; }
+  .radio-station-btn { display: block; width: 100%; text-align: left; padding: 7px 8px; border-radius: 8px; border: none; background: transparent; color: var(--text); font-size: 12.5px; font-weight: 600; }
+  .radio-station-btn:hover { background: var(--cream); }
+  .radio-station-btn.active { background: rgba(212,162,76,.14); color: var(--navy); }
+
+  @media (max-width: 420px) {
+    #radio-widget { left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
   }
 </style>
 </head>
@@ -366,6 +406,11 @@
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <h1 id="sidebar-greeting">Hola, Ayelen</h1>
     <p id="sidebar-date"></p>
+
+    <div class="copy-links-row">
+      <button type="button" class="copy-link-btn" id="copy-link-turnos">🔗 Copiar link de turnos</button>
+      <button type="button" class="copy-link-btn" id="copy-link-web">🔗 Copiar link de la web</button>
+    </div>
 
     <div class="sidebar-search">
       <input type="text" id="search-input" placeholder="Buscar paciente...">
@@ -400,6 +445,10 @@
         <div class="mobile-summary-date" id="mobile-summary-date"></div>
       </div>
       <button class="mobile-tasks-btn hidden" id="mobile-tasks-btn">Tareas pendientes</button>
+    </div>
+    <div class="copy-links-row">
+      <button type="button" class="copy-link-btn" id="copy-link-turnos-m">🔗 Copiar link de turnos</button>
+      <button type="button" class="copy-link-btn" id="copy-link-web-m">🔗 Copiar link de la web</button>
     </div>
     <div class="mobile-summary-stats" id="mobile-summary-stats">
       <span><strong id="sum-turnos-m">–</strong> turnos hoy</span>
@@ -620,6 +669,17 @@
   </button>
 </div>
 
+<div id="radio-widget" class="hidden">
+  <div class="radio-panel hidden" id="radio-panel">
+    <div class="radio-panel-title">📻 Radio en vivo</div>
+    <button class="radio-station-btn" data-idx="0">▶ Radio Mitre</button>
+    <button class="radio-station-btn" data-idx="1">▶ La 100</button>
+    <button class="radio-station-btn" data-idx="2">▶ Metro</button>
+  </div>
+  <button class="radio-fab" id="radio-fab" aria-label="Radio en vivo" title="Radio en vivo">📻</button>
+</div>
+<audio id="radio-audio" preload="none"></audio>
+
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
 <script>
 (function () {
@@ -707,6 +767,7 @@
     loginScreen.classList.remove('hidden');
     keyInput.value = '';
     ocultarAsistente();
+    ocultarRadio();
   }
   document.getElementById('logout-btn').addEventListener('click', logout);
   document.getElementById('logout-btn-desktop').addEventListener('click', logout);
@@ -718,6 +779,7 @@
     loginScreen.classList.remove('hidden');
     loginError.textContent = 'Clave incorrecta.';
     ocultarAsistente();
+    ocultarRadio();
   }
 
   function verificarYArrancar() {
@@ -733,6 +795,7 @@
     cargarAgenda();
     cargarResumenSidebar();
     asistenteWidget.classList.remove('hidden');
+    radioWidget.classList.remove('hidden');
   }
 
   // ---------- Fecha ----------
@@ -777,7 +840,7 @@
     const hoy = todayStr();
     Promise.all([
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
-      fetch(`/api/horarios-dia?date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`/api/disponibilidad?modo=dia&date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
       fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], reorganizar: [] })),
     ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
@@ -1401,6 +1464,41 @@
     }, 2600);
   }
 
+  // ---------- Copiar link de turnos / de la web (sidebar desktop + resumen mobile) ----------
+  // Fallback con execCommand('copy') para navegadores/contextos donde la Clipboard API
+  // no está disponible o el permiso de escritura queda denegado.
+  function copiarLinkFallback(url) {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      toast(ok ? '✅ Link copiado' : 'No se pudo copiar el link.');
+    } catch (e) {
+      toast('No se pudo copiar el link.');
+    }
+  }
+  function copiarLink(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => toast('✅ Link copiado')).catch(() => copiarLinkFallback(url));
+    } else {
+      copiarLinkFallback(url);
+    }
+  }
+  const linkTurnos = `${location.origin}/turnos`;
+  const linkWeb = `${location.origin}/`;
+  ['copy-link-turnos', 'copy-link-turnos-m'].forEach((id) =>
+    document.getElementById(id).addEventListener('click', () => copiarLink(linkTurnos))
+  );
+  ['copy-link-web', 'copy-link-web-m'].forEach((id) =>
+    document.getElementById(id).addEventListener('click', () => copiarLink(linkWeb))
+  );
+
   // ---------- Diálogo de confirmación propio (reemplaza confirm() nativo) ----------
   const confirmOverlay = document.getElementById('confirm-overlay');
   function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' }) {
@@ -1557,7 +1655,7 @@
   function cargarMesMC() {
     document.getElementById('mc-month-label').textContent = MESES[mcMonth - 1] + ' ' + mcYear;
     document.getElementById('mc-days').innerHTML = '<div class="loading-note">Cargando...</div>';
-    fetch(`/api/disponibilidad-mes?year=${mcYear}&month=${mcMonth}`)
+    fetch(`/api/disponibilidad?year=${mcYear}&month=${mcMonth}`)
       .then((r) => r.json())
       .then((data) => { mcAvailability = data; renderMCDays(); })
       .catch(() => { document.getElementById('mc-days').innerHTML = '<div class="loading-note">No se pudo cargar.</div>'; });
@@ -1593,7 +1691,7 @@
     document.getElementById('mc-slots-title').textContent = `Horarios para el ${dia} de ${MESES[mcMonth - 1]}`;
     document.getElementById('mc-slots').innerHTML = '<span class="empty-day">Buscando horarios...</span>';
 
-    fetch(`/api/horarios-dia?date=${mcFecha}`)
+    fetch(`/api/disponibilidad?modo=dia&date=${mcFecha}`)
       .then((r) => r.json())
       .then((slots) => renderMCSlots(slots))
       .catch(() => { document.getElementById('mc-slots').innerHTML = '<span class="empty-day">No se pudieron cargar los horarios.</span>'; });
@@ -2008,6 +2106,65 @@
   }
   wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono', itiTTelefono);
   wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono', itiMcTelefono);
+
+  // ---------- Radio en vivo ----------
+  // #radio-widget vive fuera de #app (ver HTML), así que ningún re-render de la
+  // agenda/sidebar lo toca nunca — el auto-refresh de más abajo no puede cortar la
+  // reproducción porque ni siquiera comparte árbol del DOM con este widget.
+  const RADIO_ESTACIONES = [
+    { nombre: 'Radio Mitre', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/AM790_56AAC.aac' },
+    { nombre: 'La 100', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/FM999_56.mp3' },
+    { nombre: 'Metro', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/METRO.mp3' },
+  ];
+  const radioWidget = document.getElementById('radio-widget');
+  const radioFab = document.getElementById('radio-fab');
+  const radioPanel = document.getElementById('radio-panel');
+  const radioAudio = document.getElementById('radio-audio');
+  const radioBtns = Array.from(document.querySelectorAll('.radio-station-btn'));
+  let radioIdxActual = null;
+
+  function renderRadioBtns() {
+    radioBtns.forEach((btn, i) => {
+      const sonando = i === radioIdxActual && !radioAudio.paused;
+      btn.classList.toggle('active', i === radioIdxActual);
+      btn.textContent = (sonando ? '⏸ ' : '▶ ') + RADIO_ESTACIONES[i].nombre;
+    });
+    radioFab.classList.toggle('is-playing', radioIdxActual !== null && !radioAudio.paused);
+  }
+  renderRadioBtns();
+
+  function abrirRadioPanel() {
+    radioPanel.classList.remove('hidden');
+    requestAnimationFrame(() => radioPanel.classList.add('show'));
+  }
+  function cerrarRadioPanel() {
+    radioPanel.classList.remove('show');
+    setTimeout(() => radioPanel.classList.add('hidden'), 180);
+  }
+  radioFab.addEventListener('click', () => {
+    if (radioPanel.classList.contains('show')) cerrarRadioPanel(); else abrirRadioPanel();
+  });
+
+  radioBtns.forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      if (i === radioIdxActual && !radioAudio.paused) { radioAudio.pause(); return; }
+      if (i !== radioIdxActual) {
+        radioIdxActual = i;
+        radioAudio.src = RADIO_ESTACIONES[i].url;
+      }
+      radioAudio.play().catch(() => {});
+    });
+  });
+  radioAudio.addEventListener('play', renderRadioBtns);
+  radioAudio.addEventListener('pause', renderRadioBtns);
+
+  // Al salir: cortar la radio (no dejarla sonando después de cerrar sesión) y
+  // ocultar el widget, igual que con el asistente.
+  function ocultarRadio() {
+    radioAudio.pause();
+    cerrarRadioPanel();
+    radioWidget.classList.add('hidden');
+  }
 
   // ---------- Auto-refresh cada 60s, solo si Ayelen no está en medio de nada ----------
   // "Ocupada" = algún panel (nuevo turno/sobreturno/horario/mover/bloqueo) abierto,

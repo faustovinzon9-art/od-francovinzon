@@ -180,7 +180,7 @@ se renombró a "Reorganizar turnos del [fecha]" para reflejar ambos casos.
 ## Sobreturnos
 
 - **Los sobreturnos se cargan a propósito superpuestos** con turnos normales — es su función (meter un huequito extra en un horario ya ocupado). Por eso "Nuevo sobreturno" sigue con hora libre a mano (sin calendario de disponibilidad) y su chequeo de solapamiento es solo contra el calendario de sobreturnos, nunca contra el principal.
-- **"Nuevo turno" (calendario principal) sí usa el mismo selector de calendario + horarios reales que ven los pacientes en `/turnos`** (reutiliza `/api/disponibilidad-mes` y `/api/horarios-dia`), para no calcular disponibilidad de dos formas distintas.
+- **"Nuevo turno" (calendario principal) sí usa el mismo selector de calendario + horarios reales que ven los pacientes en `/turnos`** (reutiliza `/api/disponibilidad`, antes `disponibilidad-mes.js`+`horarios-dia.js`, fusionados en 2026-08-06), para no calcular disponibilidad de dos formas distintas.
 
 ## Confirmación de turno en `/turnos`: acciones post-reserva (2026-08-06)
 

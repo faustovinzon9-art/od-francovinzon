@@ -62,8 +62,8 @@ Solo nombres, nunca valores en el código ni en estos docs:
 Archivos actuales bajo `api/` (**12 de 12 — sin margen, el próximo endpoint nuevo requiere fusionar con uno existente**):
 
 ```
-api/disponibilidad-mes.js
-api/horarios-dia.js
+api/chat.js
+api/disponibilidad.js
 api/reservar.js
 api/gestion/turnos-dia.js
 api/gestion/crear-turno.js
@@ -75,6 +75,8 @@ api/gestion/proximo-bloqueo.js
 api/gestion/agregar-telefono.js
 api/gestion/asistente.js
 ```
+
+`api/disponibilidad.js` fusiona lo que antes eran `disponibilidad-mes.js` + `horarios-dia.js` (sin `modo` = mes, `?modo=dia` = horarios de un día), liberando el cupo para `api/chat.js` (chatbot público con Gemini, ver `architecture.md`).
 
 Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el archivo, correrlo, **sacarlo del proyecto y hacer commit de la baja** ni bien confirma el resultado (patrón ya usado dos veces — limpieza de títulos viejos y rescate de teléfonos sueltos).
 

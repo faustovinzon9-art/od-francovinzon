@@ -1,6 +1,6 @@
 import {
-  getCalendarClient, CALENDAR_ID, SLOT_MINUTES, CLINIC_ADDRESS, TIME_ZONE,
-  toArgDate, eventBounds, telefonoParaWhatsApp,
+  getCalendarClient, CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
+  toArgDate, eventBounds, crearTurno,
 } from '../lib/googleCalendar.js';
 
 export default async function handler(req, res) {
@@ -18,65 +18,10 @@ export default async function handler(req, res) {
 
   try {
     const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
-
-    if (!telefono || !telefono.trim()) {
-      return res.status(200).json({ success: false, message: 'El teléfono es obligatorio.' });
-    }
-    const telNormalizado = telefonoParaWhatsApp(telefono);
-    if (!telNormalizado) {
-      return res.status(200).json({ success: false, message: 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.' });
-    }
-
-    const start = toArgDate(date, time);
-    const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
-
     const calendar = getCalendarClient();
-
-    const { data: existing } = await calendar.events.list({
-      calendarId: CALENDAR_ID,
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
-      singleEvents: true,
-    });
-
-    const stillFree = !(existing.items || []).some((ev) => {
-      const { start: evStart, end: evEnd } = eventBounds(ev);
-      return start < evEnd && end > evStart;
-    });
-
-    if (!stillFree) {
-      return res.status(200).json({
-        success: false,
-        message: 'Justo se ocupó ese horario. Por favor elegí otro disponible.',
-      });
-    }
-
-    const title = `${nombre} ${apellido || ''}`.trim();
-    const description =
-      `Teléfono: ${telNormalizado}\n` +
-      'Teléfono verificado: Sí\n' +
-      `Motivo: ${motivo || '-'}\n` +
-      `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
-      'Reservado desde el formulario propio (hora Argentina fija, sin depender del dispositivo del paciente).';
-
-    const eventBody = {
-      summary: title,
-      location: CLINIC_ADDRESS,
-      description,
-      start: { dateTime: start.toISOString(), timeZone: TIME_ZONE },
-      end: { dateTime: end.toISOString(), timeZone: TIME_ZONE },
-    };
-
-    const { data: created } = await calendar.events.insert({
-      calendarId: CALENDAR_ID,
-      requestBody: eventBody,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: `Turno confirmado para el ${date} a las ${time} hs (hora Argentina).`,
-      eventId: created.id,
-    });
+    // Misma lógica que usa el chatbot para la reserva conversacional — ver lib/googleCalendar.js.
+    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, motivo, esNuevo });
+    res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Hubo un error al confirmar el turno. Probá de nuevo.' });
