@@ -3,7 +3,7 @@ import {
   CLINIC_ADDRESS, WEEKLY_SCHEDULE,
 } from '../lib/googleCalendar.js';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.6-flash';
 const MAX_MENSAJES = 30; // tope de mensajes por conversación, para cuidar la cuota gratis de Gemini
 const MAX_VUELTAS_FUNCIONES = 6; // tope de idas y vueltas de function-calling por pregunta
 

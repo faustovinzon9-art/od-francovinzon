@@ -1,6 +1,6 @@
 import { isValidGestionKey } from '../../lib/googleCalendar.js';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.6-flash';
 const MAX_TURNOS_HISTORIAL = 10;
 
 const SYSTEM_PROMPT = `Sos un asistente que ayuda a la secretaria de un consultorio odontológico a usar el panel de gestión de turnos. Respondé siempre en español rioplatense, corto y claro, con pasos numerados cuando corresponda.
