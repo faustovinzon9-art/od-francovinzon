@@ -1,7 +1,15 @@
 import {
-  getCalendarClient, CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
-  toArgDate, eventBounds, crearTurno,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
+  toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
 } from '../lib/googleCalendar.js';
+
+// El ticket térmico imprime un QR también para sobreturnos (ver gestion/index.html),
+// así que "obtener"/"cancelar" tienen que poder apuntar a SOBRETURNOS_CALENDAR_ID —
+// nunca a un calendario arbitrario que mande el cliente: whitelist de los dos ids
+// válidos, cualquier otra cosa cae al default de siempre (CALENDAR_ID).
+function resolverCalendarId(calendarId) {
+  return calendarId === SOBRETURNOS_CALENDAR_ID ? SOBRETURNOS_CALENDAR_ID : CALENDAR_ID;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,12 +17,16 @@ export default async function handler(req, res) {
   }
 
   const { accion } = req.body;
-  // Mover/cancelar el turno recién confirmado, sin key: solo alcanza con el eventId
-  // que devolvimos al crearlo (no persiste en URL ni localStorage, vive en memoria del
-  // cliente durante esa sesión — ver decisions.md, "Modificar turno desde la
-  // confirmación"). Scope fijo a CALENDAR_ID: los pacientes nunca tocan sobreturnos.
+  // Mover/cancelar/consultar el turno, sin key: solo alcanza con el eventId — mismo
+  // modelo de seguridad para las tres (ver decisions.md, "Modificar turno desde la
+  // confirmación"). "mover" (reprogramar eligiendo día/horario del calendario
+  // principal) sigue fijo a CALENDAR_ID a propósito — los sobreturnos no tienen un
+  // selector de horarios propio en /turnos, así que esa acción no se ofrece para
+  // ellos del lado del cliente (ver gestion/index.html). "obtener"/"cancelar" sí
+  // aceptan un calendarId (whitelisteado) para poder mostrar/cancelar sobreturnos.
   if (accion === 'cancelar') return cancelarPropio(req, res);
   if (accion === 'mover') return moverPropio(req, res);
+  if (accion === 'obtener') return obtenerPropio(req, res);
 
   try {
     const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
@@ -28,14 +40,42 @@ export default async function handler(req, res) {
   }
 }
 
+// Punto de entrada del QR del ticket térmico (ver gestion/index.html): dado un
+// eventId, devuelve nombre/fecha/hora para que /turnos pueda mostrar "Tu turno" y
+// habilitar Cambiar día y horario / Cancelar sin haber pasado por la reserva en esa
+// misma carga de página. Mismo modelo de seguridad que mover/cancelar (conocer el
+// id alcanza) — no expone teléfono ni nada más de la description.
+async function obtenerPropio(req, res) {
+  try {
+    const { eventId, calendarId } = req.body;
+    if (!eventId) {
+      return res.status(200).json({ success: false, message: 'Falta el turno a consultar.' });
+    }
+    const calendar = getCalendarClient();
+    const { data: ev } = await calendar.events.get({ calendarId: resolverCalendarId(calendarId), eventId });
+    const { start } = eventBounds(ev);
+    res.status(200).json({
+      success: true,
+      nombre: ev.summary || '',
+      date: formatArgDay(start),
+      time: formatArgTime(start),
+    });
+  } catch (err) {
+    // events.get tira si el turno ya no existe (cancelado, o id inválido/de otro
+    // calendario) — se trata como "no encontrado" sin filtrar el motivo exacto.
+    console.error(err);
+    res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
+  }
+}
+
 async function cancelarPropio(req, res) {
   try {
-    const { eventId } = req.body;
+    const { eventId, calendarId } = req.body;
     if (!eventId) {
       return res.status(200).json({ success: false, message: 'Falta el turno a cancelar.' });
     }
     const calendar = getCalendarClient();
-    await calendar.events.delete({ calendarId: CALENDAR_ID, eventId });
+    await calendar.events.delete({ calendarId: resolverCalendarId(calendarId), eventId });
     res.status(200).json({ success: true, message: 'Turno cancelado.' });
   } catch (err) {
     console.error(err);

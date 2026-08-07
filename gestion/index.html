@@ -376,7 +376,7 @@
   .radio-fab:hover { border-color: var(--gold); }
   .radio-fab.is-playing { border-color: var(--gold); color: var(--gold); box-shadow: 0 6px 18px rgba(212,162,76,.35); }
 
-  .radio-panel { width: 200px; background: var(--white); border-radius: 14px; box-shadow: 0 12px 32px rgba(30,58,95,.18); padding: 10px; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom left; transition: opacity .18s ease, transform .18s ease; }
+  .radio-panel { width: 230px; background: var(--white); border-radius: 14px; box-shadow: 0 12px 32px rgba(30,58,95,.18); padding: 10px; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom left; transition: opacity .18s ease, transform .18s ease; }
   .radio-panel.show { opacity: 1; transform: scale(1) translateY(0); }
   .radio-panel-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 2px 6px 7px; }
   .radio-station-btn { display: block; width: 100%; text-align: left; padding: 7px 8px; border-radius: 8px; border: none; background: transparent; color: var(--text); font-size: 12.5px; font-weight: 600; }
@@ -385,6 +385,36 @@
 
   @media (max-width: 420px) {
     #radio-widget { left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
+  }
+
+  /* ---------- Ticket térmico (impresora 58mm, ver decisions.md) ----------
+     El modal muestra una previsualización a tamaño legible en pantalla (no la escala
+     real del papel) con el mismo estilo navy/dorado del resto de /gestion; el CSS de
+     @media print más abajo es lo único que define el tamaño real de impresión. */
+  .ticket-modal-box { max-width: 300px; }
+  .ticket-preview-frame { background: var(--cream); border-radius: 12px; padding: 16px 8px; display: flex; justify-content: center; margin-bottom: 14px; }
+  #ticket-print { width: 210px; background: var(--white); padding: 16px 12px; text-align: center; box-shadow: 0 2px 10px rgba(30,58,95,.14); }
+  .ticket-logo { width: 130px; max-width: 85%; height: auto; margin: 0 auto 10px; display: block; }
+  .ticket-nombre { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 15px; color: var(--navy); margin-bottom: 4px; text-transform: capitalize; }
+  .ticket-fecha { font-size: 12px; color: var(--text); text-transform: capitalize; }
+  .ticket-hora { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+  .ticket-qr-label { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+  .ticket-qr { display: flex; justify-content: center; margin-bottom: 10px; }
+  .ticket-qr img, .ticket-qr canvas { display: block; }
+  .ticket-footer { font-size: 9.5px; color: var(--muted); line-height: 1.4; }
+
+  /* Solo esto se imprime: se oculta todo lo demás de la página y se posiciona
+     #ticket-print en la esquina de la hoja térmica. Área imprimible real ~48mm
+     aunque el papel es de 58mm (margen físico de este modelo de impresora), y en
+     blanco y negro siempre — sin depender de que la impresora interprete bien los
+     colores navy/dorado del resto del sitio. */
+  @media print {
+    body * { visibility: hidden; }
+    #ticket-print, #ticket-print * { visibility: visible; color: #000 !important; background: transparent !important; box-shadow: none !important; }
+    #ticket-print {
+      position: absolute; top: 0; left: 0; width: 48mm; padding: 2mm 1mm; margin: 0; background: #fff !important;
+    }
+    @page { size: 58mm auto; margin: 2mm; }
   }
 </style>
 </head>
@@ -640,6 +670,30 @@
   </div>
 </div>
 
+<div class="confirm-overlay hidden" id="ticket-modal-overlay">
+  <div class="confirm-box ticket-modal-box">
+    <div class="tasks-modal-header">
+      <h3>Vista previa del ticket</h3>
+      <button class="tasks-modal-close" id="ticket-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="ticket-preview-frame">
+      <div id="ticket-print">
+        <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo" class="ticket-logo">
+        <div class="ticket-nombre" id="ticket-nombre"></div>
+        <div class="ticket-fecha" id="ticket-fecha"></div>
+        <div class="ticket-hora" id="ticket-hora"></div>
+        <div class="ticket-qr-label">Para modificar o cancelar tu turno, escaneá este código:</div>
+        <div class="ticket-qr" id="ticket-qr"></div>
+        <div class="ticket-footer" id="ticket-footer"></div>
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button class="btn-confirm" id="ticket-imprimir-btn">🖨️ Imprimir</button>
+      <button class="btn-cancel" id="ticket-cerrar-btn">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div id="asistente-widget" class="hidden">
   <div class="asistente-panel hidden" id="asistente-panel">
     <div class="asistente-header">
@@ -674,13 +728,16 @@
     <div class="radio-panel-title">📻 Radio en vivo</div>
     <button class="radio-station-btn" data-idx="0">▶ Radio Mitre</button>
     <button class="radio-station-btn" data-idx="1">▶ La 100</button>
-    <button class="radio-station-btn" data-idx="2">▶ Metro</button>
+    <button class="radio-station-btn" data-idx="2">▶ Aspen</button>
+    <button class="radio-station-btn" data-idx="3">▶ FM Milenium</button>
+    <button class="radio-station-btn" data-idx="4">▶ Radio Rivadavia</button>
   </div>
   <button class="radio-fab" id="radio-fab" aria-label="Radio en vivo" title="Radio en vivo">📻</button>
 </div>
 <audio id="radio-audio" preload="none"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
 (function () {
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
@@ -689,6 +746,15 @@
   // Tacho de basura de contorno (Feather "trash-2") — el emoji 🗑 no se reconocía
   // como ícono de eliminar. currentColor hereda el color de .icon-btn.trash.
   const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+  // Ícono de impresora (Feather "printer") para el ticket térmico.
+  const PRINTER_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>';
+  // Número de WhatsApp del consultorio (turnos y consultas) — el mismo que usan los
+  // botones "Escribinos por WhatsApp" de index.html y turnos/index.html. Se define acá
+  // una sola vez porque no hay bundler para compartir una constante entre archivos
+  // client-side (mismo criterio que normalizarTelefonoWhatsApp(), ver architecture.md);
+  // el ticket térmico es lo único de /gestion que lo necesita.
+  const WHATSAPP_CONSULTORIO = '5403442457764';
+  const WHATSAPP_CONSULTORIO_DISPLAY = '+54 3442 45-7764';
   // "Hoy" siempre en hora Argentina, sin importar la zona horaria del dispositivo de quien usa el panel.
   const todayStr = () => new Intl.DateTimeFormat('en-CA', {
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1183,6 +1249,7 @@
       ? ''
       : `<div class="row-actions">
            <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>
+           <button class="icon-btn" data-action="imprimir" data-idx="${idx}" title="Imprimir ticket">${PRINTER_ICON}</button>
            <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>
          </div>`;
     return `
@@ -1211,6 +1278,8 @@
         if (btn.dataset.action === 'mover') {
           if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
           else abrirMover(item);
+        } else if (btn.dataset.action === 'imprimir') {
+          abrirTicketPreview(item);
         } else {
           cancelarItem(item);
         }
@@ -1289,6 +1358,7 @@
     }
     if (it.tipo !== 'bloqueo') {
       botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>`);
+      botones.push(`<button class="icon-btn" data-action="imprimir" data-idx="${idx}" title="Imprimir ticket">${PRINTER_ICON}</button>`);
       botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>`);
     }
     const acciones = botones.length ? `<div class="row-actions">${botones.join('')}</div>` : '';
@@ -1359,6 +1429,8 @@
     if (action === 'mover') {
       if (item.tipo === 'turno') abrirMoverTurnoCalendario(item);
       else abrirMover(item);
+    } else if (action === 'imprimir') {
+      abrirTicketPreview(item);
     } else if (action === 'cancelar') {
       cancelarItem(item);
     } else if (action === 'agregar-tel' || action === 'editar-tel') {
@@ -1996,6 +2068,46 @@
     });
   }
 
+  // ---------- Ticket térmico (impresora 58mm) ----------
+  // Previsualización propia primero; recién si tocan "Imprimir" ahí adentro se llama
+  // a window.print() (el navegador va a mostrar su cartel nativo de impresión — no
+  // se puede evitar sin software adicional instalado en la máquina, no es un bug).
+  const ticketModalOverlay = document.getElementById('ticket-modal-overlay');
+
+  function abrirTicketPreview(item) {
+    const fechaLarga = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(item.start));
+    document.getElementById('ticket-nombre').textContent = item.title || '(sin título)';
+    document.getElementById('ticket-fecha').textContent = fechaLarga;
+    document.getElementById('ticket-hora').textContent = item.allDay ? '' : `${fmtHora(item.start)} hs`;
+    document.getElementById('ticket-footer').innerHTML = `Consultas: WhatsApp<br>${WHATSAPP_CONSULTORIO_DISPLAY}`;
+
+    // El QR apunta a /turnos con el eventId (y calendarId/tipo si es sobreturno) para
+    // reusar tal cual la misma pantalla de "cambiar día y horario / cancelar" que ya
+    // existe ahí — ver decisions.md.
+    const qrParams = new URLSearchParams({ eventId: item.id });
+    if (item.calendarId) qrParams.set('calendarId', item.calendarId);
+    if (item.tipo === 'sobreturno') qrParams.set('tipo', 'sobreturno');
+    const ticketUrl = `${location.origin}/turnos?${qrParams.toString()}`;
+
+    const qrEl = document.getElementById('ticket-qr');
+    qrEl.innerHTML = '';
+    // eslint-disable-next-line no-new
+    new QRCode(qrEl, { text: ticketUrl, width: 110, height: 110, colorDark: '#000000', colorLight: '#ffffff' });
+
+    ticketModalOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => ticketModalOverlay.classList.add('show'));
+  }
+
+  function cerrarTicketPreview() {
+    ticketModalOverlay.classList.remove('show');
+    setTimeout(() => ticketModalOverlay.classList.add('hidden'), 180);
+  }
+
+  document.getElementById('ticket-modal-close').addEventListener('click', cerrarTicketPreview);
+  document.getElementById('ticket-cerrar-btn').addEventListener('click', cerrarTicketPreview);
+  document.getElementById('ticket-imprimir-btn').addEventListener('click', () => window.print());
+  ticketModalOverlay.addEventListener('click', (e) => { if (e.target === ticketModalOverlay) cerrarTicketPreview(); });
+
   // Anima la fila antes de sacarla de agendaItems y re-renderizar localmente
   // (sin volver a pedir el día entero al servidor).
   function quitarFilaConAnimacion(idx) {
@@ -2110,11 +2222,16 @@
   // ---------- Radio en vivo ----------
   // #radio-widget vive fuera de #app (ver HTML), así que ningún re-render de la
   // agenda/sidebar lo toca nunca — el auto-refresh de más abajo no puede cortar la
-  // reproducción porque ni siquiera comparte árbol del DOM con este widget.
+  // reproducción porque ni siquiera comparte árbol del DOM con este widget. URLs de
+  // streaming verificadas a mano (curl, viendo el código fuente/JS de cada sitio
+  // oficial) antes de sumarlas — la mayoría son la misma infraestructura
+  // StreamTheWorld/Triton Digital.
   const RADIO_ESTACIONES = [
     { nombre: 'Radio Mitre', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/AM790_56AAC.aac' },
     { nombre: 'La 100', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/FM999_56.mp3' },
-    { nombre: 'Metro', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/METRO.mp3' },
+    { nombre: 'Aspen', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/ASPENAAC.aac' },
+    { nombre: 'FM Milenium', url: 'https://sonicpanel.hostradios.com/8002/stream' },
+    { nombre: 'Radio Rivadavia', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RIVADAVIA.mp3' },
   ];
   const radioWidget = document.getElementById('radio-widget');
   const radioFab = document.getElementById('radio-fab');
@@ -2126,7 +2243,7 @@
   function renderRadioBtns() {
     radioBtns.forEach((btn, i) => {
       const sonando = i === radioIdxActual && !radioAudio.paused;
-      btn.classList.toggle('active', i === radioIdxActual);
+      btn.classList.toggle('active', sonando);
       btn.textContent = (sonando ? '⏸ ' : '▶ ') + RADIO_ESTACIONES[i].nombre;
     });
     radioFab.classList.toggle('is-playing', radioIdxActual !== null && !radioAudio.paused);
