@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detalles de tu turno | Franco Vinzón Odontólogo</title>
+<meta name="description" content="Consultá, modificá o cancelá tu turno en el Consultorio Odontológico Franco Vinzón, Concepción del Uruguay.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/isologo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
+    --cream: #FAF9F6; --cream-deep: #F1ECE2; --white: #FFFFFF;
+    --text: #2A2A2A; --muted: #8A8578; --disabled: #D7D2C6; --success: #25D366;
+    --radius-pill: 100px; --radius-card: 22px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--cream); color: var(--text);
+    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  .turnos-page { max-width: 460px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
+  .brand { text-align: center; margin-bottom: 18px; }
+  .brand img { width: 100%; max-width: 280px; height: auto; margin-bottom: 12px; }
+  .brand .tagline { font-family: 'Fraunces', Georgia, serif; font-size: 27px; font-weight: 700; color: var(--navy); }
+  .brand .subtitle { color: var(--muted); font-size: 13px; margin-top: 3px; letter-spacing: 0.2px; }
+  .card { background: var(--white); border-radius: var(--radius-card); padding: 20px 18px; margin-bottom: 18px; box-shadow: 0 2px 18px rgba(30, 58, 95, 0.06); }
+  .hidden { display: none !important; }
+
+  /* ---------- Tarjeta "Detalles de tu turno" ----------
+     Deliberadamente distinta de la pantalla de éxito post-reserva (sin el ✓
+     verde ni el texto "Turno confirmado"): un ícono de ticket, el nombre del
+     paciente bien grande, y la fecha/hora en un renglón dorado propio — misma
+     paleta navy/dorado/crema del resto del sitio, otro tratamiento visual. */
+  .lookup-icon { width: 52px; height: 52px; border-radius: 50%; background: var(--cream-deep); color: var(--navy); font-size: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+  .lookup-card { text-align: center; padding: 26px 20px; }
+  .lookup-nombre { font-size: 19px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .lookup-fecha { font-size: 15px; font-weight: 700; color: var(--gold); background: rgba(212,162,76,.12); border-radius: var(--radius-pill); padding: 7px 16px; display: inline-block; }
+
+  .lookup-card, .card.error-card { opacity: 0; transform: translateY(10px); transition: opacity .22s ease, transform .22s ease; }
+  .lookup-card.card-visible, .card.error-card.card-visible { opacity: 1; transform: translateY(0); }
+
+  .error-card { text-align: center; }
+  .error-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 12px 0 18px; }
+
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .cal-header .month-label { font-size: 17px; font-weight: 600; text-transform: capitalize; }
+  .cal-nav-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--cream-deep); color: var(--navy); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .cal-nav-btn:disabled { opacity: 0.35; cursor: default; }
+  .weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
+  .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 6px; }
+  .day-cell { display: flex; align-items: center; justify-content: center; padding: 3px 0; }
+  .day-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--disabled); cursor: default; display: flex; align-items: center; justify-content: center; }
+  .day-btn.available { background: var(--navy); color: var(--white); cursor: pointer; box-shadow: 0 2px 7px rgba(30, 58, 95, 0.3); }
+  .day-btn.selected { background: var(--navy); box-shadow: 0 2px 8px rgba(30, 58, 95, 0.4), inset 0 0 0 2px var(--gold); }
+  .day-btn.today { box-shadow: inset 0 0 0 2px var(--gold); }
+  .day-btn.today.available { box-shadow: 0 2px 7px rgba(30, 58, 95, 0.3), inset 0 0 0 2px var(--gold); }
+  .legend { display: flex; gap: 18px; justify-content: center; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.navy { background: var(--navy); }
+  .dot.gray { background: var(--disabled); }
+  .cal-loading { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+
+  #cal-body { transition: transform .18s ease, opacity .18s ease; }
+  #cal-body.cal-out-left { transform: translateX(-16px); opacity: 0; }
+  #cal-body.cal-out-right { transform: translateX(16px); opacity: 0; }
+  #cal-body.cal-in-left { transition: none; transform: translateX(-16px); opacity: 0; }
+  #cal-body.cal-in-right { transition: none; transform: translateX(16px); opacity: 0; }
+
+  .enter-up { opacity: 0; transform: translateY(14px); transition: opacity .2s ease, transform .2s ease; }
+  .enter-up.card-visible { opacity: 1; transform: translateY(0); }
+
+  @keyframes slotEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .slot-btn-enter { animation: slotEnter .18s ease both; }
+
+  .slots-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+  .slots { display: flex; flex-wrap: wrap; gap: 9px; }
+  .slot-btn { padding: 9px 16px; border: 1.5px solid var(--navy-soft); border-radius: var(--radius-pill); background: var(--white); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .slot-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); box-shadow: 0 3px 10px rgba(30, 58, 95, 0.35); }
+
+  button.primary { width: 100%; padding: 15px; background: var(--gold); color: var(--white); border: none; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 700; margin-top: 22px; cursor: pointer; box-shadow: 0 3px 12px rgba(212, 162, 76, 0.3); }
+  button.primary:disabled { background: var(--disabled); box-shadow: none; cursor: default; }
+  .msg { margin-top: 14px; font-size: 13.5px; text-align: center; }
+  .msg.ok { color: #1a8f4c; font-weight: 600; }
+  .msg.error { color: #C1443A; font-weight: 600; }
+  .msg.loading { color: var(--muted); }
+
+  .success-card { text-align: center; padding: 30px 20px; }
+  .success-card .check { width: 56px; height: 56px; border-radius: 50%; background: var(--success); color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+  .success-card h3 { font-size: 18px; margin-bottom: 8px; }
+  .success-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
+  .success-card p.success-highlight { font-size: 17px; font-weight: 700; color: #4F9A3C; line-height: 1.4; }
+  .success-card { opacity: 0; transform: translateY(10px); transition: opacity .22s ease, transform .22s ease; }
+  .success-card.card-visible { opacity: 1; transform: translateY(0); }
+
+  .empty-day { text-align: center; color: var(--muted); font-size: 13.5px; padding: 6px 0 2px; display: block; }
+
+  button, .day-btn, .slot-btn, .card, .post-action-btn {
+    transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
+  }
+  button, .day-btn.available, .slot-btn { cursor: pointer; }
+  button:active:not(:disabled), .day-btn.available:active, .slot-btn:active, .post-action-btn:active { transform: scale(0.96); }
+  .day-btn.available:hover { box-shadow: 0 4px 12px rgba(30, 58, 95, 0.4); }
+  .slot-btn:hover { border-color: var(--gold); }
+  button.primary:hover:not(:disabled) { filter: brightness(1.04); box-shadow: 0 5px 16px rgba(30, 58, 95, 0.12); }
+  .cal-nav-btn:hover:not(:disabled) { background: var(--disabled); }
+
+  .post-actions-row { display: flex; flex-direction: column; gap: 9px; }
+  .post-action-btn {
+    width: 100%; padding: 12px; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif;
+    font-size: 13.5px; font-weight: 600; border: 1.5px solid var(--navy-soft); background: var(--white); color: var(--navy);
+    text-align: center; text-decoration: none; cursor: pointer; box-sizing: border-box;
+  }
+  .post-action-btn:hover { background: var(--cream-deep); }
+  .post-action-btn.danger { border-color: rgba(193, 68, 55, 0.4); color: #C14437; }
+  .post-action-btn.danger:hover { background: rgba(193, 68, 55, 0.06); }
+  .reprogramar-note { font-size: 13px; color: var(--navy-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
+
+  #toast-container {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999;
+    display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none;
+  }
+  .toast {
+    background: var(--navy); color: var(--white); padding: 11px 20px; border-radius: 100px;
+    font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(30,58,95,.28);
+    opacity: 0; transform: translateY(-10px); transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .confirm-overlay {
+    position: fixed; inset: 0; background: rgba(30, 58, 95, 0.35); display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 100; opacity: 0; transition: opacity .18s ease;
+  }
+  .confirm-overlay.show { opacity: 1; }
+  .confirm-box {
+    background: var(--white); border-radius: 20px; padding: 24px 22px; max-width: 320px; width: 100%;
+    box-shadow: 0 20px 50px rgba(30,58,95,.25); transform: scale(0.94); transition: transform .18s ease;
+  }
+  .confirm-overlay.show .confirm-box { transform: scale(1); }
+  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; }
+  .confirm-box p { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+  .confirm-actions { display: flex; gap: 8px; }
+  .confirm-actions button { flex: 1; padding: 11px; border-radius: var(--radius-pill); font-weight: 700; font-size: 13.5px; border: none; }
+  .confirm-actions .btn-cancel { background: var(--cream-deep); color: var(--navy); }
+  .confirm-actions .btn-danger { background: #C14437; color: var(--white); }
+  .confirm-actions button:hover { filter: brightness(1.06); }
+</style>
+</head>
+<body>
+
+<div class="turnos-page">
+  <div class="brand">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
+    <div class="tagline">Detalles de tu turno</div>
+    <div class="subtitle">Ameghino 410, Concepción del Uruguay</div>
+  </div>
+
+  <div class="card lookup-card hidden" id="turno-lookup-card">
+    <div class="lookup-icon">🦷</div>
+    <div class="lookup-nombre" id="lookup-nombre"></div>
+    <div class="lookup-fecha" id="lookup-fecha"></div>
+  </div>
+
+  <div class="card error-card hidden" id="turno-lookup-error-card">
+    <h3>No encontramos ese turno</h3>
+    <p id="turno-lookup-error-text"></p>
+    <a class="post-action-btn" href="/turnos">Ir a reservar un turno</a>
+  </div>
+
+  <div class="card hidden" id="post-actions-card">
+    <div class="post-actions-row">
+      <a class="post-action-btn" id="btn-agregar-apple" href="#">📅 Agregar a Apple Calendar</a>
+      <a class="post-action-btn" id="btn-agregar-google" href="#" target="_blank" rel="noopener noreferrer">📅 Agregar a Google Calendar</a>
+      <button class="post-action-btn" id="btn-cambiar-turno">Cambiar día y horario</button>
+      <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelar turno</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="calendar-card">
+    <div class="cal-header">
+      <button class="cal-nav-btn" id="prev-month">‹</button>
+      <div class="month-label" id="month-label"></div>
+      <button class="cal-nav-btn" id="next-month">›</button>
+    </div>
+    <div class="weekday-row">
+      <span>D</span><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span>
+    </div>
+    <div id="cal-body"></div>
+    <div class="legend">
+      <span><span class="dot navy"></span> Hay turnos</span>
+      <span><span class="dot gray"></span> Sin disponibilidad</span>
+    </div>
+  </div>
+
+  <div class="card enter-up hidden" id="slots-card">
+    <div class="slots-title" id="slots-title"></div>
+    <div class="slots" id="slots-body"></div>
+  </div>
+
+  <div class="card hidden" id="reprogramar-card">
+    <p class="reprogramar-note" id="reprogramar-note"></p>
+    <button class="primary" id="reprogramar-confirm-btn">Confirmar nuevo horario</button>
+    <div class="msg hidden" id="reprogramar-msg"></div>
+  </div>
+
+  <div class="card success-card hidden" id="success-card">
+    <div class="check">✓</div>
+    <h3 id="success-title">¡Turno reprogramado!</h3>
+    <p id="success-text" class="success-highlight"></p>
+  </div>
+
+  <div class="card success-card hidden" id="cancelado-card">
+    <div class="check" style="background:#C14437;">✕</div>
+    <h3>Turno cancelado</h3>
+    <p>Si te arrepentís, podés reservar un turno nuevo cuando quieras desde /turnos.</p>
+  </div>
+</div>
+
+<div id="toast-container" aria-live="polite"></div>
+
+<div class="confirm-overlay hidden" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3>Cancelar turno</h3>
+    <p>¿Estás seguro de que querés cancelar tu turno?</p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="confirm-volver-btn">Volver</button>
+      <button class="btn-danger" id="confirm-cancelar-btn">Cancelar turno</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const pad2 = (n) => (n < 10 ? '0' + n : '' + n);
+
+  const TIME_ZONE = 'America/Argentina/Buenos_Aires';
+  const hoyArgStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const [hoyYear, hoyMonth, hoyDay] = hoyArgStr.split('-').map(Number);
+
+  let viewYear = hoyYear;
+  let viewMonth = hoyMonth;
+  const minYear = hoyYear;
+  const minMonth = hoyMonth;
+
+  let availability = {};
+  let fechaSeleccionada = null;
+  let horarioSeleccionado = null;
+  let ultimoEventId = null;
+  let ultimoCalendarId = null;
+
+  const monthLabelEl = document.getElementById('month-label');
+  const calBodyEl = document.getElementById('cal-body');
+  const prevBtn = document.getElementById('prev-month');
+  const nextBtn = document.getElementById('next-month');
+  const slotsCard = document.getElementById('slots-card');
+  const slotsTitleEl = document.getElementById('slots-title');
+  const slotsBodyEl = document.getElementById('slots-body');
+  const successCard = document.getElementById('success-card');
+  const successTextEl = document.getElementById('success-text');
+  const postActionsCard = document.getElementById('post-actions-card');
+  const reprogramarCard = document.getElementById('reprogramar-card');
+  const canceladoCard = document.getElementById('cancelado-card');
+  const confirmOverlay = document.getElementById('confirm-overlay');
+  const calendarCard = document.getElementById('calendar-card');
+  const turnoLookupCard = document.getElementById('turno-lookup-card');
+  const turnoLookupErrorCard = document.getElementById('turno-lookup-error-card');
+
+  const toastContainer = document.getElementById('toast-container');
+  function toast(mensaje) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = mensaje;
+    toastContainer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, 2600);
+  }
+
+  function ocultarTodasLasCards() {
+    [slotsCard, successCard, postActionsCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
+      .forEach((c) => c.classList.add('hidden'));
+  }
+
+  function mostrarCardAnimada(el) {
+    el.classList.remove('hidden');
+    el.classList.remove('card-visible');
+    void el.offsetWidth;
+    requestAnimationFrame(() => el.classList.add('card-visible'));
+  }
+
+  prevBtn.addEventListener('click', () => cambiarMes(-1));
+  nextBtn.addEventListener('click', () => cambiarMes(1));
+
+  function slideCalendarGrid(direction, updateFn) {
+    if (!direction) { Promise.resolve(updateFn()); return; }
+    calBodyEl.className = direction > 0 ? 'cal-out-left' : 'cal-out-right';
+    const espera = new Promise((resolve) => setTimeout(resolve, 180));
+    Promise.all([espera, Promise.resolve(updateFn())]).then(() => {
+      calBodyEl.className = direction > 0 ? 'cal-in-right' : 'cal-in-left';
+      void calBodyEl.offsetWidth;
+      calBodyEl.className = '';
+    });
+  }
+
+  function cambiarMes(delta) {
+    const direction = delta > 0 ? 1 : -1;
+    let m = viewMonth + delta;
+    let y = viewYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    viewYear = y;
+    viewMonth = m;
+    cargarMes(direction);
+  }
+
+  function cargarMes(direction) {
+    fechaSeleccionada = null;
+    horarioSeleccionado = null;
+    slotsCard.classList.add('hidden');
+    reprogramarCard.classList.add('hidden');
+
+    monthLabelEl.textContent = MESES[viewMonth - 1] + ' ' + viewYear;
+    prevBtn.disabled = viewYear === minYear && viewMonth === minMonth;
+
+    const actualizar = () => fetch(`/api/disponibilidad?year=${viewYear}&month=${viewMonth}`)
+      .then((r) => r.json())
+      .then((data) => { availability = data; renderCalendar(); })
+      .catch(() => { calBodyEl.innerHTML = '<div class="cal-loading">No se pudo cargar el calendario.</div>'; });
+
+    if (!direction) {
+      calBodyEl.innerHTML = '<div class="cal-loading">Buscando días disponibles...</div>';
+      actualizar();
+    } else {
+      slideCalendarGrid(direction, actualizar);
+    }
+  }
+
+  function renderCalendar() {
+    const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+    let html = '<div class="days-grid">';
+    for (let i = 0; i < firstDow; i++) html += '<div class="day-cell"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const isToday = viewYear === hoyYear && viewMonth === hoyMonth && d === hoyDay;
+      const isAvailable = !!availability[d];
+      const dateStr = `${viewYear}-${pad2(viewMonth)}-${pad2(d)}`;
+      const isSelected = fechaSeleccionada === dateStr;
+      const cls = ['day-btn', isAvailable && 'available', isToday && 'today', isSelected && 'selected'].filter(Boolean).join(' ');
+      html += `<div class="day-cell"><button type="button" class="${cls}" data-day="${d}" ${isAvailable ? '' : 'disabled'}>${d}</button></div>`;
+    }
+    html += '</div>';
+    calBodyEl.innerHTML = html;
+
+    calBodyEl.querySelectorAll('.day-btn.available').forEach((btn) => {
+      btn.addEventListener('click', () => seleccionarDia(parseInt(btn.dataset.day, 10)));
+    });
+  }
+
+  function seleccionarDia(dia) {
+    let direction = 0;
+    if (fechaSeleccionada) {
+      const diaAnterior = parseInt(fechaSeleccionada.split('-')[2], 10);
+      if (diaAnterior !== dia) direction = dia > diaAnterior ? 1 : -1;
+    }
+
+    fechaSeleccionada = `${viewYear}-${pad2(viewMonth)}-${pad2(dia)}`;
+    horarioSeleccionado = null;
+    reprogramarCard.classList.add('hidden');
+
+    slideCalendarGrid(direction, () => renderCalendar());
+
+    slotsTitleEl.textContent = `Horarios para el ${dia} de ${MESES[viewMonth - 1]}`;
+    slotsBodyEl.innerHTML = '<span class="empty-day">Buscando horarios...</span>';
+    mostrarCardAnimada(slotsCard);
+    slotsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    fetch(`/api/disponibilidad?modo=dia&date=${fechaSeleccionada}`)
+      .then((r) => r.json())
+      .then((data) => renderSlots(data, true))
+      .catch(() => { slotsBodyEl.innerHTML = '<span class="empty-day">No se pudieron cargar los horarios.</span>'; });
+  }
+
+  function renderSlots(slots, animar) {
+    if (!slots || slots.length === 0) {
+      slotsBodyEl.innerHTML = '<span class="empty-day">No quedan horarios libres este día.</span>';
+      return;
+    }
+    slotsBodyEl.innerHTML = slots.map((hora, i) => {
+      const cls = 'slot-btn' + (horarioSeleccionado === hora ? ' selected' : '') + (animar ? ' slot-btn-enter' : '');
+      const style = animar ? ` style="animation-delay:${Math.min(i * 18, 200)}ms"` : '';
+      return `<button type="button" class="${cls}"${style} data-hora="${hora}">${hora}</button>`;
+    }).join('');
+
+    slotsBodyEl.querySelectorAll('.slot-btn').forEach((btn) => {
+      btn.addEventListener('click', () => seleccionarHorario(btn.dataset.hora, slots));
+    });
+  }
+
+  function seleccionarHorario(hora, slots) {
+    horarioSeleccionado = hora;
+    renderSlots(slots, false);
+    const [, m, d] = fechaSeleccionada.split('-').map(Number);
+    document.getElementById('reprogramar-note').textContent =
+      `Vas a mover tu turno al ${d} de ${MESES[m - 1]} a las ${horarioSeleccionado} hs.`;
+    showMsg('reprogramar-msg', '', '');
+    mostrarCardAnimada(reprogramarCard);
+    reprogramarCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function showMsg(id, text, type) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'msg' + (type ? ' ' + type : '');
+    if (!text) el.classList.add('hidden'); else el.classList.remove('hidden');
+  }
+
+  // ---------- Agregar al calendario del dispositivo (mismo criterio que /turnos) ----------
+  function limitesUTC(fechaStr, horaStr) {
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const [hh, mm] = horaStr.split(':').map(Number);
+    const startUTC = new Date(Date.UTC(y, m - 1, d, hh + 3, mm, 0));
+    const endUTC = new Date(startUTC.getTime() + 30 * 60000);
+    return { startUTC, endUTC };
+  }
+  const fmtUTC = (dt) => dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  function construirICS(fechaStr, horaStr) {
+    const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
+    const uid = `turno-${fechaStr}-${horaStr.replace(':', '')}-${Math.random().toString(36).slice(2)}@odontologofrancovinzon`;
+    return [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Franco Vinzon Odontologo//Turnos//ES', 'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${fmtUTC(new Date())}`,
+      `DTSTART:${fmtUTC(startUTC)}`,
+      `DTEND:${fmtUTC(endUTC)}`,
+      'SUMMARY:Turno odontológico - Franco Vinzón',
+      'LOCATION:Ameghino 410\\, Concepción del Uruguay',
+      'DESCRIPTION:Turno en el Consultorio Odontológico Franco Vinzón.',
+      'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n');
+  }
+
+  function armarLinkGoogleCalendar(fechaStr, horaStr) {
+    const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: 'Turno odontológico - Franco Vinzón',
+      dates: `${fmtUTC(startUTC)}/${fmtUTC(endUTC)}`,
+      details: 'Turno en el Consultorio Odontológico Franco Vinzón.',
+      location: 'Ameghino 410, Concepción del Uruguay',
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  }
+
+  const btnAgregarApple = document.getElementById('btn-agregar-apple');
+  const btnAgregarGoogle = document.getElementById('btn-agregar-google');
+  let ultimoIcsUrl = null;
+
+  function actualizarLinksCalendario() {
+    if (!fechaSeleccionada || !horarioSeleccionado) return;
+    if (ultimoIcsUrl) URL.revokeObjectURL(ultimoIcsUrl);
+    const blob = new Blob([construirICS(fechaSeleccionada, horarioSeleccionado)], { type: 'text/calendar;charset=utf-8' });
+    ultimoIcsUrl = URL.createObjectURL(blob);
+    btnAgregarApple.href = ultimoIcsUrl;
+    btnAgregarGoogle.href = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado);
+  }
+
+  // ---------- Cambiar día/horario o cancelar el turno ----------
+  document.getElementById('btn-cambiar-turno').addEventListener('click', () => {
+    ocultarTodasLasCards();
+    calendarCard.classList.remove('hidden');
+    cargarMes();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.getElementById('reprogramar-confirm-btn').addEventListener('click', () => {
+    if (!fechaSeleccionada || !horarioSeleccionado || !ultimoEventId) return;
+    showMsg('reprogramar-msg', 'Reprogramando...', 'loading');
+    fetch('/api/reservar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'mover', eventId: ultimoEventId, date: fechaSeleccionada, time: horarioSeleccionado }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success) {
+          reprogramarCard.classList.add('hidden');
+          calendarCard.classList.add('hidden');
+          successTextEl.textContent = res.message;
+          document.getElementById('success-title').textContent = '¡Turno reprogramado!';
+          mostrarCardAnimada(successCard);
+          actualizarLinksCalendario();
+          postActionsCard.classList.remove('hidden');
+          toast('✅ Turno modificado correctamente');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          showMsg('reprogramar-msg', res.message, 'error');
+        }
+      })
+      .catch(() => showMsg('reprogramar-msg', 'Error de red. Probá de nuevo.', 'error'));
+  });
+
+  function mostrarConfirmCancelar(mostrar) {
+    confirmOverlay.classList.toggle('hidden', !mostrar);
+    if (mostrar) requestAnimationFrame(() => confirmOverlay.classList.add('show'));
+    else confirmOverlay.classList.remove('show');
+  }
+  document.getElementById('btn-cancelar-turno').addEventListener('click', () => mostrarConfirmCancelar(true));
+  document.getElementById('confirm-volver-btn').addEventListener('click', () => mostrarConfirmCancelar(false));
+  document.getElementById('confirm-cancelar-btn').addEventListener('click', () => {
+    if (!ultimoEventId) { mostrarConfirmCancelar(false); return; }
+    fetch('/api/reservar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'cancelar', eventId: ultimoEventId, calendarId: ultimoCalendarId }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        mostrarConfirmCancelar(false);
+        if (res.success) {
+          ultimoEventId = null;
+          ocultarTodasLasCards();
+          mostrarCardAnimada(canceladoCard);
+          toast('✅ Turno cancelado correctamente');
+        }
+      })
+      .catch(() => mostrarConfirmCancelar(false));
+  });
+
+  // ---------- Punto de entrada: /turno?eventId=... (QR del ticket térmico) ----------
+  // Página propia, distinta de la confirmación post-reserva de /turnos: siempre
+  // arranca mostrando el turno existente (nunca el calendario de reserva), y
+  // reusa tal cual la API de /api/reservar (acciones "obtener"/"mover"/"cancelar").
+  function mostrarTurnoDesdeUrl(eventId, calendarId, esSobreturno) {
+    fetch('/api/reservar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'obtener', eventId, calendarId }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (!res.success) {
+          document.getElementById('turno-lookup-error-text').textContent = res.message;
+          mostrarCardAnimada(turnoLookupErrorCard);
+          return;
+        }
+        ultimoEventId = eventId;
+        ultimoCalendarId = calendarId;
+        fechaSeleccionada = res.date;
+        horarioSeleccionado = res.time;
+        const [, m, d] = res.date.split('-').map(Number);
+        document.getElementById('lookup-nombre').textContent = res.nombre;
+        document.getElementById('lookup-fecha').textContent = `${d} de ${MESES[m - 1]} a las ${res.time} hs.`;
+        mostrarCardAnimada(turnoLookupCard);
+        // El selector de "Cambiar día y horario" es el calendario/horarios del
+        // consultorio principal (30 min) — no tiene forma de mostrar disponibilidad
+        // de sobreturnos, así que esa acción no se ofrece acá (ver decisions.md).
+        document.getElementById('btn-cambiar-turno').classList.toggle('hidden', esSobreturno);
+        actualizarLinksCalendario();
+        postActionsCard.classList.remove('hidden');
+      })
+      .catch(() => {
+        document.getElementById('turno-lookup-error-text').textContent = 'No se pudo consultar el turno. Probá de nuevo en un momento.';
+        mostrarCardAnimada(turnoLookupErrorCard);
+      });
+  }
+
+  const paramsUrl = new URLSearchParams(location.search);
+  const eventIdDesdeUrl = paramsUrl.get('eventId');
+  if (eventIdDesdeUrl) {
+    mostrarTurnoDesdeUrl(eventIdDesdeUrl, paramsUrl.get('calendarId'), paramsUrl.get('tipo') === 'sobreturno');
+  } else {
+    document.getElementById('turno-lookup-error-text').textContent = 'Este link no incluye ningún turno para mostrar.';
+    mostrarCardAnimada(turnoLookupErrorCard);
+  }
+})();
+</script>
+</body>
+</html>

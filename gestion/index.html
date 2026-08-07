@@ -374,26 +374,25 @@
     #asistente-widget { right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
   }
 
-  /* ---------- Radio en vivo ----------
-     Discreto, abajo a la izquierda (el asistente ya ocupa abajo a la derecha).
-     Vive fuera de #app, como el asistente y los overlays — el auto-refresh de 60s
-     (ver haySesionOcupada()/refrescarAgendaSilencioso() más abajo) nunca toca este
-     árbol del DOM, así que el audio no se corta aunque la agenda se actualice sola. */
-  #radio-widget { position: fixed; left: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 890; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-  .radio-fab { width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--white); color: var(--navy); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(30,58,95,.16); font-size: 19px; flex-shrink: 0; }
-  .radio-fab:hover { border-color: var(--gold); }
-  .radio-fab.is-playing { border-color: var(--gold); color: var(--gold); box-shadow: 0 6px 18px rgba(212,162,76,.35); }
-
-  .radio-panel { width: 230px; background: var(--white); border-radius: 14px; box-shadow: 0 12px 32px rgba(30,58,95,.18); padding: 10px; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom left; transition: opacity .18s ease, transform .18s ease; }
-  .radio-panel.show { opacity: 1; transform: scale(1) translateY(0); }
-  .radio-panel-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 2px 6px 7px; }
-  .radio-station-btn { display: block; width: 100%; text-align: left; padding: 7px 8px; border-radius: 8px; border: none; background: transparent; color: var(--text); font-size: 12.5px; font-weight: 600; }
-  .radio-station-btn:hover { background: var(--cream); }
-  .radio-station-btn.active { background: rgba(212,162,76,.14); color: var(--navy); }
-
-  @media (max-width: 420px) {
-    #radio-widget { left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
-  }
+  /* ---------- Radio en vivo (tarjeta, no ícono flotante) ----------
+     Tarjeta bien visible, mismo ancho que el bloque de saludo/resumen — en
+     desktop vive dentro del sidebar (después de las tareas), en mobile debajo
+     de .mobile-summary. El <audio> sigue viviendo fuera de #app (ver HTML), así
+     que el auto-refresh de 60s de la agenda nunca puede cortar la reproducción
+     (ver haySesionOcupada()/refrescarAgendaSilencioso() más abajo). */
+  .radio-card { background: var(--cream); border-radius: 14px; padding: 14px 15px; margin-top: 2px; }
+  .radio-card-mobile { background: var(--white); box-shadow: 0 1px 8px rgba(30,58,95,.06); margin-bottom: 14px; padding: 14px; }
+  @media (min-width: 1000px) { .radio-card-mobile { display: none; } }
+  .radio-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 8px; }
+  .radio-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border-radius: 10px; border: none; background: transparent; text-align: left; transition: background-color .18s ease; }
+  .radio-row:hover { background: rgba(30,58,95,.05); }
+  .radio-row.active { background: rgba(212,162,76,.16); }
+  .radio-row-play { width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; transition: background-color .18s ease; }
+  .radio-row.active .radio-row-play { background: var(--gold); }
+  .radio-row-info { display: flex; flex-direction: column; min-width: 0; }
+  .radio-row-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .radio-row.active .radio-row-name { color: var(--navy); }
+  .radio-row-freq { font-size: 11px; color: var(--muted); }
 
   /* ---------- Ticket térmico (impresora 58mm, ver decisions.md) ----------
      El modal muestra una previsualización a tamaño legible en pantalla (no la escala
@@ -414,14 +413,22 @@
   /* Solo esto se imprime: se oculta todo lo demás de la página y se posiciona
      #ticket-print en la esquina de la hoja térmica. Área imprimible real ~48mm
      aunque el papel es de 58mm (margen físico de este modelo de impresora), y en
-     blanco y negro siempre — sin depender de que la impresora interprete bien los
-     colores navy/dorado del resto del sitio. */
+     blanco y negro ESTRICTO siempre — la térmica no interpreta bien la escala de
+     grises, así que no alcanza con "no usar colores": ningún elemento puede
+     depender de un gris intermedio, sombra ni degradé para verse bien.
+     - Texto/fondos: ya forzados a #000/transparente sin sombra (regla de abajo).
+     - Logo (único elemento con semitonos reales, por el antialiasing del PNG):
+       filtro de alto contraste que empuja cada píxel a negro puro o blanco puro,
+       sin punto intermedio — ver la regla de la imagen más abajo.
+     - QR: ya se genera con colorDark/colorLight puros (#000000/#ffffff, ver
+       abrirTicketPreview), sin necesitar filtro. */
   @media print {
     body * { visibility: hidden; }
-    #ticket-print, #ticket-print * { visibility: visible; color: #000 !important; background: transparent !important; box-shadow: none !important; }
+    #ticket-print, #ticket-print * { visibility: visible; color: #000 !important; background: transparent !important; box-shadow: none !important; text-shadow: none !important; }
     #ticket-print {
       position: absolute; top: 0; left: 0; width: 48mm; padding: 2mm 1mm; margin: 0; background: #fff !important;
     }
+    #ticket-print img { filter: grayscale(1) contrast(1000%) !important; }
     @page { size: 58mm auto; margin: 2mm; }
   }
 </style>
@@ -466,6 +473,30 @@
       <div class="tasks-more hidden" id="sidebar-tasks-more"></div>
     </div>
 
+    <div class="radio-card" id="radio-card">
+      <div class="radio-card-title">📻 Radio en vivo</div>
+      <button type="button" class="radio-row" data-idx="0">
+        <span class="radio-row-play">▶</span>
+        <span class="radio-row-info"><span class="radio-row-name">Radio Mitre</span><span class="radio-row-freq">AM 790</span></span>
+      </button>
+      <button type="button" class="radio-row" data-idx="1">
+        <span class="radio-row-play">▶</span>
+        <span class="radio-row-info"><span class="radio-row-name">La 100</span><span class="radio-row-freq">FM 99.9</span></span>
+      </button>
+      <button type="button" class="radio-row" data-idx="2">
+        <span class="radio-row-play">▶</span>
+        <span class="radio-row-info"><span class="radio-row-name">Aspen</span><span class="radio-row-freq">FM 102.3</span></span>
+      </button>
+      <button type="button" class="radio-row" data-idx="3">
+        <span class="radio-row-play">▶</span>
+        <span class="radio-row-info"><span class="radio-row-name">Radio Rivadavia</span><span class="radio-row-freq">AM 630</span></span>
+      </button>
+      <button type="button" class="radio-row" data-idx="4">
+        <span class="radio-row-play">▶</span>
+        <span class="radio-row-info"><span class="radio-row-name">Jazz 24hs — Blackie FM</span><span class="radio-row-freq">blackiefm.com.ar</span></span>
+      </button>
+    </div>
+
     <button class="logout-btn sidebar-logout" id="logout-btn-desktop">Salir</button>
   </aside>
 
@@ -493,6 +524,30 @@
       <span><strong id="sum-huecos-m">–</strong> huecos libres hoy</span>
       <span class="hidden" id="sum-bloqueo-line-m">Próximo bloqueo: <strong id="sum-bloqueo-fecha-m"></strong></span>
     </div>
+  </div>
+
+  <div class="radio-card radio-card-mobile" id="radio-card-m">
+    <div class="radio-card-title">📻 Radio en vivo</div>
+    <button type="button" class="radio-row" data-idx="0">
+      <span class="radio-row-play">▶</span>
+      <span class="radio-row-info"><span class="radio-row-name">Radio Mitre</span><span class="radio-row-freq">AM 790</span></span>
+    </button>
+    <button type="button" class="radio-row" data-idx="1">
+      <span class="radio-row-play">▶</span>
+      <span class="radio-row-info"><span class="radio-row-name">La 100</span><span class="radio-row-freq">FM 99.9</span></span>
+    </button>
+    <button type="button" class="radio-row" data-idx="2">
+      <span class="radio-row-play">▶</span>
+      <span class="radio-row-info"><span class="radio-row-name">Aspen</span><span class="radio-row-freq">FM 102.3</span></span>
+    </button>
+    <button type="button" class="radio-row" data-idx="3">
+      <span class="radio-row-play">▶</span>
+      <span class="radio-row-info"><span class="radio-row-name">Radio Rivadavia</span><span class="radio-row-freq">AM 630</span></span>
+    </button>
+    <button type="button" class="radio-row" data-idx="4">
+      <span class="radio-row-play">▶</span>
+      <span class="radio-row-info"><span class="radio-row-name">Jazz 24hs — Blackie FM</span><span class="radio-row-freq">blackiefm.com.ar</span></span>
+    </button>
   </div>
 
   <div class="search-mobile">
@@ -731,17 +786,6 @@
   </button>
 </div>
 
-<div id="radio-widget" class="hidden">
-  <div class="radio-panel hidden" id="radio-panel">
-    <div class="radio-panel-title">📻 Radio en vivo</div>
-    <button class="radio-station-btn" data-idx="0">▶ Radio Mitre</button>
-    <button class="radio-station-btn" data-idx="1">▶ La 100</button>
-    <button class="radio-station-btn" data-idx="2">▶ Aspen</button>
-    <button class="radio-station-btn" data-idx="3">▶ FM Milenium</button>
-    <button class="radio-station-btn" data-idx="4">▶ Radio Rivadavia</button>
-  </div>
-  <button class="radio-fab" id="radio-fab" aria-label="Radio en vivo" title="Radio en vivo">📻</button>
-</div>
 <audio id="radio-audio" preload="none"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
@@ -869,7 +913,6 @@
     cargarAgenda();
     cargarResumenSidebar();
     asistenteWidget.classList.remove('hidden');
-    radioWidget.classList.remove('hidden');
   }
 
   // ---------- Fecha ----------
@@ -2089,13 +2132,14 @@
     document.getElementById('ticket-hora').textContent = item.allDay ? '' : `${fmtHora(item.start)} hs`;
     document.getElementById('ticket-footer').innerHTML = `Consultas: WhatsApp<br>${WHATSAPP_CONSULTORIO_DISPLAY}`;
 
-    // El QR apunta a /turnos con el eventId (y calendarId/tipo si es sobreturno) para
-    // reusar tal cual la misma pantalla de "cambiar día y horario / cancelar" que ya
-    // existe ahí — ver decisions.md.
+    // El QR apunta a /turno (página propia, distinta de /turnos) con el eventId
+    // (y calendarId/tipo si es sobreturno) — reusa la misma API de "obtener/mover/
+    // cancelar" de api/reservar.js, pero con su propio diseño y texto ("Detalles de
+    // tu turno", no "Reservar turno"). Ver decisions.md.
     const qrParams = new URLSearchParams({ eventId: item.id });
     if (item.calendarId) qrParams.set('calendarId', item.calendarId);
     if (item.tipo === 'sobreturno') qrParams.set('tipo', 'sobreturno');
-    const ticketUrl = `${location.origin}/turnos?${qrParams.toString()}`;
+    const ticketUrl = `${location.origin}/turno?${qrParams.toString()}`;
 
     const qrEl = document.getElementById('ticket-qr');
     qrEl.innerHTML = '';
@@ -2227,68 +2271,106 @@
   wireAutocompletePacientes('t-nombre', 't-nombre-dropdown', 't-apellido', 't-telefono', itiTTelefono);
   wireAutocompletePacientes('mc-nombre', 'mc-nombre-dropdown', 'mc-apellido', 'mc-telefono', itiMcTelefono);
 
-  // ---------- Radio en vivo ----------
-  // #radio-widget vive fuera de #app (ver HTML), así que ningún re-render de la
+  // ---------- Radio en vivo (tarjeta en el sidebar / resumen mobile) ----------
+  // El <audio> vive fuera de #app (ver HTML), así que ningún re-render de la
   // agenda/sidebar lo toca nunca — el auto-refresh de más abajo no puede cortar la
-  // reproducción porque ni siquiera comparte árbol del DOM con este widget. URLs de
-  // streaming verificadas a mano (curl, viendo el código fuente/JS de cada sitio
-  // oficial) antes de sumarlas — la mayoría son la misma infraestructura
-  // StreamTheWorld/Triton Digital.
+  // reproducción porque ni siquiera comparte árbol del DOM con este elemento. URLs
+  // de streaming verificadas a mano (curl, viendo el código fuente/JS de cada sitio
+  // oficial) antes de sumarlas — todas la misma infraestructura StreamTheWorld/
+  // Triton Digital, incluida Blackie FM (fuente real detrás del sitio no oficial
+  // blackiefm.com.ar).
   const RADIO_ESTACIONES = [
     { nombre: 'Radio Mitre', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/AM790_56AAC.aac' },
     { nombre: 'La 100', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/FM999_56.mp3' },
     { nombre: 'Aspen', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/ASPENAAC.aac' },
-    { nombre: 'FM Milenium', url: 'https://sonicpanel.hostradios.com/8002/stream' },
     { nombre: 'Radio Rivadavia', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RIVADAVIA.mp3' },
+    { nombre: 'Jazz 24hs — Blackie FM', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/BLACKIE_89_1.mp3' },
   ];
-  const radioWidget = document.getElementById('radio-widget');
-  const radioFab = document.getElementById('radio-fab');
-  const radioPanel = document.getElementById('radio-panel');
+  const RADIO_FADE_MS = 3000;
   const radioAudio = document.getElementById('radio-audio');
-  const radioBtns = Array.from(document.querySelectorAll('.radio-station-btn'));
+  // Las filas existen DOS veces en el DOM (sidebar desktop + tarjeta mobile, mismo
+  // data-idx en ambas) — se actualizan todas juntas, mismo patrón que sum-turnos/
+  // sum-turnos-m para el resumen.
+  const radioRows = Array.from(document.querySelectorAll('.radio-row'));
   let radioIdxActual = null;
+  let radioFadeFrame = null;
 
-  function renderRadioBtns() {
-    radioBtns.forEach((btn, i) => {
+  function renderRadioRows() {
+    radioRows.forEach((row) => {
+      const i = parseInt(row.dataset.idx, 10);
       const sonando = i === radioIdxActual && !radioAudio.paused;
-      btn.classList.toggle('active', sonando);
-      btn.textContent = (sonando ? '⏸ ' : '▶ ') + RADIO_ESTACIONES[i].nombre;
+      row.classList.toggle('active', sonando);
+      const playIcon = row.querySelector('.radio-row-play');
+      if (playIcon) playIcon.textContent = sonando ? '⏸' : '▶';
     });
-    radioFab.classList.toggle('is-playing', radioIdxActual !== null && !radioAudio.paused);
   }
-  renderRadioBtns();
+  renderRadioRows();
 
-  function abrirRadioPanel() {
-    radioPanel.classList.remove('hidden');
-    requestAnimationFrame(() => radioPanel.classList.add('show'));
+  function cancelarFadeRadio() {
+    if (radioFadeFrame) { cancelAnimationFrame(radioFadeFrame); radioFadeFrame = null; }
   }
-  function cerrarRadioPanel() {
-    radioPanel.classList.remove('show');
-    setTimeout(() => radioPanel.classList.add('hidden'), 180);
-  }
-  radioFab.addEventListener('click', () => {
-    if (radioPanel.classList.contains('show')) cerrarRadioPanel(); else abrirRadioPanel();
-  });
 
-  radioBtns.forEach((btn, i) => {
-    btn.addEventListener('click', () => {
-      if (i === radioIdxActual && !radioAudio.paused) { radioAudio.pause(); return; }
-      if (i !== radioIdxActual) {
-        radioIdxActual = i;
-        radioAudio.src = RADIO_ESTACIONES[i].url;
+  // Sube o baja el volumen de forma gradual (no hay dos <audio> para superponer
+  // pistas: es un fundido secuencial — termina de bajar la que suena antes de
+  // arrancar la nueva, tal como se pidió, no una superposición real).
+  function fadeVolumen(desde, hasta, duracionMs, onDone) {
+    cancelarFadeRadio();
+    radioAudio.volume = desde;
+    const inicio = performance.now();
+    function paso(ahora) {
+      const t = Math.min(1, (ahora - inicio) / duracionMs);
+      radioAudio.volume = desde + (hasta - desde) * t;
+      if (t < 1) {
+        radioFadeFrame = requestAnimationFrame(paso);
+      } else {
+        radioFadeFrame = null;
+        if (onDone) onDone();
       }
+    }
+    radioFadeFrame = requestAnimationFrame(paso);
+  }
+
+  function reproducirEstacion(i) {
+    const cambiarYFadeIn = () => {
+      radioIdxActual = i;
+      radioAudio.src = RADIO_ESTACIONES[i].url;
+      radioAudio.volume = 0;
       radioAudio.play().catch(() => {});
+      fadeVolumen(0, 1, RADIO_FADE_MS);
+    };
+    if (radioIdxActual !== null && !radioAudio.paused) {
+      // Ya suena algo: fade out de 3s hasta silenciarla, recién ahí se cambia de
+      // estación y arranca el fade in de la nueva.
+      fadeVolumen(radioAudio.volume, 0, RADIO_FADE_MS, () => {
+        radioAudio.pause();
+        cambiarYFadeIn();
+      });
+    } else {
+      cambiarYFadeIn();
+    }
+  }
+
+  radioRows.forEach((row) => {
+    const i = parseInt(row.dataset.idx, 10);
+    row.addEventListener('click', () => {
+      if (i === radioIdxActual && !radioAudio.paused) {
+        // Pausar la que ya está sonando: instantáneo, no es un cambio de estación.
+        cancelarFadeRadio();
+        radioAudio.pause();
+        return;
+      }
+      reproducirEstacion(i);
     });
   });
-  radioAudio.addEventListener('play', renderRadioBtns);
-  radioAudio.addEventListener('pause', renderRadioBtns);
+  radioAudio.addEventListener('play', renderRadioRows);
+  radioAudio.addEventListener('pause', renderRadioRows);
 
-  // Al salir: cortar la radio (no dejarla sonando después de cerrar sesión) y
-  // ocultar el widget, igual que con el asistente.
+  // Al salir: cortar la radio (no dejarla sonando después de cerrar sesión). Las
+  // tarjetas se ocultan solas junto con #app, no hace falta tocarlas acá.
   function ocultarRadio() {
+    cancelarFadeRadio();
     radioAudio.pause();
-    cerrarRadioPanel();
-    radioWidget.classList.add('hidden');
+    radioAudio.volume = 1;
   }
 
   // ---------- Auto-refresh cada 60s, solo si Ayelen no está en medio de nada ----------
