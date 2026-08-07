@@ -340,6 +340,22 @@
     dispararConfeti();
   }
 
+  // Fallback honesto: si el asistente no puede responder (red caída, error de
+  // Gemini, lo que sea), nunca se inventa una respuesta ni se falla en silencio —
+  // mensaje claro + botón directo al WhatsApp real del consultorio (mismo número
+  // que el resto de los botones de WhatsApp de esta misma página).
+  function agregarFallbackAsistente() {
+    const el = document.createElement('div');
+    el.className = 'asistente-msg asistente-fallback';
+    el.innerHTML =
+      '<div class="asistente-fallback-text">No puedo resolver tu consulta en este momento. Lo mejor es que te comuniques por WhatsApp.</div>' +
+      '<a class="asistente-fallback-btn" href="https://wa.me/5403442457764" target="_blank" rel="noopener noreferrer">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>' +
+      'Escribinos por WhatsApp</a>';
+    asistenteMessages.appendChild(el);
+    asistenteMessages.scrollTop = asistenteMessages.scrollHeight;
+  }
+
   asistenteForm.addEventListener('submit', (e) => { e.preventDefault(); enviarMensajeAsistente(); });
   asistenteInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); enviarMensajeAsistente(); } });
 
@@ -376,10 +392,10 @@
             asistenteSendBtn.disabled = true;
           }
         } else {
-          agregarMensajeAsistente(res.message || 'No pude responder. Probá de nuevo.', 'asistente');
+          agregarFallbackAsistente();
         }
       })
-      .catch(() => agregarMensajeAsistente('No pude conectarme. Probá de nuevo en un momento.', 'asistente'))
+      .catch(() => agregarFallbackAsistente())
       .finally(() => {
         asistenteEnviando = false;
         if (!asistenteInput.disabled) asistenteSendBtn.disabled = false;

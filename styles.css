@@ -356,6 +356,14 @@ h1, h2, h3 {
 .asistente-bienvenida-title.pop-in { animation: asistenteBienvenidoPop .5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .asistente-bienvenida-text { font-size: 12.5px; color: var(--text); line-height: 1.5; font-family: var(--sans); }
 
+/* Fallback honesto cuando el asistente no puede responder: mensaje claro + botón
+   directo a WhatsApp, en vez de inventar o fallar en silencio. Ver turnos/index.html. */
+.asistente-fallback { max-width: 88%; align-self: flex-start; background: var(--white); border-radius: 14px; border-bottom-left-radius: 4px; padding: 10px 12px; box-shadow: 0 1px 4px rgba(30,58,95,.08); }
+.asistente-fallback-text { font-size: 13px; color: var(--text); line-height: 1.45; margin-bottom: 9px; font-family: var(--sans); }
+.asistente-fallback-btn { display: inline-flex; align-items: center; gap: 6px; background: #25D366; color: #fff; padding: 8px 14px; border-radius: 100px; font-size: 12.5px; font-weight: 700; text-decoration: none; font-family: var(--sans); }
+.asistente-fallback-btn:hover { filter: brightness(1.05); }
+.asistente-fallback-btn svg { flex-shrink: 0; }
+
 /* Confeti (paciente nuevo, dentro del chat): mismo criterio que /turnos — ráfaga
    corta, colores de marca, pointer-events: none para no tapar botones. */
 @keyframes asistenteConfettiFall {
