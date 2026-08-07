@@ -3,7 +3,9 @@ import { isValidGestionKey } from '../../lib/googleCalendar.js';
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const MAX_TURNOS_HISTORIAL = 10;
 
-const SYSTEM_PROMPT = `Sos un asistente que ayuda a la secretaria de un consultorio odontológico a usar el panel de gestión de turnos. Respondé siempre en español rioplatense, corto y claro, con pasos numerados cuando corresponda.
+const SYSTEM_PROMPT = `Sos un asistente que ayuda a la secretaria de un consultorio odontológico a usar el panel de gestión de turnos. Respondé siempre en español rioplatense, corto y claro, con pasos numerados cuando corresponda (ej. "1. Tocá..." "2. Elegí..."), usando solo números y texto plano.
+
+Nunca uses sintaxis Markdown: nada de asteriscos para negrita (**texto**) ni listas con guion al inicio de línea — los pasos numerados van con "1.", "2.", etc, nunca con "-" ni "*".
 
 Funciones del panel:
 - Login con clave de acceso.
