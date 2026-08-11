@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     // no de un fetch nuestro. El `state` es la propia GESTION_KEY: si no coincide, se
     // rechaza (evita que alguien dispare el intercambio de code con un state ajeno).
     if (req.method === 'GET' && req.query.code) {
-      return oauthCallback(req, res);
+      return await oauthCallback(req, res);
     }
 
     if (req.method === 'GET' && req.query.modo === 'oauth-iniciar') {
@@ -37,20 +37,20 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (!isValidGestionKey(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
-      if (req.query.modo === 'listar') return listar(req, res);
-      if (req.query.modo === 'ficha') return obtenerFicha(req, res);
-      if (req.query.modo === 'modified') return obtenerModified(req, res);
-      if (req.query.modo === 'telefono-turnos') return telefonoDesdeTurnos(req, res);
+      if (req.query.modo === 'listar') return await listar(req, res);
+      if (req.query.modo === 'ficha') return await obtenerFicha(req, res);
+      if (req.query.modo === 'modified') return await obtenerModified(req, res);
+      if (req.query.modo === 'telefono-turnos') return await telefonoDesdeTurnos(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
     if (req.method === 'POST') {
       if (!isValidGestionKey(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
-      if (req.body.accion === 'crear') return crearPaciente(req, res);
-      if (req.body.accion === 'actualizar-campo') return actualizarCampo(req, res);
-      if (req.body.accion === 'movimiento-agregar') return movimientoAgregar(req, res);
-      if (req.body.accion === 'movimiento-editar') return movimientoEditar(req, res);
-      if (req.body.accion === 'movimiento-anular') return movimientoAnular(req, res);
+      if (req.body.accion === 'crear') return await crearPaciente(req, res);
+      if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
+      if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
+      if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
+      if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
       return res.status(400).json({ error: 'acción inválida' });
     }
 
