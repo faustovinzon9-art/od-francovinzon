@@ -23,14 +23,10 @@
   h1 { font-size: 24px; margin-bottom: 8px; }
   .sub { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin-bottom: 28px; }
   .step { background: var(--white); border-radius: 16px; padding: 22px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
-  .step.done { opacity: .55; }
   .step h2 { font-size: 16px; margin-bottom: 6px; }
   .step p { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
   button, .btn-link { border: none; background: var(--navy); color: var(--white); padding: 10px 18px; border-radius: 9px; font-weight: 600; font-size: 13.5px; cursor: pointer; text-decoration: none; display: inline-block; }
   button:disabled { opacity: .5; cursor: default; }
-  .status { margin-top: 10px; font-size: 12.5px; font-weight: 600; }
-  .status.ok { color: var(--confirmado); }
-  .status.error { color: var(--bloqueo); }
   input { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); font-size: 13px; margin-bottom: 10px; }
   input:focus { outline: none; border-color: var(--gold); }
 </style>
@@ -40,7 +36,7 @@
   <img src="../assets/logo-horizontal.png" alt="">
   <h1>Conectar Google Drive</h1>
   <p class="sub">Configuración única para el módulo de Pacientes. Solo hace falta hacerlo una vez —
-  después el sistema queda funcionando solo. Los dos pasos hay que hacerlos con la cuenta
+  después el sistema queda funcionando solo. Hay que hacerlo con la cuenta
   odontologofrancovinzon@gmail.com.</p>
 
   <div class="step">
@@ -49,110 +45,31 @@
   </div>
 
   <div class="step" id="step1">
-    <h2>1. Conectar con Google</h2>
+    <h2>Conectar con Google</h2>
     <p>Autoriza al sistema a crear y editar fichas en tu Drive. Te va a pedir iniciar sesión
     y aceptar permisos — es normal que Google muestre un aviso de "app no verificada" porque
     es una app propia, chica, hecha a medida para el consultorio.</p>
     <button id="btn-step1">Conectar con Google</button>
   </div>
 
-  <div class="step" id="step2">
-    <h2>2. Elegir la carpeta "Pacientes"</h2>
-    <p>Elegí la carpeta "Pacientes" en el selector de Google (aparece ya ubicada en
-    "Consultorio Odontológico"). Esto le da acceso al sistema a las fichas que ya existen,
-    además de las nuevas.</p>
-    <button id="btn-step2" disabled>Cargando selector…</button>
-    <div class="status" id="status2"></div>
-  </div>
-
   <div class="step">
     <h2>Listo</h2>
-    <p>Con los dos pasos hechos, el módulo de Pacientes ya puede crear y editar fichas.
-    Volvé a <a href="/gestion">/gestion</a> y entrá por "Acceder a fichas".</p>
+    <p>Después de aceptar los permisos, Google te va a mostrar un valor para copiar y pegar
+    en Vercel como <code>GOOGLE_OAUTH_REFRESH_TOKEN</code> — seguí las instrucciones de esa
+    pantalla. Una vez guardado y redesplegado, volvé a <a href="/gestion">/gestion</a> y entrá
+    por "Acceder a fichas".</p>
   </div>
 </div>
 
-<script src="https://apis.google.com/js/api.js"></script>
 <script>
-  const OAUTH_CLIENT_ID = '190064606578-kjm7n296idj5l4amt33vaujpnh34vq91.apps.googleusercontent.com';
-  const PICKER_API_KEY = 'AIzaSyBE8bKC8Iv-GadueKoSwP2rsfEXGiuXOo0';
-  const CONSULTORIO_FOLDER_ID = '1vGdY2SMPPDiBa_gi7BNFvppNFOVwVgrn';
-
   const keyInput = document.getElementById('key-input');
   const btnStep1 = document.getElementById('btn-step1');
-  const btnStep2 = document.getElementById('btn-step2');
-  const status2 = document.getElementById('status2');
 
   btnStep1.addEventListener('click', () => {
     const key = keyInput.value.trim();
     if (!key) { alert('Ingresá la clave de acceso primero.'); return; }
     window.location.href = `/api/gestion/pacientes?modo=oauth-iniciar&key=${encodeURIComponent(key)}`;
   });
-
-  let pickerLoaded = false;
-
-  function habilitarPaso2SiListo() {
-    if (pickerLoaded) {
-      btnStep2.disabled = false;
-      btnStep2.textContent = 'Elegir carpeta';
-    }
-  }
-
-  gapi.load('picker', () => { pickerLoaded = true; habilitarPaso2SiListo(); });
-
-  // Modo redirect (no popup): más confiable — algunos navegadores/entornos bloquean el
-  // popup que abriría el modo por defecto de Google Identity Services. El access_token
-  // vuelve en el fragmento de la URL (#access_token=...) después de la redirección.
-  btnStep2.addEventListener('click', () => {
-    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.searchParams.set('client_id', OAUTH_CLIENT_ID);
-    url.searchParams.set('redirect_uri', window.location.origin + window.location.pathname);
-    url.searchParams.set('response_type', 'token');
-    url.searchParams.set('scope', 'https://www.googleapis.com/auth/drive.file');
-    url.searchParams.set('include_granted_scopes', 'true');
-    url.searchParams.set('prompt', 'consent');
-    window.location.href = url.toString();
-  });
-
-  // Al volver de Google con el token en el hash, abrir el Picker directo.
-  (function revisarTokenEnHash() {
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    const accessToken = hash.get('access_token');
-    if (!accessToken) return;
-    history.replaceState(null, '', window.location.pathname);
-    const intentarAbrir = () => {
-      if (!pickerLoaded) { setTimeout(intentarAbrir, 200); return; }
-      abrirPicker(accessToken);
-    };
-    intentarAbrir();
-  })();
-
-  function abrirPicker(accessToken) {
-    const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-      .setParent(CONSULTORIO_FOLDER_ID)
-      .setSelectFolderEnabled(true)
-      .setIncludeFolders(true);
-
-    const picker = new google.picker.PickerBuilder()
-      .addView(view)
-      .setOAuthToken(accessToken)
-      .setDeveloperKey(PICKER_API_KEY)
-      .setCallback((data) => {
-        if (data.action === google.picker.Action.PICKED) {
-          const carpeta = data.docs[0];
-          if (carpeta.name !== 'Pacientes') {
-            status2.textContent = `Elegiste "${carpeta.name}" — asegurate de elegir la carpeta "Pacientes".`;
-            status2.className = 'status error';
-            return;
-          }
-          status2.textContent = '✅ Carpeta "Pacientes" conectada correctamente.';
-          status2.className = 'status ok';
-          document.getElementById('step2').classList.add('done');
-        }
-      })
-      .build();
-    picker.setVisible(true);
-  }
 </script>
 </body>
 </html>
