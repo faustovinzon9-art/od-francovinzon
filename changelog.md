@@ -4,10 +4,11 @@ Registro breve de cambios importantes. Agregar una línea (o pocas) después de 
 
 ## 2026-08-11 — Módulo de Fichas de pacientes (Fase 1)
 
-- Módulo nuevo `/pacientes` + botón "Acceder a fichas" en `/gestion`. Arquitectura: OAuth del odontólogo (no la cuenta de servicio) para Sheets/Drive, con scope `drive.file` + Google Picker para darle acceso a la carpeta "Pacientes" existente. Endpoint único `api/gestion/pacientes.js` (límite de 12 funciones serverless). Ver `tasks.md` para el detalle completo de qué se probó y qué quedó pendiente.
+- Módulo nuevo `/pacientes` + botón "Acceder a fichas" en `/gestion`. Arquitectura final: OAuth del odontólogo (no la cuenta de servicio) para Sheets/Drive, con scope `drive` completo (se probó primero con `drive.file` + Google Picker acotado a la carpeta "Pacientes", pero se confirmó que ese scope no da acceso a archivos preexistentes — solo a los que la app crea — así que se amplió). Endpoint único `api/gestion/pacientes.js` (límite de 12 funciones serverless). Ver `tasks.md` para el detalle completo de qué se probó.
 - Fix: typo en la Picker API Key (`gestion/conectar-drive.html`) — una `l` minúscula en vez de `I` mayúscula causaba "The API developer key is invalid.".
 - Fix: `api/gestion/pacientes.js` perdía errores reales detrás del mensaje genérico de Vercel por faltarle `await` en los `return` de las acciones (`crear`, `listar`, etc.) — el rechazo de la promesa se escapaba del `try/catch` del handler.
-- **Pendiente bloqueante**: falta un clic manual del odontólogo en "Elegir carpeta" (`/gestion/conectar-drive.html`) — no se pudo hacer desde el entorno de automatización de navegador (iframe anidado de origen cruzado del Picker de Google no responde a clics ni teclado sintéticos). Sin ese paso, `crear`/`listar` no funcionan (confirmado con `GaxiosError: File not found` en los logs de Vercel al intentar copiar la plantilla).
+- Cambio de arquitectura: scope `drive.file` + Google Picker → scope `drive` completo. `gestion/conectar-drive.html` quedó con un solo paso ("Conectar con Google"), ya no hace falta elegir la carpeta.
+- **Pruebas de punta a punta completadas contra producción real**: crear paciente con y sin autocompletado de teléfono, cargar movimientos "Tratamiento" y "Pago" (con "Forma de pago"), verificar sincronización con el Google Sheet real, y confirmar que el sistema detecta una edición hecha directo en el Sheet. Ver `tasks.md` para el detalle de cada prueba.
 
 ## 2026-08-07 (decimonovena vuelta, punto 1/4) — ícono del chatbot: robot 🤖
 
