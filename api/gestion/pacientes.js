@@ -17,7 +17,7 @@ import {
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
-  primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
+  rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
 } from '../../lib/pacientesSheet.js';
 
 export default async function handler(req, res) {
@@ -51,6 +51,9 @@ export default async function handler(req, res) {
       if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
       if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
       if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
+      if (req.body.accion === 'prestacion-agregar') return await prestacionAgregar(req, res);
+      if (req.body.accion === 'prestacion-editar') return await prestacionEditar(req, res);
+      if (req.body.accion === 'prestacion-eliminar') return await prestacionEliminar(req, res);
       return res.status(400).json({ error: 'acción inválida' });
     }
 
@@ -124,12 +127,13 @@ async function obtenerFicha(req, res) {
 
   await intentarRecuperarRespaldos(sheets, drive, id);
 
-  const [campos, financiero, movRaw, meta] = await Promise.all([
+  const [campos, financiero, movRaw, presRaw, meta] = await Promise.all([
     sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C15` }),
     // Columna E también: "AL DÍA"/"DEBE $X" vive en una celda combinada E9:F10 — el
     // valor solo está en la celda ancla E9, F9 devuelve vacío (ver decisions.md).
     sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!E6:F11` }),
     sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }),
+    sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() }),
     drive.files.get({ fileId: id, fields: 'modifiedTime, name' }),
   ]);
 
@@ -157,12 +161,23 @@ async function obtenerFicha(req, res) {
     .filter((m) => m.fecha || m.tratamiento || m.debe || m.haber)
     .map((m) => ({ ...m, anulado: /^\[ANULADO\]/.test(m.tratamiento) }));
 
+  const prestacionesObraSocial = (presRaw.data.values || [])
+    .map((row, i) => ({
+      fila: 18 + i,
+      fecha: row[0] || '',
+      tratamiento: row[1] || '',
+      codigo: row[2] || '',
+      autorizado: row[3] === true || row[3] === 'TRUE',
+    }))
+    .filter((p) => p.fecha || p.tratamiento || p.codigo);
+
   res.status(200).json({
     id,
     driveModifiedTime: meta.data.modifiedTime,
     campos: { nombre, apellido, dni, fechaNacimiento, domicilio, localidad, obraSocial, nAfiliado, plan, telefono, planTratamiento },
     financiero: { total, pagado, saldo, alDiaTexto, diasSinPagoTexto },
     movimientos,
+    prestacionesObraSocial,
   });
 }
 
@@ -387,6 +402,68 @@ async function movimientoAnular(req, res) {
   }
 }
 
+// ---------- Estado de prestaciones a obra social ----------
+// Tabla aparte (columnas J-M, misma fila de arranque que movimientos) — Obra
+// social/Nº de afiliado/Plan viven en C11/C12/C13 (CAMPO_CELDA, vía actualizar-campo),
+// L14/L15/L16 son solo fórmulas espejo dentro del propio Sheet, nunca se les escribe acá.
+// Sin lógica de saldo — a diferencia de movimientos, "eliminar" borra de verdad la fila
+// (no hace falta "anular": no hay ningún total que dependa de estos datos).
+
+async function prestacionAgregar(req, res) {
+  const { id, fecha, tratamiento, codigo, autorizado } = req.body;
+  if (!id || !fecha) return res.status(400).json({ success: false, message: 'Falta fecha.' });
+
+  try {
+    const sheets = getPacientesSheetsClient();
+    const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() });
+    const fila = primeraFilaLibre(data.values || []);
+    await escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado });
+    res.status(200).json({ success: true, fila });
+  } catch (err) {
+    console.error(err);
+    await respaldarCambioFallido(id, 'prestacion-agregar', { fecha, tratamiento, codigo, autorizado });
+    res.status(200).json({ success: true, pendiente: true });
+  }
+}
+
+async function prestacionEditar(req, res) {
+  const { id, fila, fecha, tratamiento, codigo, autorizado } = req.body;
+  if (!id || !fila) return res.status(400).json({ success: false, message: 'Falta fila.' });
+
+  try {
+    await escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado });
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    await respaldarCambioFallido(id, 'prestacion-editar', { fila, fecha, tratamiento, codigo, autorizado });
+    res.status(200).json({ success: true, pendiente: true });
+  }
+}
+
+async function prestacionEliminar(req, res) {
+  const { id, fila } = req.body;
+  if (!id || !fila) return res.status(400).json({ success: false, message: 'Falta fila.' });
+
+  try {
+    await escribirPrestacionEnFila(id, fila, { fecha: '', tratamiento: '', codigo: '', autorizado: false });
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    await respaldarCambioFallido(id, 'prestacion-eliminar', { fila });
+    res.status(200).json({ success: true, pendiente: true });
+  }
+}
+
+async function escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado }) {
+  const sheets = getPacientesSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: id,
+    range: `${SHEET_NAME}!J${fila}:M${fila}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[fecha || '', tratamiento || '', codigo || '', !!autorizado]] },
+  });
+}
+
 async function asegurarColumnaFormaPago(id) {
   const sheets = getPacientesSheetsClient();
   const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!H17` });
@@ -486,6 +563,14 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
         await escribirMovimientoEnFila(pacienteId, payload.fila, payload);
       } else if (accion === 'movimiento-anular') {
         await movimientoAnularInterno(pacienteId, payload.fila);
+      } else if (accion === 'prestacion-agregar') {
+        const { data: pres } = await sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoPrestacionesObraSocial() });
+        const fila = primeraFilaLibre(pres.values || []);
+        await escribirPrestacionEnFila(pacienteId, fila, payload);
+      } else if (accion === 'prestacion-editar') {
+        await escribirPrestacionEnFila(pacienteId, payload.fila, payload);
+      } else if (accion === 'prestacion-eliminar') {
+        await escribirPrestacionEnFila(pacienteId, payload.fila, { fecha: '', tratamiento: '', codigo: '', autorizado: false });
       }
       await drive.files.delete({ fileId: archivo.id });
     } catch (err) {

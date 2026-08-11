@@ -69,9 +69,11 @@
   .panel-msg.error { color: var(--bloqueo); }
 
   /* Ficha */
-  .ficha-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+  .ficha-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
   .ficha-header h1 { font-size: 22px; }
   .ficha-header .dni { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .btn-obra-social { background: var(--white); color: var(--navy); border: 1.5px solid var(--line); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 12.5px; white-space: nowrap; margin-bottom: 16px; }
+  .btn-obra-social:hover { border-color: var(--gold); }
   .autosave-status { font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; padding-top: 4px; }
   .autosave-status.saving { color: var(--gold); }
   .autosave-status.ok { color: var(--confirmado); }
@@ -97,7 +99,11 @@
   .icon-btn:hover { background: var(--cream); }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
   .mov-table-wrap { overflow-x: auto; }
-  .btn-add-mov { margin-top: 12px; background: var(--navy); color: var(--white); border: none; padding: 9px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+  .mov-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-add-mov { background: var(--navy); color: var(--white); border: none; padding: 9px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+  .btn-add-mov.secondary { background: var(--white); color: var(--navy); border: 1.5px solid var(--line); }
+  .mov-tipo-hint { font-size: 12px; color: var(--muted); margin: -4px 0 10px; min-height: 15px; }
+  .mov-tipo-hint.historica { color: var(--gold); font-weight: 600; }
 
   .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
   .checkbox-row input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--navy); flex-shrink: 0; }
@@ -188,6 +194,7 @@
       </div>
       <div class="autosave-status" id="autosave-status"></div>
     </div>
+    <button class="btn-obra-social" id="btn-obra-social">🏥 Estado de prestación obra social</button>
 
     <div class="panel">
       <h2>Datos del paciente</h2>
@@ -237,29 +244,25 @@
           <tbody id="mov-tbody"></tbody>
         </table>
       </div>
-      <button class="btn-add-mov" id="btn-add-mov">+ Agregar movimiento</button>
+      <div class="mov-btns">
+        <button class="btn-add-mov" id="btn-add-mov">+ Agregar movimiento</button>
+        <button class="btn-add-mov secondary" id="btn-add-mov-historica">+ Carga histórica</button>
+      </div>
     </div>
 
     <div class="panel hidden" id="panel-mov">
       <h2 id="mov-form-titulo">Nuevo movimiento</h2>
       <div class="field-row">
-        <div class="field"><label>Tipo</label>
-          <select id="mov-tipo" style="width:100%; padding:9px 11px; border:1.5px solid var(--line); border-radius:9px; background:var(--cream);">
-            <option value="tratamiento">Tratamiento</option>
-            <option value="pago">Pago</option>
-            <option value="tratamiento-pago">Tratamiento + Pago</option>
-            <option value="historica">Carga histórica</option>
-          </select>
-        </div>
         <div class="field"><label>Fecha</label><input type="date" id="mov-fecha"></div>
       </div>
       <div class="field-row">
         <div class="field full"><label>Tratamiento / descripción</label><input type="text" id="mov-tratamiento"></div>
       </div>
       <div class="field-row">
-        <div class="field" id="mov-debe-wrap"><label>Debe</label><input type="number" id="mov-debe" min="0" step="0.01"></div>
-        <div class="field" id="mov-haber-wrap"><label>Haber</label><input type="number" id="mov-haber" min="0" step="0.01"></div>
+        <div class="field"><label>Debe (tratamiento)</label><input type="number" id="mov-debe" min="0" step="0.01"></div>
+        <div class="field"><label>Haber (pago)</label><input type="number" id="mov-haber" min="0" step="0.01"></div>
       </div>
+      <div class="mov-tipo-hint" id="mov-tipo-hint"></div>
       <div class="field-row">
         <div class="field full" id="mov-forma-pago-wrap"><label>Forma de pago</label><input type="text" id="mov-forma-pago" placeholder="Ej: Efectivo, MP, Transferencia"></div>
       </div>
@@ -268,6 +271,44 @@
         <button class="btn-cancel" id="mov-cancelar">Cancelar</button>
       </div>
       <div class="panel-msg hidden" id="mov-msg"></div>
+    </div>
+
+    <div class="panel" id="panel-obra-social">
+      <h2>Estado de prestación obra social</h2>
+      <div class="field-row">
+        <div class="field"><label>Obra social</label><input type="text" data-campo="obraSocial"></div>
+        <div class="field"><label>Nº de afiliado</label><input type="text" data-campo="nAfiliado"></div>
+        <div class="field"><label>Plan</label><input type="text" data-campo="plan"></div>
+      </div>
+      <div class="mov-table-wrap">
+        <table class="mov-table">
+          <thead>
+            <tr><th>Fecha</th><th>Tratamiento</th><th>Código</th><th>Autorizado</th><th></th></tr>
+          </thead>
+          <tbody id="pres-tbody"></tbody>
+        </table>
+      </div>
+      <button class="btn-add-mov" id="btn-add-pres">+ Agregar prestación</button>
+    </div>
+
+    <div class="panel hidden" id="panel-pres">
+      <h2 id="pres-form-titulo">Nueva prestación</h2>
+      <div class="field-row">
+        <div class="field"><label>Fecha</label><input type="date" id="pres-fecha"></div>
+        <div class="field"><label>Código</label><input type="text" id="pres-codigo"></div>
+      </div>
+      <div class="field-row">
+        <div class="field full"><label>Tratamiento</label><input type="text" id="pres-tratamiento"></div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="pres-autorizado">
+        <label for="pres-autorizado">Autorizado</label>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="pres-guardar">Guardar</button>
+        <button class="btn-cancel" id="pres-cancelar">Cancelar</button>
+      </div>
+      <div class="panel-msg hidden" id="pres-msg"></div>
     </div>
   </div>
 </div>
@@ -545,6 +586,7 @@
     }
 
     renderMovimientos();
+    renderPrestaciones();
   }
 
   function renderMovimientos() {
@@ -571,7 +613,7 @@
       </tr>
     `).join('');
 
-    tbody.querySelectorAll('.btn-editar-mov').forEach((btn) => btn.addEventListener('click', () => abrirFormMov(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.btn-editar-mov').forEach((btn) => btn.addEventListener('click', () => abrirFormMov(Number(btn.dataset.fila), false)));
     tbody.querySelectorAll('.btn-anular-mov').forEach((btn) => btn.addEventListener('click', () => anularMovimiento(Number(btn.dataset.fila))));
   }
 
@@ -584,6 +626,12 @@
       const valor = input.value;
       if (!fichaActual || fichaActual.campos[campo] === valor) return;
       fichaActual.campos[campo] = valor;
+      // Obra social / Nº de afiliado / Plan aparecen duplicados (sección principal +
+      // sección de obra social, mismos data-campo) — al guardar desde cualquiera de los
+      // dos lados, se reflejan los dos al toque, sin esperar un refetch.
+      document.querySelectorAll(`#vista-ficha [data-campo="${campo}"]`).forEach((el) => {
+        if (el !== input) el.value = valor;
+      });
       autosaveStatus.textContent = 'Guardando…';
       autosaveStatus.className = 'autosave-status saving';
       try {
@@ -607,29 +655,46 @@
   });
 
   // ---------- Movimientos ----------
+  // El tipo (Tratamiento / Pago / Tratamiento + Pago) ya no se elige a mano: se infiere
+  // solo según qué montos se cargan. "Carga histórica" es un botón aparte que abre el
+  // mismo formulario, solo cambia el título y deja "Forma de pago" siempre visible (para
+  // registros viejos no siempre alcanza con mirar si hay Haber cargado).
   const panelMov = document.getElementById('panel-mov');
-  const movTipo = document.getElementById('mov-tipo');
   const movFecha = document.getElementById('mov-fecha');
   const movTratamiento = document.getElementById('mov-tratamiento');
   const movDebe = document.getElementById('mov-debe');
   const movHaber = document.getElementById('mov-haber');
   const movFormaPago = document.getElementById('mov-forma-pago');
   const movMsg = document.getElementById('mov-msg');
+  const movTipoHint = document.getElementById('mov-tipo-hint');
+  let cargaHistorica = false;
 
-  function actualizarCamposSegunTipo() {
-    const tipo = movTipo.value;
-    const debeWrap = document.getElementById('mov-debe-wrap');
-    const haberWrap = document.getElementById('mov-haber-wrap');
-    const formaWrap = document.getElementById('mov-forma-pago-wrap');
-    debeWrap.style.display = tipo === 'pago' ? 'none' : '';
-    haberWrap.style.display = tipo === 'tratamiento' ? 'none' : '';
-    formaWrap.style.display = (tipo === 'pago' || tipo === 'tratamiento-pago' || tipo === 'historica') ? '' : 'none';
-    if (tipo === 'tratamiento') movHaber.value = '';
-    if (tipo === 'pago') movDebe.value = '';
+  function tipoInferido() {
+    const debe = Number(movDebe.value) || 0;
+    const haber = Number(movHaber.value) || 0;
+    if (debe > 0 && haber > 0) return 'tratamiento-pago';
+    if (haber > 0) return 'pago';
+    if (debe > 0) return 'tratamiento';
+    return null;
   }
-  movTipo.addEventListener('change', actualizarCamposSegunTipo);
+  function actualizarHintTipo() {
+    const formaWrap = document.getElementById('mov-forma-pago-wrap');
+    if (cargaHistorica) {
+      movTipoHint.textContent = 'Carga histórica';
+      movTipoHint.className = 'mov-tipo-hint historica';
+      formaWrap.style.display = '';
+      return;
+    }
+    const tipo = tipoInferido();
+    const etiquetas = { tratamiento: 'Tratamiento', pago: 'Pago', 'tratamiento-pago': 'Tratamiento + Pago' };
+    movTipoHint.textContent = tipo ? `Se va a guardar como: ${etiquetas[tipo]}` : 'Cargá un monto de tratamiento y/o de pago.';
+    movTipoHint.className = 'mov-tipo-hint';
+    formaWrap.style.display = (Number(movHaber.value) || 0) > 0 ? '' : 'none';
+  }
+  [movDebe, movHaber].forEach((el) => el.addEventListener('input', actualizarHintTipo));
 
-  document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null));
+  document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null, false));
+  document.getElementById('btn-add-mov-historica').addEventListener('click', () => abrirFormMov(null, true));
   document.getElementById('mov-cancelar').addEventListener('click', () => panelMov.classList.add('hidden'));
 
   function fechaSheetAInput(fechaStr) {
@@ -644,8 +709,9 @@
     return `${d}/${m}/${y}`;
   }
 
-  function abrirFormMov(fila) {
+  function abrirFormMov(fila, historica) {
     editandoMovFila = fila;
+    cargaHistorica = !!historica;
     movMsg.classList.add('hidden');
     if (fila) {
       const mov = fichaActual.movimientos.find((m) => m.fila === fila);
@@ -655,17 +721,15 @@
       movDebe.value = mov.debe || '';
       movHaber.value = mov.haber || '';
       movFormaPago.value = mov.formaPago || '';
-      movTipo.value = mov.debe && mov.haber ? 'tratamiento-pago' : (mov.haber ? 'pago' : 'tratamiento');
     } else {
-      document.getElementById('mov-form-titulo').textContent = 'Nuevo movimiento';
-      movTipo.value = 'tratamiento';
+      document.getElementById('mov-form-titulo').textContent = cargaHistorica ? 'Carga histórica' : 'Nuevo movimiento';
       movFecha.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
       movTratamiento.value = '';
       movDebe.value = '';
       movHaber.value = '';
       movFormaPago.value = '';
     }
-    actualizarCamposSegunTipo();
+    actualizarHintTipo();
     panelMov.classList.remove('hidden');
     panelMov.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -674,6 +738,12 @@
     const fecha = movFecha.value;
     if (!fecha) {
       movMsg.textContent = 'La fecha es obligatoria.';
+      movMsg.className = 'panel-msg error';
+      movMsg.classList.remove('hidden');
+      return;
+    }
+    if (!(Number(movDebe.value) || 0) && !(Number(movHaber.value) || 0)) {
+      movMsg.textContent = 'Cargá un monto de tratamiento, de pago, o ambos.';
       movMsg.className = 'panel-msg error';
       movMsg.classList.remove('hidden');
       return;
@@ -722,6 +792,122 @@
       renderFicha();
     } else {
       toast('No se pudo anular el movimiento.');
+    }
+  }
+
+  // ---------- Estado de prestación obra social ----------
+  document.getElementById('btn-obra-social').addEventListener('click', () => {
+    document.getElementById('panel-obra-social').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  function renderPrestaciones() {
+    const tbody = document.getElementById('pres-tbody');
+    const lista = fichaActual.prestacionesObraSocial || [];
+    if (!lista.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted); text-align:center; padding:16px;">Sin prestaciones cargadas todavía.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = lista.map((p) => `
+      <tr data-fila="${p.fila}">
+        <td>${escapeHtml(p.fecha)}</td>
+        <td>${escapeHtml(p.tratamiento)}</td>
+        <td>${escapeHtml(p.codigo)}</td>
+        <td>${p.autorizado ? '✅' : '—'}</td>
+        <td>
+          <div class="mov-actions">
+            <button class="icon-btn btn-editar-pres" title="Editar" data-fila="${p.fila}">✎</button>
+            <button class="icon-btn trash btn-eliminar-pres" title="Eliminar" data-fila="${p.fila}">✕</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('.btn-editar-pres').forEach((btn) => btn.addEventListener('click', () => abrirFormPres(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.btn-eliminar-pres').forEach((btn) => btn.addEventListener('click', () => eliminarPrestacion(Number(btn.dataset.fila))));
+  }
+
+  const panelPres = document.getElementById('panel-pres');
+  const presFecha = document.getElementById('pres-fecha');
+  const presTratamiento = document.getElementById('pres-tratamiento');
+  const presCodigo = document.getElementById('pres-codigo');
+  const presAutorizado = document.getElementById('pres-autorizado');
+  const presMsg = document.getElementById('pres-msg');
+  let editandoPresFila = null;
+
+  document.getElementById('btn-add-pres').addEventListener('click', () => abrirFormPres(null));
+  document.getElementById('pres-cancelar').addEventListener('click', () => panelPres.classList.add('hidden'));
+
+  function abrirFormPres(fila) {
+    editandoPresFila = fila;
+    presMsg.classList.add('hidden');
+    if (fila) {
+      const pres = fichaActual.prestacionesObraSocial.find((p) => p.fila === fila);
+      document.getElementById('pres-form-titulo').textContent = 'Editar prestación';
+      presFecha.value = fechaSheetAInput(pres.fecha);
+      presTratamiento.value = pres.tratamiento;
+      presCodigo.value = pres.codigo;
+      presAutorizado.checked = pres.autorizado;
+    } else {
+      document.getElementById('pres-form-titulo').textContent = 'Nueva prestación';
+      presFecha.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+      presTratamiento.value = '';
+      presCodigo.value = '';
+      presAutorizado.checked = false;
+    }
+    panelPres.classList.remove('hidden');
+    panelPres.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  document.getElementById('pres-guardar').addEventListener('click', async () => {
+    const fecha = presFecha.value;
+    if (!fecha) {
+      presMsg.textContent = 'La fecha es obligatoria.';
+      presMsg.className = 'panel-msg error';
+      presMsg.classList.remove('hidden');
+      return;
+    }
+    const payload = {
+      id: fichaActual.id,
+      fecha: fechaInputASheet(fecha),
+      tratamiento: presTratamiento.value.trim(),
+      codigo: presCodigo.value.trim(),
+      autorizado: presAutorizado.checked,
+    };
+    const btn = document.getElementById('pres-guardar');
+    btn.disabled = true;
+    try {
+      const r = editandoPresFila
+        ? await apiPost({ accion: 'prestacion-editar', fila: editandoPresFila, ...payload })
+        : await apiPost({ accion: 'prestacion-agregar', ...payload });
+      if (r.success) {
+        panelPres.classList.add('hidden');
+        toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Prestación guardada');
+        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+        renderFicha();
+      } else {
+        presMsg.textContent = r.message || 'No se pudo guardar.';
+        presMsg.className = 'panel-msg error';
+        presMsg.classList.remove('hidden');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function eliminarPrestacion(fila) {
+    const ok = await confirmDialog({
+      title: 'Eliminar prestación',
+      message: 'Se borra esta fila de la tabla de prestaciones. ¿Confirmás?',
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await apiPost({ accion: 'prestacion-eliminar', id: fichaActual.id, fila });
+    if (r.success) {
+      toast('✅ Prestación eliminada');
+      fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+      renderFicha();
+    } else {
+      toast('No se pudo eliminar la prestación.');
     }
   }
 
