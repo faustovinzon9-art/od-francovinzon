@@ -72,7 +72,6 @@
   </div>
 </div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js"></script>
 <script>
   const OAUTH_CLIENT_ID = '190064606578-kjm7n296idj5l4amt33vaujpnh34vq91.apps.googleusercontent.com';
@@ -90,11 +89,10 @@
     window.location.href = `/api/gestion/pacientes?modo=oauth-iniciar&key=${encodeURIComponent(key)}`;
   });
 
-  let tokenClient;
   let pickerLoaded = false;
 
   function habilitarPaso2SiListo() {
-    if (pickerLoaded && window.google && google.accounts) {
+    if (pickerLoaded) {
       btnStep2.disabled = false;
       btnStep2.textContent = 'Elegir carpeta';
     }
@@ -102,27 +100,32 @@
 
   gapi.load('picker', () => { pickerLoaded = true; habilitarPaso2SiListo(); });
 
-  window.addEventListener('load', () => {
-    if (!window.google || !google.accounts) { setTimeout(habilitarPaso2SiListo, 500); return; }
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: OAUTH_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: (resp) => {
-        if (resp.error) {
-          status2.textContent = 'No se pudo autorizar: ' + resp.error;
-          status2.className = 'status error';
-          return;
-        }
-        abrirPicker(resp.access_token);
-      },
-    });
-    habilitarPaso2SiListo();
+  // Modo redirect (no popup): más confiable — algunos navegadores/entornos bloquean el
+  // popup que abriría el modo por defecto de Google Identity Services. El access_token
+  // vuelve en el fragmento de la URL (#access_token=...) después de la redirección.
+  btnStep2.addEventListener('click', () => {
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.searchParams.set('client_id', OAUTH_CLIENT_ID);
+    url.searchParams.set('redirect_uri', window.location.origin + window.location.pathname);
+    url.searchParams.set('response_type', 'token');
+    url.searchParams.set('scope', 'https://www.googleapis.com/auth/drive.file');
+    url.searchParams.set('include_granted_scopes', 'true');
+    url.searchParams.set('prompt', 'consent');
+    window.location.href = url.toString();
   });
 
-  btnStep2.addEventListener('click', () => {
-    if (!tokenClient) return;
-    tokenClient.requestAccessToken({ prompt: 'consent' });
-  });
+  // Al volver de Google con el token en el hash, abrir el Picker directo.
+  (function revisarTokenEnHash() {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = hash.get('access_token');
+    if (!accessToken) return;
+    history.replaceState(null, '', window.location.pathname);
+    const intentarAbrir = () => {
+      if (!pickerLoaded) { setTimeout(intentarAbrir, 200); return; }
+      abrirPicker(accessToken);
+    };
+    intentarAbrir();
+  })();
 
   function abrirPicker(accessToken) {
     const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
