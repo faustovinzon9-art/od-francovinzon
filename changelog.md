@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-11 — Módulo de Fichas de pacientes (Fase 1)
+
+- Módulo nuevo `/pacientes` + botón "Acceder a fichas" en `/gestion`. Arquitectura: OAuth del odontólogo (no la cuenta de servicio) para Sheets/Drive, con scope `drive.file` + Google Picker para darle acceso a la carpeta "Pacientes" existente. Endpoint único `api/gestion/pacientes.js` (límite de 12 funciones serverless). Ver `tasks.md` para el detalle completo de qué se probó y qué quedó pendiente.
+- Fix: typo en la Picker API Key (`gestion/conectar-drive.html`) — una `l` minúscula en vez de `I` mayúscula causaba "The API developer key is invalid.".
+- Fix: `api/gestion/pacientes.js` perdía errores reales detrás del mensaje genérico de Vercel por faltarle `await` en los `return` de las acciones (`crear`, `listar`, etc.) — el rechazo de la promesa se escapaba del `try/catch` del handler.
+- **Pendiente bloqueante**: falta un clic manual del odontólogo en "Elegir carpeta" (`/gestion/conectar-drive.html`) — no se pudo hacer desde el entorno de automatización de navegador (iframe anidado de origen cruzado del Picker de Google no responde a clics ni teclado sintéticos). Sin ese paso, `crear`/`listar` no funcionan (confirmado con `GaxiosError: File not found` en los logs de Vercel al intentar copiar la plantilla).
+
 ## 2026-08-07 (decimonovena vuelta, punto 1/4) — ícono del chatbot: robot 🤖
 
 - Reemplaza el ícono de burbuja SVG del botón flotante (`.icon-chat`, en `index.html`, `turnos/index.html`, `gestion/index.html`) y el emoji del encabezado del panel (💬 en los dos públicos, ✨ en `/gestion`) por 🤖 en los tres. El ícono de cerrar (✕, cuando el panel está abierto) no se tocó — sigue siendo el SVG de una X, es un estado distinto (cerrar) y cambiarlo a robot no tendría sentido.
