@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-11 (segunda vuelta) — Fichas de pacientes: sección de obra social + movimiento simplificado
+
+- Nueva sección **"Estado de prestación obra social"** dentro de la misma ficha (botón junto al nombre del paciente, scroll sin cambiar de URL): Obra social/Nº de afiliado/Plan compartidos y editables desde ahí o desde la sección principal (mismo dato, sincronizado al instante en los dos sentidos), más una tabla de prestaciones (Fecha/Tratamiento/Código/Autorizado) con CRUD propio. Layout real de la planilla respetado — L14/L15/L16 son fórmulas espejo de C11/C12/C13, nunca se escriben directo.
+- **"Agregar movimiento" simplificado**: se sacó el selector manual de tipo — un solo formulario (Tratamiento/Pago) con un hint en vivo que muestra cómo se va a clasificar el movimiento según los montos cargados. "Carga histórica" quedó como botón aparte para registros con fecha vieja. Cero cambios de lógica financiera (saldo, anular, recálculo) — el "tipo" nunca se guardaba en la Sheet.
+- Fix: `montoSheetANumero()` — el formulario "Editar movimiento" no precargaba Debe/Haber porque la API los devuelve formateados como moneda (`"$1.000,00"`) y un `<input type="number">` rechaza ese valor en silencio.
+- Probado de punta a punta contra un paciente de prueba (sincronización bidireccional, prestación con checkbox real en la Sheet, las tres combinaciones de auto-detección, carga histórica, y regresión de Anular/recálculo de saldo) — ver `tasks.md` para el detalle completo.
+
 ## 2026-08-11 — Módulo de Fichas de pacientes (Fase 1)
 
 - Módulo nuevo `/pacientes` + botón "Acceder a fichas" en `/gestion`. Arquitectura final: OAuth del odontólogo (no la cuenta de servicio) para Sheets/Drive, con scope `drive` completo (se probó primero con `drive.file` + Google Picker acotado a la carpeta "Pacientes", pero se confirmó que ese scope no da acceso a archivos preexistentes — solo a los que la app crea — así que se amplió). Endpoint único `api/gestion/pacientes.js` (límite de 12 funciones serverless). Ver `tasks.md` para el detalle completo de qué se probó.
