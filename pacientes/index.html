@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pacientes | Franco Vinzón Odontólogo</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/isologo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
+    --cream: #FAF9F6; --line: #E9E4D8; --white: #FFFFFF;
+    --text: #2A2A2A; --muted: #8A8578; --bloqueo: #C1443A; --confirmado: #4F9A3C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
+  .hidden { display: none !important; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; font-size: 14px; }
+
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-box { background: var(--white); border-radius: 20px; padding: 32px 28px; max-width: 320px; width: 100%; box-shadow: 0 10px 40px rgba(30,58,95,.12); text-align: center; }
+  .login-box img { height: 40px; margin-bottom: 18px; }
+  .login-box h1 { font-size: 20px; margin-bottom: 18px; }
+  .login-box input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .login-box input:focus { outline: none; border-color: var(--gold); }
+  .login-box button { width: 100%; background: var(--navy); color: var(--white); border: none; padding: 11px; border-radius: 10px; font-weight: 600; }
+  .login-error { color: var(--bloqueo); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+
+  #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; opacity: 0; }
+  #app.fade-in { opacity: 1; transition: opacity .2s ease; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .topbar img { width: 190px; max-width: 50vw; height: auto; }
+  .volver-link { margin-left: auto; color: var(--muted); font-size: 12.5px; text-decoration: underline; }
+
+  .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .search-box { flex: 1; background: var(--white); border-radius: 14px; padding: 4px 4px 4px 14px; display: flex; align-items: center; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .search-box input { flex: 1; border: none; background: transparent; padding: 10px 6px; }
+  .search-box input:focus { outline: none; }
+  .btn-nuevo { background: var(--gold); color: var(--white); border: none; padding: 0 18px; border-radius: 14px; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+
+  .patient-list { background: var(--white); border-radius: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); overflow: hidden; }
+  .patient-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+  .patient-row:last-child { border-bottom: none; }
+  .patient-row:hover { background: rgba(30,58,95,.025); }
+  .patient-nombre { font-weight: 600; font-size: 14px; }
+  .patient-dni { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .patient-row .chev { color: var(--muted); font-size: 13px; }
+  .empty-note { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .panel { background: var(--white); border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .panel h2 { font-size: 15px; margin-bottom: 14px; }
+  .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 140px; margin-bottom: 12px; }
+  .field.full { flex-basis: 100%; }
+  .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
+  .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .panel-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .panel-actions button { padding: 9px 18px; border-radius: 9px; font-weight: 600; font-size: 13px; border: none; }
+  .btn-confirm { background: var(--gold); color: var(--white); }
+  .btn-cancel { background: var(--cream); color: var(--navy); }
+  .panel-msg { margin-top: 10px; font-size: 12.5px; font-weight: 600; }
+  .panel-msg.error { color: var(--bloqueo); }
+
+  /* Ficha */
+  .ficha-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+  .ficha-header h1 { font-size: 22px; }
+  .ficha-header .dni { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .autosave-status { font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; padding-top: 4px; }
+  .autosave-status.saving { color: var(--gold); }
+  .autosave-status.ok { color: var(--confirmado); }
+  .autosave-status.error { color: var(--bloqueo); }
+
+  .financiero-card { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; }
+  .financiero-item { min-width: 90px; }
+  .financiero-item .label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .3px; margin-bottom: 3px; }
+  .financiero-item .valor { font-size: 17px; font-weight: 700; color: var(--navy); }
+  .estado-pill { padding: 5px 13px; border-radius: 100px; font-size: 12px; font-weight: 700; }
+  .estado-pill.al-dia { background: rgba(79,154,60,.14); color: var(--confirmado); }
+  .estado-pill.debe { background: rgba(193,68,55,.1); color: var(--bloqueo); }
+  .dias-sin-pago { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .mov-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .mov-table th { text-align: left; font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 6px 8px; border-bottom: 1.5px solid var(--line); letter-spacing: .3px; }
+  .mov-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .mov-table tr:last-child td { border-bottom: none; }
+  .mov-table tr.anulado { opacity: .5; text-decoration: line-through; }
+  .mov-table .num { text-align: right; white-space: nowrap; }
+  .mov-actions { display: flex; gap: 4px; }
+  .icon-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  .icon-btn:hover { background: var(--cream); }
+  .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
+  .mov-table-wrap { overflow-x: auto; }
+  .btn-add-mov { margin-top: 12px; background: var(--navy); color: var(--white); border: none; padding: 9px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+  .checkbox-row input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--navy); flex-shrink: 0; }
+  .checkbox-row label { display: inline; margin: 0; font-size: 13px; font-weight: 500; color: var(--text); text-transform: none; }
+
+  .volver-ficha { color: var(--muted); font-size: 12.5px; text-decoration: underline; margin-bottom: 14px; display: inline-block; }
+
+  .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
+
+  #toast-container { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+  .toast { background: var(--navy); color: var(--white); padding: 11px 20px; border-radius: 100px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(30,58,95,.28); opacity: 0; transform: translateY(-10px); transition: opacity .2s ease, transform .2s ease; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(30,58,95,.35); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 998; opacity: 0; transition: opacity .18s ease; }
+  .confirm-overlay.show { opacity: 1; }
+  .confirm-box { background: var(--white); border-radius: 20px; padding: 24px 22px; max-width: 340px; width: 100%; box-shadow: 0 20px 50px rgba(30,58,95,.25); transform: scale(0.94); transition: transform .18s ease; }
+  .confirm-overlay.show .confirm-box { transform: scale(1); }
+  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; }
+  .confirm-box p { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+  .confirm-actions { display: flex; gap: 8px; }
+  .confirm-actions button { flex: 1; padding: 11px; border-radius: 100px; font-weight: 700; font-size: 13.5px; border: none; }
+  .confirm-actions .btn-cancel { background: var(--cream); color: var(--navy); }
+  .confirm-actions .btn-danger { background: var(--bloqueo); color: var(--white); }
+  .confirm-actions .btn-gold { background: var(--gold); color: var(--white); }
+
+  button, .icon-btn, input, select, textarea, .patient-row {
+    transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
+  }
+  button:active:not(:disabled), .icon-btn:active { transform: scale(0.96); }
+  input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(212,162,76,.15); }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <img src="../assets/isologo.png" alt="">
+    <h1>Pacientes</h1>
+    <input type="password" id="key-input" placeholder="Clave de acceso" autocomplete="off">
+    <button id="login-btn">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
+    <a class="volver-link" href="/gestion">← Gestión</a>
+  </div>
+
+  <div id="vista-lista">
+    <div class="search-row">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Buscar por nombre o DNI...">
+      </div>
+      <button class="btn-nuevo" id="btn-nuevo-paciente">+ Nuevo paciente</button>
+    </div>
+
+    <div class="panel hidden" id="panel-nuevo">
+      <h2>Nuevo paciente</h2>
+      <div class="field-row">
+        <div class="field"><label>Nombre *</label><input type="text" id="np-nombre"></div>
+        <div class="field"><label>Apellido *</label><input type="text" id="np-apellido"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>DNI</label><input type="text" id="np-dni"></div>
+        <div class="field"><label>Teléfono</label><input type="text" id="np-telefono"></div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="np-guardar">Crear ficha</button>
+        <button class="btn-cancel" id="np-cancelar">Cancelar</button>
+      </div>
+      <div class="panel-msg hidden" id="np-msg"></div>
+    </div>
+
+    <div class="patient-list" id="patient-list">
+      <div class="empty-note">Cargando pacientes…</div>
+    </div>
+  </div>
+
+  <div id="vista-ficha" class="hidden">
+    <a class="volver-ficha" id="volver-lista">← Volver a la lista</a>
+
+    <div class="ficha-header">
+      <div>
+        <h1 id="f-titulo">—</h1>
+        <div class="dni" id="f-dni-header"></div>
+      </div>
+      <div class="autosave-status" id="autosave-status"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Datos del paciente</h2>
+      <div class="field-row">
+        <div class="field"><label>Nombre</label><input type="text" data-campo="nombre"></div>
+        <div class="field"><label>Apellido</label><input type="text" data-campo="apellido"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>DNI</label><input type="text" data-campo="dni"></div>
+        <div class="field"><label>Fecha de nacimiento</label><input type="text" data-campo="fechaNacimiento" placeholder="dd/mm/aaaa"></div>
+      </div>
+      <div class="field-row">
+        <div class="field full"><label>Domicilio</label><input type="text" data-campo="domicilio"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Localidad</label><input type="text" data-campo="localidad"></div>
+        <div class="field"><label>Nº de teléfono</label><input type="text" data-campo="telefono"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Obra social</label><input type="text" data-campo="obraSocial"></div>
+        <div class="field"><label>Nº de afiliado</label><input type="text" data-campo="nAfiliado"></div>
+        <div class="field"><label>Plan</label><input type="text" data-campo="plan"></div>
+      </div>
+      <div class="field-row">
+        <div class="field full"><label>Plan de tratamiento</label><textarea data-campo="planTratamiento"></textarea></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Estado financiero</h2>
+      <div class="financiero-card">
+        <div class="financiero-item"><div class="label">Total</div><div class="valor" id="fin-total">—</div></div>
+        <div class="financiero-item"><div class="label">Pagado</div><div class="valor" id="fin-pagado">—</div></div>
+        <div class="financiero-item"><div class="label">Saldo</div><div class="valor" id="fin-saldo">—</div></div>
+        <div class="financiero-item"><span class="estado-pill" id="fin-estado">—</span></div>
+      </div>
+      <div class="dias-sin-pago hidden" id="fin-dias"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Movimientos</h2>
+      <div class="mov-table-wrap">
+        <table class="mov-table">
+          <thead>
+            <tr><th>Fecha</th><th>Tratamiento</th><th>Debe</th><th>Haber</th><th>Saldo</th><th>Forma de pago</th><th></th></tr>
+          </thead>
+          <tbody id="mov-tbody"></tbody>
+        </table>
+      </div>
+      <button class="btn-add-mov" id="btn-add-mov">+ Agregar movimiento</button>
+    </div>
+
+    <div class="panel hidden" id="panel-mov">
+      <h2 id="mov-form-titulo">Nuevo movimiento</h2>
+      <div class="field-row">
+        <div class="field"><label>Tipo</label>
+          <select id="mov-tipo" style="width:100%; padding:9px 11px; border:1.5px solid var(--line); border-radius:9px; background:var(--cream);">
+            <option value="tratamiento">Tratamiento</option>
+            <option value="pago">Pago</option>
+            <option value="tratamiento-pago">Tratamiento + Pago</option>
+            <option value="historica">Carga histórica</option>
+          </select>
+        </div>
+        <div class="field"><label>Fecha</label><input type="date" id="mov-fecha"></div>
+      </div>
+      <div class="field-row">
+        <div class="field full"><label>Tratamiento / descripción</label><input type="text" id="mov-tratamiento"></div>
+      </div>
+      <div class="field-row">
+        <div class="field" id="mov-debe-wrap"><label>Debe</label><input type="number" id="mov-debe" min="0" step="0.01"></div>
+        <div class="field" id="mov-haber-wrap"><label>Haber</label><input type="number" id="mov-haber" min="0" step="0.01"></div>
+      </div>
+      <div class="field-row">
+        <div class="field full" id="mov-forma-pago-wrap"><label>Forma de pago</label><input type="text" id="mov-forma-pago" placeholder="Ej: Efectivo, MP, Transferencia"></div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-confirm" id="mov-guardar">Guardar</button>
+        <button class="btn-cancel" id="mov-cancelar">Cancelar</button>
+      </div>
+      <div class="panel-msg hidden" id="mov-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<div class="confirm-overlay hidden" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-msg"></p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="confirm-cancel-btn">Cancelar</button>
+      <button class="btn-gold" id="confirm-ok-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let gestionKey = sessionStorage.getItem('gestionKey') || '';
+  let pacientes = [];
+  let fichaActual = null; // { id, campos, financiero, movimientos, driveModifiedTime }
+  let pollTimer = null;
+  let campoConFoco = null;
+  let editandoMovFila = null;
+
+  const loginScreen = document.getElementById('login-screen');
+  const appEl = document.getElementById('app');
+  const keyInput = document.getElementById('key-input');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
+
+  function tryLogin() {
+    const k = keyInput.value.trim();
+    if (!k) return;
+    gestionKey = k;
+    sessionStorage.setItem('gestionKey', k);
+    arrancar();
+  }
+  loginBtn.addEventListener('click', tryLogin);
+  keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+
+  function onUnauthorized() {
+    sessionStorage.removeItem('gestionKey');
+    gestionKey = '';
+    appEl.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    loginError.textContent = 'Clave incorrecta.';
+  }
+
+  async function apiGet(params) {
+    const qs = new URLSearchParams({ ...params, key: gestionKey }).toString();
+    const r = await fetch(`/api/gestion/pacientes?${qs}`);
+    if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+    return r.json();
+  }
+  async function apiPost(body) {
+    const r = await fetch('/api/gestion/pacientes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, key: gestionKey }),
+    });
+    if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+    return r.json();
+  }
+
+  function arrancar() {
+    if (!gestionKey) return;
+    loginScreen.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    requestAnimationFrame(() => requestAnimationFrame(() => appEl.classList.add('fade-in')));
+    cargarLista();
+  }
+  if (gestionKey) arrancar();
+
+  // ---------- Toast / confirm (mismo patrón que /gestion) ----------
+  const toastContainer = document.getElementById('toast-container');
+  function toast(mensaje) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = mensaje;
+    toastContainer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 2600);
+  }
+  const confirmOverlay = document.getElementById('confirm-overlay');
+  function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false }) {
+    return new Promise((resolve) => {
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-msg').textContent = message;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      const cancelBtn = document.getElementById('confirm-cancel-btn');
+      okBtn.textContent = confirmLabel;
+      okBtn.className = danger ? 'btn-danger' : 'btn-gold';
+      cancelBtn.textContent = cancelLabel;
+      confirmOverlay.classList.remove('hidden');
+      requestAnimationFrame(() => confirmOverlay.classList.add('show'));
+      function cerrar(r) {
+        confirmOverlay.classList.remove('show');
+        setTimeout(() => confirmOverlay.classList.add('hidden'), 180);
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(r);
+      }
+      function onOk() { cerrar(true); }
+      function onCancel() { cerrar(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  // ---------- Lista ----------
+  const searchInput = document.getElementById('search-input');
+  const patientListEl = document.getElementById('patient-list');
+
+  async function cargarLista() {
+    try {
+      pacientes = await apiGet({ modo: 'listar' });
+      renderLista();
+    } catch (e) {
+      if (e.message !== 'unauthorized') patientListEl.innerHTML = '<div class="empty-note">No se pudo cargar la lista.</div>';
+    }
+  }
+
+  function renderLista() {
+    const q = normalizar(searchInput.value.trim());
+    const filtrados = q
+      ? pacientes.filter((p) => normalizar(`${p.nombre} ${p.apellido} ${p.dni}`).includes(q))
+      : pacientes;
+
+    if (!filtrados.length) {
+      patientListEl.innerHTML = `<div class="empty-note">${pacientes.length ? 'Sin resultados.' : 'Todavía no hay pacientes cargados.'}</div>`;
+      return;
+    }
+    patientListEl.innerHTML = filtrados.map((p) => `
+      <div class="patient-row" data-id="${p.id}">
+        <div>
+          <div class="patient-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</div>
+          <div class="patient-dni">${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'Sin DNI cargado'}</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    `).join('');
+    patientListEl.querySelectorAll('.patient-row').forEach((row) => {
+      row.addEventListener('click', () => abrirFicha(row.dataset.id));
+    });
+  }
+  searchInput.addEventListener('input', renderLista);
+
+  function normalizar(str) {
+    return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : str;
+    return div.innerHTML;
+  }
+
+  // ---------- Nuevo paciente ----------
+  const panelNuevo = document.getElementById('panel-nuevo');
+  const npNombre = document.getElementById('np-nombre');
+  const npApellido = document.getElementById('np-apellido');
+  const npDni = document.getElementById('np-dni');
+  const npTelefono = document.getElementById('np-telefono');
+  const npMsg = document.getElementById('np-msg');
+
+  document.getElementById('btn-nuevo-paciente').addEventListener('click', () => {
+    panelNuevo.classList.remove('hidden');
+    npNombre.value = ''; npApellido.value = ''; npDni.value = ''; npTelefono.value = '';
+    npMsg.classList.add('hidden');
+    npNombre.focus();
+  });
+  document.getElementById('np-cancelar').addEventListener('click', () => panelNuevo.classList.add('hidden'));
+
+  let telefonoAutocompletadoConsultado = false;
+  npApellido.addEventListener('blur', async () => {
+    const nombre = npNombre.value.trim();
+    const apellido = npApellido.value.trim();
+    if (!nombre || !apellido || telefonoAutocompletadoConsultado || npTelefono.value.trim()) return;
+    telefonoAutocompletadoConsultado = true;
+    try {
+      const r = await apiGet({ modo: 'telefono-turnos', nombre, apellido });
+      if (r.telefono) {
+        const ok = await confirmDialog({
+          title: 'Teléfono encontrado',
+          message: `¿El número de teléfono de ${nombre} es ${r.telefono}? Si no es el correcto, podrás completarlo manualmente dentro de la ficha.`,
+          confirmLabel: 'Sí',
+          cancelLabel: 'No',
+        });
+        if (ok) npTelefono.value = r.telefono;
+      }
+    } catch (e) { /* silencioso, no bloquea la carga */ }
+  });
+  [npNombre, npApellido].forEach((el) => el.addEventListener('input', () => { telefonoAutocompletadoConsultado = false; }));
+
+  document.getElementById('np-guardar').addEventListener('click', async () => {
+    const nombre = npNombre.value.trim();
+    const apellido = npApellido.value.trim();
+    if (!nombre || !apellido) {
+      npMsg.textContent = 'Nombre y apellido son obligatorios.';
+      npMsg.className = 'panel-msg error';
+      npMsg.classList.remove('hidden');
+      return;
+    }
+    const btn = document.getElementById('np-guardar');
+    btn.disabled = true;
+    try {
+      const r = await apiPost({
+        accion: 'crear',
+        nombre, apellido,
+        campos: { dni: npDni.value.trim(), telefono: npTelefono.value.trim() },
+      });
+      if (r.success) {
+        panelNuevo.classList.add('hidden');
+        toast('✅ Ficha creada');
+        await cargarLista();
+        abrirFicha(r.id);
+      } else {
+        npMsg.textContent = r.message || 'No se pudo crear la ficha.';
+        npMsg.className = 'panel-msg error';
+        npMsg.classList.remove('hidden');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---------- Ficha ----------
+  const vistaLista = document.getElementById('vista-lista');
+  const vistaFicha = document.getElementById('vista-ficha');
+  const autosaveStatus = document.getElementById('autosave-status');
+
+  document.getElementById('volver-lista').addEventListener('click', () => {
+    detenerPolling();
+    vistaFicha.classList.add('hidden');
+    vistaLista.classList.remove('hidden');
+    cargarLista();
+  });
+
+  async function abrirFicha(id) {
+    vistaLista.classList.add('hidden');
+    vistaFicha.classList.remove('hidden');
+    document.getElementById('f-titulo').textContent = 'Cargando…';
+    try {
+      fichaActual = await apiGet({ modo: 'ficha', id });
+      renderFicha();
+      iniciarPolling(id);
+    } catch (e) {
+      if (e.message !== 'unauthorized') toast('No se pudo abrir la ficha.');
+    }
+  }
+
+  function renderFicha() {
+    const c = fichaActual.campos;
+    document.getElementById('f-titulo').textContent = `${c.nombre} ${c.apellido}`.trim() || 'Sin nombre';
+    document.getElementById('f-dni-header').textContent = c.dni ? `DNI ${c.dni}` : '';
+
+    document.querySelectorAll('#vista-ficha [data-campo]').forEach((input) => {
+      if (input === campoConFoco) return; // no pisar lo que se está escribiendo ahora mismo
+      input.value = c[input.dataset.campo] || '';
+    });
+
+    const fin = fichaActual.financiero;
+    document.getElementById('fin-total').textContent = fin.total;
+    document.getElementById('fin-pagado').textContent = fin.pagado;
+    document.getElementById('fin-saldo').textContent = fin.saldo;
+    const estadoEl = document.getElementById('fin-estado');
+    const alDia = /AL DÍA/i.test(fin.alDiaTexto);
+    estadoEl.textContent = fin.alDiaTexto || '—';
+    estadoEl.className = 'estado-pill ' + (alDia ? 'al-dia' : 'debe');
+    const diasEl = document.getElementById('fin-dias');
+    if (fin.diasSinPagoTexto) {
+      diasEl.textContent = `${fin.diasSinPagoTexto} día(s) sin pago`;
+      diasEl.classList.remove('hidden');
+    } else {
+      diasEl.classList.add('hidden');
+    }
+
+    renderMovimientos();
+  }
+
+  function renderMovimientos() {
+    const tbody = document.getElementById('mov-tbody');
+    if (!fichaActual.movimientos.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:16px;">Sin movimientos todavía.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = fichaActual.movimientos.map((m) => `
+      <tr class="${m.anulado ? 'anulado' : ''}" data-fila="${m.fila}">
+        <td>${escapeHtml(m.fecha)}</td>
+        <td>${escapeHtml(m.tratamiento)}</td>
+        <td class="num">${escapeHtml(m.debe)}</td>
+        <td class="num">${escapeHtml(m.haber)}</td>
+        <td class="num">${escapeHtml(m.saldo)}</td>
+        <td>${escapeHtml(m.formaPago)}</td>
+        <td>
+          ${m.anulado ? '' : `
+          <div class="mov-actions">
+            <button class="icon-btn btn-editar-mov" title="Editar" data-fila="${m.fila}">✎</button>
+            <button class="icon-btn trash btn-anular-mov" title="Anular" data-fila="${m.fila}">✕</button>
+          </div>`}
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.btn-editar-mov').forEach((btn) => btn.addEventListener('click', () => abrirFormMov(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.btn-anular-mov').forEach((btn) => btn.addEventListener('click', () => anularMovimiento(Number(btn.dataset.fila))));
+  }
+
+  // ---------- Autosave de campos ----------
+  document.querySelectorAll('#vista-ficha [data-campo]').forEach((input) => {
+    input.addEventListener('focus', () => { campoConFoco = input; });
+    input.addEventListener('blur', async () => {
+      campoConFoco = null;
+      const campo = input.dataset.campo;
+      const valor = input.value;
+      if (!fichaActual || fichaActual.campos[campo] === valor) return;
+      fichaActual.campos[campo] = valor;
+      autosaveStatus.textContent = 'Guardando…';
+      autosaveStatus.className = 'autosave-status saving';
+      try {
+        const r = await apiPost({ accion: 'actualizar-campo', id: fichaActual.id, campo, valor });
+        if (r.success) {
+          autosaveStatus.textContent = r.pendiente ? 'Guardado (pendiente de sincronizar)' : 'Guardado';
+          autosaveStatus.className = 'autosave-status ' + (r.pendiente ? 'saving' : 'ok');
+          if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
+            document.getElementById('f-titulo').textContent = `${fichaActual.campos.nombre} ${fichaActual.campos.apellido}`.trim();
+            document.getElementById('f-dni-header').textContent = fichaActual.campos.dni ? `DNI ${fichaActual.campos.dni}` : '';
+          }
+        } else {
+          throw new Error();
+        }
+      } catch (e) {
+        autosaveStatus.textContent = 'Error al guardar';
+        autosaveStatus.className = 'autosave-status error';
+      }
+      setTimeout(() => { if (autosaveStatus.textContent !== 'Guardando…') autosaveStatus.textContent = ''; }, 3000);
+    });
+  });
+
+  // ---------- Movimientos ----------
+  const panelMov = document.getElementById('panel-mov');
+  const movTipo = document.getElementById('mov-tipo');
+  const movFecha = document.getElementById('mov-fecha');
+  const movTratamiento = document.getElementById('mov-tratamiento');
+  const movDebe = document.getElementById('mov-debe');
+  const movHaber = document.getElementById('mov-haber');
+  const movFormaPago = document.getElementById('mov-forma-pago');
+  const movMsg = document.getElementById('mov-msg');
+
+  function actualizarCamposSegunTipo() {
+    const tipo = movTipo.value;
+    const debeWrap = document.getElementById('mov-debe-wrap');
+    const haberWrap = document.getElementById('mov-haber-wrap');
+    const formaWrap = document.getElementById('mov-forma-pago-wrap');
+    debeWrap.style.display = tipo === 'pago' ? 'none' : '';
+    haberWrap.style.display = tipo === 'tratamiento' ? 'none' : '';
+    formaWrap.style.display = (tipo === 'pago' || tipo === 'tratamiento-pago' || tipo === 'historica') ? '' : 'none';
+    if (tipo === 'tratamiento') movHaber.value = '';
+    if (tipo === 'pago') movDebe.value = '';
+  }
+  movTipo.addEventListener('change', actualizarCamposSegunTipo);
+
+  document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null));
+  document.getElementById('mov-cancelar').addEventListener('click', () => panelMov.classList.add('hidden'));
+
+  function fechaSheetAInput(fechaStr) {
+    // "27/7/2026" -> "2026-07-27" para <input type=date>. Si no matchea, deja vacío.
+    const m = String(fechaStr || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return '';
+    return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  function fechaInputASheet(valorInput) {
+    // "2026-07-27" -> "27/07/2026"
+    const [y, m, d] = valorInput.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function abrirFormMov(fila) {
+    editandoMovFila = fila;
+    movMsg.classList.add('hidden');
+    if (fila) {
+      const mov = fichaActual.movimientos.find((m) => m.fila === fila);
+      document.getElementById('mov-form-titulo').textContent = 'Editar movimiento';
+      movFecha.value = fechaSheetAInput(mov.fecha);
+      movTratamiento.value = mov.tratamiento;
+      movDebe.value = mov.debe || '';
+      movHaber.value = mov.haber || '';
+      movFormaPago.value = mov.formaPago || '';
+      movTipo.value = mov.debe && mov.haber ? 'tratamiento-pago' : (mov.haber ? 'pago' : 'tratamiento');
+    } else {
+      document.getElementById('mov-form-titulo').textContent = 'Nuevo movimiento';
+      movTipo.value = 'tratamiento';
+      movFecha.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+      movTratamiento.value = '';
+      movDebe.value = '';
+      movHaber.value = '';
+      movFormaPago.value = '';
+    }
+    actualizarCamposSegunTipo();
+    panelMov.classList.remove('hidden');
+    panelMov.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  document.getElementById('mov-guardar').addEventListener('click', async () => {
+    const fecha = movFecha.value;
+    if (!fecha) {
+      movMsg.textContent = 'La fecha es obligatoria.';
+      movMsg.className = 'panel-msg error';
+      movMsg.classList.remove('hidden');
+      return;
+    }
+    const payload = {
+      id: fichaActual.id,
+      fecha: fechaInputASheet(fecha),
+      tratamiento: movTratamiento.value.trim(),
+      debe: movDebe.value ? Number(movDebe.value) : 0,
+      haber: movHaber.value ? Number(movHaber.value) : 0,
+      formaPago: movFormaPago.value.trim(),
+    };
+    const btn = document.getElementById('mov-guardar');
+    btn.disabled = true;
+    try {
+      const r = editandoMovFila
+        ? await apiPost({ accion: 'movimiento-editar', fila: editandoMovFila, ...payload })
+        : await apiPost({ accion: 'movimiento-agregar', ...payload });
+      if (r.success) {
+        panelMov.classList.add('hidden');
+        toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Movimiento guardado');
+        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+        renderFicha();
+      } else {
+        movMsg.textContent = r.message || 'No se pudo guardar.';
+        movMsg.className = 'panel-msg error';
+        movMsg.classList.remove('hidden');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function anularMovimiento(fila) {
+    const ok = await confirmDialog({
+      title: 'Anular movimiento',
+      message: 'El movimiento queda marcado como anulado (no se borra) y deja de afectar el saldo. ¿Confirmás?',
+      confirmLabel: 'Anular',
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await apiPost({ accion: 'movimiento-anular', id: fichaActual.id, fila });
+    if (r.success) {
+      toast('✅ Movimiento anulado');
+      fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+      renderFicha();
+    } else {
+      toast('No se pudo anular el movimiento.');
+    }
+  }
+
+  // ---------- Polling (Sheets -> Sistema) ----------
+  function iniciarPolling(id) {
+    detenerPolling();
+    pollTimer = setInterval(async () => {
+      if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.campo) return; // no interrumpir mientras se escribe
+      try {
+        const { modifiedTime } = await apiGet({ modo: 'modified', id });
+        if (fichaActual && modifiedTime && modifiedTime !== fichaActual.driveModifiedTime) {
+          fichaActual = await apiGet({ modo: 'ficha', id });
+          renderFicha();
+        }
+      } catch (e) { /* silencioso */ }
+    }, 60000);
+  }
+  function detenerPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+</script>
+</body>
+</html>
