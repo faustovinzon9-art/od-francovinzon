@@ -24,6 +24,9 @@ export default async function handler(req, res) {
   if (req.query.modo === 'tareas') {
     return tareas(req, res);
   }
+  if (req.query.modo === 'proximo-bloqueo') {
+    return proximoBloqueo(req, res);
+  }
 
   try {
     const q = (req.query.q || '').trim();
@@ -326,5 +329,34 @@ async function tareas(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json({ sinTelefono: [], reorganizar: [] });
+  }
+}
+
+// Próximo día bloqueado por completo a partir de hoy — resumen del sidebar.
+// (Fusionado desde proximo-bloqueo.js, mismo horizonte que RANGO_REORGANIZAR_DIAS.)
+async function proximoBloqueo(req, res) {
+  try {
+    const calendar = getCalendarClient();
+    const now = new Date();
+    const timeMax = new Date(now.getTime() + RANGO_REORGANIZAR_DIAS * 24 * 60 * 60000);
+
+    const { data } = await calendar.events.list({
+      calendarId: CALENDAR_ID,
+      q: BLOCK_MARKER,
+      timeMin: now.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 50,
+    });
+
+    const bloqueoDia = (data.items || []).find(
+      (ev) => !ev.start.dateTime && (ev.description || '').includes(BLOCK_MARKER)
+    );
+
+    res.status(200).json({ date: bloqueoDia ? bloqueoDia.start.date : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo consultar.' });
   }
 }

@@ -994,7 +994,7 @@
     Promise.all([
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/disponibilidad?modo=dia&date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
-      fetch(`/api/gestion/proximo-bloqueo?key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
+      fetch(`/api/gestion/buscar?modo=proximo-bloqueo&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
       fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], reorganizar: [] })),
     ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
