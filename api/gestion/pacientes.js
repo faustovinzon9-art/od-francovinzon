@@ -9,7 +9,6 @@
 // servicio de siempre (lib/googleCalendar.js), sin cambios.
 import {
   getPacientesSheetsClient, getPacientesDriveClient, buildAuthUrl, exchangeCodeForTokens,
-  diagTokenScopes,
 } from '../../lib/googleOAuthPacientes.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, normalizarTexto, extraerTelefono,
@@ -42,7 +41,6 @@ export default async function handler(req, res) {
       if (req.query.modo === 'ficha') return await obtenerFicha(req, res);
       if (req.query.modo === 'modified') return await obtenerModified(req, res);
       if (req.query.modo === 'telefono-turnos') return await telefonoDesdeTurnos(req, res);
-      if (req.query.modo === 'diag-scopes') return await diagScopes(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
@@ -96,11 +94,6 @@ async function oauthCallback(req, res) {
 }
 
 // ---------- Lectura ----------
-
-async function diagScopes(req, res) {
-  const info = await diagTokenScopes();
-  res.status(200).json(info);
-}
 
 async function listar(req, res) {
   const drive = getPacientesDriveClient();
