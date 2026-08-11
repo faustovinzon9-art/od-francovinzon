@@ -708,6 +708,14 @@
     const [y, m, d] = valorInput.split('-');
     return `${d}/${m}/${y}`;
   }
+  function montoSheetANumero(valor) {
+    // Sheets devuelve Debe/Haber ya formateados (ej. "$1.000,00"); un <input type=number>
+    // rechaza en silencio cualquier valor no numérico, así que hay que parsearlo antes.
+    if (!valor) return '';
+    const limpio = String(valor).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(limpio);
+    return Number.isFinite(n) && n !== 0 ? n : '';
+  }
 
   function abrirFormMov(fila, historica) {
     editandoMovFila = fila;
@@ -718,8 +726,8 @@
       document.getElementById('mov-form-titulo').textContent = 'Editar movimiento';
       movFecha.value = fechaSheetAInput(mov.fecha);
       movTratamiento.value = mov.tratamiento;
-      movDebe.value = mov.debe || '';
-      movHaber.value = mov.haber || '';
+      movDebe.value = montoSheetANumero(mov.debe);
+      movHaber.value = montoSheetANumero(mov.haber);
       movFormaPago.value = mov.formaPago || '';
     } else {
       document.getElementById('mov-form-titulo').textContent = cargaHistorica ? 'Carga histórica' : 'Nuevo movimiento';
