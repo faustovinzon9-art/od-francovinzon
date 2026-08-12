@@ -483,15 +483,18 @@
     loginScreen.classList.add('hidden');
     appEl.classList.remove('hidden');
     requestAnimationFrame(() => requestAnimationFrame(() => appEl.classList.add('fade-in')));
-    // getElementById directo (no la const vistaLista, declarada más abajo): si ya hay
-    // gestionKey en sessionStorage, arrancar() se llama de forma síncrona acá mismo, antes
-    // de que el resto del script llegue a declarar esa const (evita un ReferenceError por
-    // temporal dead zone en el reingreso de una sesión ya logueada).
     mostrarAnimado(document.getElementById('vista-lista'));
     cargarLista();
     iniciarEscaneoDuplicados();
   }
-  if (gestionKey) arrancar();
+  // Si ya hay gestionKey en sessionStorage (reingreso a una sesión ya logueada),
+  // arrancar() dispara cargarLista()/iniciarEscaneoDuplicados(), que usan const/let
+  // declaradas más abajo en el script (patientListEl, duplicadosTimer, etc.) — llamarla
+  // ya mismo de forma síncrona las encuentra en temporal dead zone (ReferenceError real,
+  // confirmado en consola: "Cannot access 'patientListEl' before initialization").
+  // queueMicrotask la difiere hasta que el script termine de correr de punta a punta, sin
+  // parpadeo visible (corre en el mismo tick, antes del próximo repintado).
+  if (gestionKey) queueMicrotask(arrancar);
 
   // ---------- Transición de entrada de vistas/paneles (mismo mecanismo que
   // mostrarCardAnimada() de /turnos y /gestion): saca .hidden, fuerza reflow para poder
