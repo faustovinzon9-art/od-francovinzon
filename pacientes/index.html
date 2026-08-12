@@ -41,7 +41,7 @@
   .search-box { flex: 1; background: var(--white); border-radius: 14px; padding: 4px 4px 4px 14px; display: flex; align-items: center; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .search-box input { flex: 1; border: none; background: transparent; padding: 10px 6px; }
   .search-box input:focus { outline: none; }
-  .btn-nuevo { background: var(--gold); color: var(--white); border: none; padding: 0 18px; border-radius: 14px; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+  .btn-nuevo { background: var(--gold); color: var(--white); border: none; padding: 0 20px; border-radius: 14px; font-weight: 700; font-size: 14.5px; white-space: nowrap; }
 
   .patient-list { background: var(--white); border-radius: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); overflow: hidden; }
   .patient-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
@@ -62,7 +62,7 @@
   .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
   .field textarea { resize: vertical; min-height: 60px; }
   .panel-actions { display: flex; gap: 8px; margin-top: 4px; }
-  .panel-actions button { padding: 9px 18px; border-radius: 9px; font-weight: 600; font-size: 13px; border: none; }
+  .panel-actions button { padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 14px; border: none; }
   .btn-confirm { background: var(--gold); color: var(--white); }
   .btn-cancel { background: var(--cream); color: var(--navy); }
   .panel-msg { margin-top: 10px; font-size: 12.5px; font-weight: 600; }
@@ -95,12 +95,12 @@
   .mov-table tr.anulado { opacity: .5; text-decoration: line-through; }
   .mov-table .num { text-align: right; white-space: nowrap; }
   .mov-actions { display: flex; gap: 4px; }
-  .icon-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12.5px; display: flex; align-items: center; justify-content: center; }
   .icon-btn:hover { background: var(--cream); }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
   .mov-table-wrap { overflow-x: auto; }
   .mov-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .btn-add-mov { background: var(--navy); color: var(--white); border: none; padding: 9px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; }
+  .btn-add-mov { background: var(--navy); color: var(--white); border: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; font-size: 14px; }
   .btn-add-mov.secondary { background: var(--white); color: var(--navy); border: 1.5px solid var(--line); }
   .mov-tipo-hint { font-size: 12px; color: var(--muted); margin: -4px 0 10px; min-height: 15px; }
   .mov-tipo-hint.historica { color: var(--gold); font-weight: 600; }
@@ -113,7 +113,26 @@
   .chk-pres-autorizado { width: 19px; height: 19px; accent-color: var(--confirmado); cursor: pointer; }
   .chk-pres-autorizado:disabled { opacity: .5; cursor: wait; }
 
-  .volver-ficha { color: var(--muted); font-size: 12.5px; text-decoration: underline; margin-bottom: 14px; display: inline-block; }
+  /* Botón "Volver" — prominente y siempre arriba de cada vista, mismo estilo pill que
+     .copy-link-btn de /gestion (antes era un link de texto chico subrayado). */
+  .btn-volver { display: inline-flex; align-items: center; gap: 5px; background: var(--cream); color: var(--navy-soft); border: 1.5px solid var(--line); padding: 9px 16px; border-radius: 100px; font-weight: 700; font-size: 13px; margin-bottom: 14px; }
+  .btn-volver:hover { border-color: var(--gold); color: var(--navy); background: var(--white); }
+
+  /* "Pacientes de hoy": carrusel horizontal de acceso directo, arriba de todo en la
+     pantalla principal — cruza los turnos de hoy contra las fichas ya cargadas (mismo
+     criterio best-effort del autocompletado de teléfono: match EXACTO de nombre+apellido
+     normalizado, sin crear ningún vínculo permanente turno↔ficha). Oculto si no hay
+     ninguna coincidencia, para no ocupar lugar en un día sin turnos con ficha. */
+  .hoy-section { margin-bottom: 16px; }
+  .hoy-section h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 10px; }
+  .hoy-carril { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .hoy-carril::-webkit-scrollbar { height: 5px; }
+  .hoy-carril::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
+  .hoy-chip { flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 7px; background: var(--white); border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 14px; min-width: 88px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
+  .hoy-chip:hover { border-color: var(--gold); }
+  .hoy-chip-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; font-family: 'Fraunces', Georgia, serif; flex-shrink: 0; }
+  .hoy-chip-nombre { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hoy-chip-hora { font-size: 11px; color: var(--gold); font-weight: 700; }
 
   .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
 
@@ -206,6 +225,11 @@
   </div>
 
   <div id="vista-lista" class="vista">
+    <div class="hoy-section hidden" id="hoy-section">
+      <h2>Pacientes de hoy</h2>
+      <div class="hoy-carril" id="hoy-carril"></div>
+    </div>
+
     <div class="dup-banner hidden" id="dup-banner">
       <span class="dup-banner-icon">❗</span>
       <span class="dup-banner-text" id="dup-banner-text">Hay fichas duplicadas</span>
@@ -246,13 +270,13 @@
   </div>
 
   <div id="vista-duplicados" class="vista hidden">
-    <a class="volver-ficha" id="volver-lista-desde-dup">← Volver a la lista</a>
+    <button type="button" class="btn-volver" id="volver-lista-desde-dup">← Volver a la lista</button>
     <div class="ficha-header"><div><h1 style="font-size:20px;">Fichas duplicadas</h1></div></div>
     <div id="dup-grupos"></div>
   </div>
 
   <div id="vista-fusion" class="vista hidden">
-    <a class="volver-ficha" id="volver-duplicados-desde-fusion">← Volver a duplicados</a>
+    <button type="button" class="btn-volver" id="volver-duplicados-desde-fusion">← Volver a duplicados</button>
     <div class="panel">
       <h2>Elegí cuál ficha mantener</h2>
       <div class="field-row" style="gap:10px;">
@@ -278,7 +302,7 @@
   </div>
 
   <div id="vista-ficha" class="vista hidden">
-    <a class="volver-ficha" id="volver-lista">← Volver a la lista</a>
+    <button type="button" class="btn-volver" id="volver-lista">← Volver a la lista</button>
 
     <div class="ficha-header">
       <div>
@@ -369,7 +393,7 @@
   </div>
 
   <div id="vista-obra-social" class="vista hidden">
-    <a class="volver-ficha" id="volver-ficha-desde-obra-social">← Volver a la ficha</a>
+    <button type="button" class="btn-volver" id="volver-ficha-desde-obra-social">← Volver a la ficha</button>
     <div class="ficha-header">
       <div>
         <h1 style="font-size:20px;">🏥 Estado de prestación obra social</h1>
@@ -562,6 +586,7 @@
       pacientes = await apiGet({ modo: 'listar' });
       renderLista();
       renderBannerDuplicados();
+      cargarPacientesDeHoy(); // no se espera: es una sección secundaria, no bloquea el resto
     } catch (e) {
       if (e.message !== 'unauthorized') patientListEl.innerHTML = '<div class="empty-note">No se pudo cargar la lista.</div>';
     }
@@ -608,6 +633,69 @@
     const div = document.createElement('div');
     div.textContent = str == null ? '' : str;
     return div.innerHTML;
+  }
+
+  // ---------- "Pacientes de hoy": acceso directo de un solo toque ----------
+  // Cruza los turnos de hoy (api/gestion/turnos-dia.js, misma GESTION_KEY que el resto del
+  // panel — no hizo falta ninguna ruta nueva) contra las fichas ya cargadas, con el mismo
+  // criterio best-effort que el autocompletado de teléfono al crear paciente: coincidencia
+  // EXACTA de nombre+apellido normalizado (sin acentos, sin mayúsculas, espacios
+  // colapsados). Si no hay ficha para un turno de hoy, ese turno simplemente no aparece acá
+  // — no crea nada solo, y no queda ningún vínculo permanente entre el turno y la ficha,
+  // es solo una ayuda de acceso rápido que se recalcula cada vez.
+  const hoySection = document.getElementById('hoy-section');
+  const hoyCarril = document.getElementById('hoy-carril');
+  let pacientesDeHoy = [];
+
+  function normalizarNombreCompleto(nombre, apellido) {
+    return normalizar(`${(nombre || '').trim()} ${(apellido || '').trim()}`.replace(/\s+/g, ' ').trim());
+  }
+  function formatHoraArg(iso) {
+    return new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(iso));
+  }
+
+  async function cargarPacientesDeHoy() {
+    try {
+      const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+      const qs = new URLSearchParams({ date: hoy, key: gestionKey }).toString();
+      const r = await fetch(`/api/gestion/turnos-dia?${qs}`);
+      if (r.status === 401) { onUnauthorized(); return; }
+      const items = await r.json();
+      if (!Array.isArray(items)) { pacientesDeHoy = []; renderPacientesDeHoy(); return; }
+
+      const vistos = new Set();
+      pacientesDeHoy = [];
+      items
+        .filter((it) => it.tipo !== 'bloqueo')
+        .sort((a, b) => new Date(a.start) - new Date(b.start))
+        .forEach((it) => {
+          const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
+          if (!nombreTurno) return;
+          const ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
+          if (!ficha || vistos.has(ficha.id)) return;
+          vistos.add(ficha.id);
+          pacientesDeHoy.push({ id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatHoraArg(it.start) });
+        });
+    } catch (e) {
+      pacientesDeHoy = [];
+    }
+    renderPacientesDeHoy();
+  }
+
+  function renderPacientesDeHoy() {
+    if (!pacientesDeHoy.length) {
+      hoySection.classList.add('hidden');
+      return;
+    }
+    hoyCarril.innerHTML = pacientesDeHoy.map((p) => `
+      <button type="button" class="hoy-chip" data-id="${p.id}">
+        <span class="hoy-chip-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
+        <span class="hoy-chip-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
+        <span class="hoy-chip-hora">${escapeHtml(p.hora)}</span>
+      </button>
+    `).join('');
+    hoyCarril.querySelectorAll('.hoy-chip').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
+    hoySection.classList.remove('hidden');
   }
 
   // ---------- Mayúsculas automáticas (ver decisions.md): nombre, apellido, localidad,
