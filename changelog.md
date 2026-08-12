@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-12 (quinta vuelta) — INCIDENTE: producción caída (Calendar/Sheets/Drive), hotfix
+
+- **Síntoma**: agenda de `/gestion` mostrando "No se pudo cargar la agenda" — reportado urgente por el usuario, consultorio sin poder trabajar. Diagnóstico encontró que el alcance era mayor: `api/disponibilidad` (público, usado por `/turnos` para reservar) también devolvía 500, así que la reserva de turnos también estaba caída.
+- **Causa raíz**: `envolverConReintentos()` (`lib/retry.js`, subido en la vuelta anterior) envolvía `getCalendarClient()`/`getSheetsClient()`/`getDriveClient()`/los dos clientes de `lib/googleOAuthPacientes.js` en un `Proxy` que reenvía `receiver` en `Reflect.get()`. Las clases de `googleapis`/`google-auth-library` (v174) usan campos privados nativos — un getter interno corriendo con `this` = el Proxy tira `TypeError: Cannot read private member...`. Rompía cualquier llamada a Calendar/Sheets/Drive, en cualquier endpoint, a cualquier profundidad.
+- **Fix**: se revirtió el wrapping — los 5 getters vuelven a devolver el cliente de `googleapis` sin envolver. `lib/retry.js` queda en el repo sin usar. Ver `decisions.md`, nueva sección "Incidentes en producción", para la lección completa y cómo reintentar esto bien en el futuro (si se quiere).
+- Diagnóstico hecho con un solo request directo a `api/disponibilidad` en producción (no un loop — ver la nota de `CLAUDE.md` sobre no hacer polling agresivo). Verificación del fix con chequeos espaciados ≥25s.
+
 ## 2026-08-12 (cuarta vuelta) — Confirmación de turno: link en el WhatsApp, badge verde/rojo en `/gestion`, 4 botones en `/turno`
 
 - **Campo nuevo `Confirmado: Sí/No`** en la description del evento (`extraerConfirmado()`/`escribirConfirmado()` en `lib/googleCalendar.js`, mismo patrón que `Teléfono verificado`) — default "Sin confirmar" para cualquier evento sin la línea, sin migración necesaria.
