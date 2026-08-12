@@ -349,6 +349,9 @@
     <label>Teléfono</label>
     <input type="tel" id="f-telefono">
 
+    <label>DNI (opcional)</label>
+    <input type="text" id="f-dni" inputmode="numeric" placeholder="Sin puntos ni espacios">
+
     <label>Motivo de la consulta</label>
     <textarea id="f-motivo" rows="2" placeholder="Contanos brevemente qué necesitás"></textarea>
 
@@ -685,6 +688,7 @@
     const nombreCompleto = document.getElementById('f-nombre').value.trim();
     const esNuevo = document.getElementById('f-nuevo').checked;
     const telefonoIngresado = document.getElementById('f-telefono').value.trim();
+    const dniIngresado = document.getElementById('f-dni').value.trim();
     const motivo = document.getElementById('f-motivo').value.trim();
 
     if (!horarioSeleccionado) {
@@ -699,6 +703,13 @@
       showFormMsg('Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
+    // DNI opcional: si lo cargan tiene que ser numérico (se dejan pasar puntos/espacios
+    // sueltos por si los tipean, pero se limpian antes de mandar).
+    const dniLimpio = dniIngresado.replace(/[.\s]/g, '');
+    if (dniLimpio && !/^\d{6,9}$/.test(dniLimpio)) {
+      showFormMsg('Ese DNI no parece válido. Dejalo vacío o revisalo.', 'error');
+      return;
+    }
     const telefono = itiTelefono.getNumber();
 
     const partes = nombreCompleto.split(' ');
@@ -711,7 +722,7 @@
     fetch('/api/reservar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: fechaSeleccionada, time: horarioSeleccionado, nombre, apellido, telefono, motivo, esNuevo }),
+      body: JSON.stringify({ date: fechaSeleccionada, time: horarioSeleccionado, nombre, apellido, telefono, dni: dniLimpio, motivo, esNuevo }),
     })
       .then((r) => r.json())
       .then((res) => {

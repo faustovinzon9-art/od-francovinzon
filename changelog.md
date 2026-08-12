@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-12 (séptima vuelta) — DNI en /turnos + cruce de fichas por niveles (Bloque 1 de 3), en curso
+
+- **Mensaje de WhatsApp**: confirmado contra el pedido nuevo, ya cumplía el texto exacto (sin cambios de código). Emoji 🤗 pedido de nuevo, dejado afuera de nuevo por el mismo motivo ya documentado.
+- **Campo DNI opcional en `/turnos`**: `turnos/index.html` (input `#f-dni`, solo el formulario público del paciente, `/gestion` no se tocó), viaja a `api/reservar.js` → `crearTurno()` (`lib/googleCalendar.js`), se guarda como línea `DNI: ...` en la description del evento. Helper nuevo `extraerDni()`.
+- **Cruce de fichas por niveles** (`pacientes/index.html`): DNI exacto → nombre exacto → mismo teléfono + nombre parecido (Levenshtein, sección nueva "¿Es este paciente?", requiere confirmación manual) → sin match. Endpoint liviano nuevo `modo=telefono` en `api/gestion/pacientes.js` (una celda, no la ficha completa) para no pagar el costo de traer teléfono de cada ficha en bulk.
+- De paso: reintentos agregados a `moverPropio()` (`api/reservar.js`) y `api/gestion/turnos-dia.js`, que habían quedado afuera del pase de reintentos de vueltas anteriores.
+- **Bloque 2 (reintentos + cron de salud)**: `conReintentos` agregado a todas las llamadas de Sheets/Drive que faltaban en `api/gestion/pacientes.js` (~25 call sites), más anti-duplicado en `crearPaciente()` (mismo criterio que `crearTurno`). `vercel.json` nuevo con cron diario a las 4:00 AM Argentina (`0 7 * * *` UTC) → `modo=healthcheck` en `api/gestion/pacientes.js` (sin archivo nuevo, sigue en 12 funciones), autenticado con `CRON_SECRET` (no `GESTION_KEY`, para no exponerla en `vercel.json`). Prueba Calendar + Sheets/Drive sin crear datos reales; si falla, email de alerta. Falta setear `CRON_SECRET` en Vercel.
+- **Bloque 3 (formato de fichas)**: DNI mostrado con puntos de miles (`formatearDni()`, solo presentación, el dato guardado sigue siendo dígitos crudos) en los 4 lugares donde aparece. Botones "Estado de prestación obra social" y "Volver a la lista" más grandes. Estado financiero: Total y Pagado ocultos de la vista (siguen calculándose igual, backend sin cambios), queda solo Saldo + indicador al día/días sin pago. El formato mayúscula-solo-primera-letra en Nombre/Apellido/etc. ya estaba resuelto de antes, no hizo falta tocar nada.
+- Pendiente: probar todo en preview de Vercel (escenarios pedidos) antes de mergear a `main`.
+
 ## 2026-08-12 (sexta vuelta) — Fila de `/gestion` más liviana + fix del mensaje de WhatsApp, primera vez en rama+preview
 
 - **Proceso nuevo**: primera vuelta hecha siguiendo la regla recién agregada a `CLAUDE.md` — rama separada (`fix/gestion-fila-botones-whatsapp`), probada en el deploy de preview de Vercel de esa rama, recién mergeada a `main` después de confirmar. Directamente a raíz del incidente de la vuelta anterior.

@@ -1,9 +1,10 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
   toArgDate, eventBounds, isValidGestionKey, extraerTelefono, extraerEsNuevoPaciente,
-  extraerTelefonoVerificado, extraerConfirmado,
+  extraerTelefonoVerificado, extraerConfirmado, extraerDni,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
+import { conReintentos } from '../../lib/retry.js';
 
 export default async function handler(req, res) {
   if (!isValidGestionKey(req.query.key)) {
@@ -18,18 +19,18 @@ export default async function handler(req, res) {
     const calendar = getCalendarClient();
 
     const [principal, sobreturnos] = await Promise.all([
-      calendar.events.list({
+      conReintentos(() => calendar.events.list({
         calendarId: CALENDAR_ID,
         timeMin: dayStart.toISOString(),
         timeMax: dayEnd.toISOString(),
         singleEvents: true,
-      }),
-      calendar.events.list({
+      })),
+      conReintentos(() => calendar.events.list({
         calendarId: SOBRETURNOS_CALENDAR_ID,
         timeMin: dayStart.toISOString(),
         timeMax: dayEnd.toISOString(),
         singleEvents: true,
-      }),
+      })),
     ]);
 
     const items = [];
@@ -48,6 +49,7 @@ export default async function handler(req, res) {
         tipo: isBloqueo ? 'bloqueo' : 'turno',
         allDay,
         telefono: extraerTelefono(ev.description),
+        dni: extraerDni(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
         confirmado: extraerConfirmado(ev.description),
@@ -66,6 +68,7 @@ export default async function handler(req, res) {
         tipo: 'sobreturno',
         allDay: !ev.start.dateTime,
         telefono: extraerTelefono(ev.description),
+        dni: extraerDni(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
         confirmado: extraerConfirmado(ev.description),

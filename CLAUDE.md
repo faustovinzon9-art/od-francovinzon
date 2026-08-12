@@ -53,6 +53,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 - `GESTION_KEY` — clave de acceso al panel `/gestion` (la usa Ayelen). Se manda como `key` en cada request a `/api/gestion/*`, nunca queda logueada en el cliente salvo `sessionStorage`.
 - `GEMINI_API_KEY` — clave de la API de Gemini, usada solo server-side por `api/gestion/asistente.js` (asistente de ayuda del panel). Nunca se expone al frontend.
 - `RESEND_API_KEY` — opcional. Clave de la API de Resend, usada solo por `lib/alertas.js` (`avisarFallo()`) para mandar un email a Fausto cuando algo falla de verdad después de agotar los reintentos automáticos (`lib/retry.js`). Sin esta variable, `avisarFallo()` no hace más que un `console.error` — nunca tira, nunca rompe el endpoint que la llama.
+- `CRON_SECRET` — necesaria para que el chequeo de salud diario (`vercel.json`, `modo=healthcheck` en `api/gestion/pacientes.js`, 4:00 AM hora Argentina) funcione. Vercel manda automáticamente `Authorization: Bearer <valor>` en cada invocación de cron cuando esta variable está seteada — sin ella, el endpoint devuelve 401 y el cron nunca hace nada útil (no rompe nada, solo queda inactivo). Se genera un valor random cualquiera, no depende de ningún servicio externo.
 
 ## Límite de 12 Serverless Functions (plan Hobby de Vercel)
 
@@ -102,3 +103,13 @@ Esto aplica en particular a cualquier cosa que toque `lib/googleCalendar.js`, `l
 - **Una vez el webhook de GitHub→Vercel no disparó** un deploy con un push válido; se resolvió con un commit vacío/trivial para forzar un nuevo push. Si un deploy no aparece en absoluto en el dashboard de Vercel después de varios minutos (no "Building", directamente no existe), sospechar esto antes que un error de código.
 - **No hacer polling agresivo (loops cortos de curl) contra el dominio de producción** — en algún momento disparó el modo de protección anti-bot de Vercel (`x-vercel-mitigated: challenge`) y bloqueó el sitio real para visitantes reales, no solo para mí. Espaciar los chequeos (≥20-30s entre intentos) y avisar al usuario para que confirme desde su propio navegador en vez de insistir con requests automáticos.
 - Al tocar rutas que llaman a Google Calendar API en un loop (migraciones, procesar muchos eventos): la cuota de Google es ~600 requests/min/usuario, **compartida con el tráfico real del sitio**. Usar lotes chicos (~40) secuenciales con una pausa (~150ms) entre llamadas, nunca `Promise.all` sobre muchos `events.patch`/`insert` a la vez.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

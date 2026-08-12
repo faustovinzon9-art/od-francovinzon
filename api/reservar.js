@@ -4,6 +4,7 @@ import {
   extraerTelefono, extraerMotivo, extraerEsNuevoPaciente, extraerConfirmado, escribirConfirmado,
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
+import { conReintentos } from '../lib/retry.js';
 
 // El ticket térmico imprime un QR también para sobreturnos (ver gestion/index.html),
 // así que "obtener"/"cancelar" tienen que poder apuntar a SOBRETURNOS_CALENDAR_ID —
@@ -32,10 +33,10 @@ export default async function handler(req, res) {
   if (accion === 'confirmar') return confirmarPropio(req, res);
 
   try {
-    const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
+    const { date, time, nombre, apellido, telefono, dni, motivo, esNuevo } = req.body;
     const calendar = getCalendarClient();
     // Misma lógica que usa el chatbot para la reserva conversacional — ver lib/googleCalendar.js.
-    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, motivo, esNuevo });
+    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, motivo, esNuevo });
     res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
@@ -56,7 +57,7 @@ async function obtenerPropio(req, res) {
       return res.status(200).json({ success: false, message: 'Falta el turno a consultar.' });
     }
     const calendar = getCalendarClient();
-    const { data: ev } = await calendar.events.get({ calendarId: resolverCalendarId(calendarId), eventId });
+    const { data: ev } = await conReintentos(() => calendar.events.get({ calendarId: resolverCalendarId(calendarId), eventId }));
     // Un turno recién cancelado no siempre tira error en events.get de entrada —
     // Google Calendar puede devolver el recurso igual con status: 'cancelled'
     // (tombstone) en vez de un 404 inmediato. Bug real encontrado probando el QR
@@ -95,12 +96,12 @@ async function confirmarPropio(req, res) {
     }
     const calendar = getCalendarClient();
     const calId = resolverCalendarId(calendarId);
-    const { data: ev } = await calendar.events.get({ calendarId: calId, eventId });
+    const { data: ev } = await conReintentos(() => calendar.events.get({ calendarId: calId, eventId }));
     if (ev.status === 'cancelled') {
       return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
     }
     const nuevaDescripcion = escribirConfirmado(ev.description || '', true);
-    await calendar.events.patch({ calendarId: calId, eventId, requestBody: { description: nuevaDescripcion } });
+    await conReintentos(() => calendar.events.patch({ calendarId: calId, eventId, requestBody: { description: nuevaDescripcion } }));
     res.status(200).json({ success: true, message: '¡Turno confirmado! Gracias por avisarnos.' });
   } catch (err) {
     console.error(err);
@@ -116,7 +117,7 @@ async function cancelarPropio(req, res) {
       return res.status(200).json({ success: false, message: 'Falta el turno a cancelar.' });
     }
     const calendar = getCalendarClient();
-    await calendar.events.delete({ calendarId: resolverCalendarId(calendarId), eventId });
+    await conReintentos(() => calendar.events.delete({ calendarId: resolverCalendarId(calendarId), eventId }));
     res.status(200).json({ success: true, message: 'Turno cancelado.' });
   } catch (err) {
     console.error(err);
@@ -140,12 +141,12 @@ async function moverPropio(req, res) {
     // El horario elegido siempre es del calendario principal (30 min) — tanto para
     // reprogramar un turno común como para convertir un sobreturno en uno — así que
     // el chequeo de solapamiento es siempre contra CALENDAR_ID.
-    const { data: existing } = await calendar.events.list({
+    const { data: existing } = await conReintentos(() => calendar.events.list({
       calendarId: CALENDAR_ID,
       timeMin: newStart.toISOString(),
       timeMax: newEnd.toISOString(),
       singleEvents: true,
-    });
+    }));
 
     const overlapping = (existing.items || []).some((ev) => {
       if (ev.id === eventId) return false;
@@ -164,7 +165,7 @@ async function moverPropio(req, res) {
       // el evento en el otro calendario con la duración correcta. Se crea primero
       // el turno nuevo y recién si sale bien se borra el sobreturno viejo, para no
       // perder el turno si algo falla en el medio (ver decisions.md).
-      const { data: original } = await calendar.events.get({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId });
+      const { data: original } = await conReintentos(() => calendar.events.get({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId }));
       if (original.status === 'cancelled') {
         return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
       }
@@ -185,7 +186,7 @@ async function moverPropio(req, res) {
       });
       if (!resultado.success) return res.status(200).json(resultado);
 
-      await calendar.events.delete({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId });
+      await conReintentos(() => calendar.events.delete({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId }));
 
       return res.status(200).json({
         success: true,
@@ -195,14 +196,14 @@ async function moverPropio(req, res) {
       });
     }
 
-    await calendar.events.patch({
+    await conReintentos(() => calendar.events.patch({
       calendarId: CALENDAR_ID,
       eventId,
       requestBody: {
         start: { dateTime: newStart.toISOString(), timeZone: TIME_ZONE },
         end: { dateTime: newEnd.toISOString(), timeZone: TIME_ZONE },
       },
-    });
+    }));
 
     res.status(200).json({
       success: true,

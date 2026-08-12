@@ -881,7 +881,7 @@
   const saludoActual = () => {
     let hora = parseInt(new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(new Date()), 10);
     if (hora === 24) hora = 0; // algunos motores devuelven "24" para la medianoche con hour12:false
-    return hora < 12 ? 'buenos días' : 'buenas tardes';
+    return hora < 13 ? 'buenos días' : 'buenas tardes'; // corte a las 13hs, a pedido explícito (2026-08-12)
   };
 
   // Link de "Detalles de tu turno" (/turno) — mismo destino que el QR del ticket
@@ -1465,18 +1465,23 @@
 
     const nombre = it.title || 'paciente';
     const tipoTexto = it.tipo === 'sobreturno' ? 'sobreturno' : 'turno';
+    const cuandoCap = cuando.charAt(0).toUpperCase() + cuando.slice(1);
     const link = armarLinkTurno(it);
-    // Texto y estructura a pedido explícito (2026-08-12) — revierte la decisión previa
-    // de no incluir "con Franco"/"Te esperamos" (ver decisions.md). Sigue sin emoji a
-    // propósito: wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text"
-    // (se comprobó con 😊🦷✅⏰👍🤗, todos terminan como el carácter de reemplazo "�" ya
-    // en el propio href hacia web.whatsapp.com — no es un problema de nuestro
-    // encodeURIComponent, así que agregar el 🤗 pedido no se ve bien del otro lado).
-    // Corregido (2026-08-12, segunda vuelta): el saludo NO lleva el nombre — quedaba
-    // repetido dos veces en la misma oración ("Hola ... Fausto Vinzon ... turno Fausto
-    // Vinzon..."). El nombre va una sola vez, en la parte del turno.
-    return `¡Hola, ${saludoActual()}! Te escribía para recordarte que ${cuando} tiene ${tipoTexto} ${nombre} con Franco a las ${fmtHora(it.start)}hs. Cualquier cosita que no puedas venir avisar. Te esperamos.\n\n` +
-      `Para confirmar, cancelar o cambiar el turno, entrá acá: ${link}`;
+    // Plantilla reescrita de nuevo (2026-08-12, tercera vuelta) — saludo neutral a
+    // propósito: el número de WhatsApp guardado no siempre es el de la persona que
+    // tiene el turno (puede ser un familiar), así que ya no se asume ni se escribe
+    // ningún nombre en el saludo — ni el del paciente ni el de quien recibe el
+    // mensaje. El nombre del paciente va en su propia línea, bien claro, más abajo.
+    // Sigue sin emoji a propósito, re-confirmado empíricamente en esta misma vuelta:
+    // wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text" (se
+    // comprobó de nuevo con 🤗 justo ahora, termina como el carácter de reemplazo "�"
+    // ya en el propio href hacia web.whatsapp.com, antes de llegar al chat) — no es
+    // un problema de nuestro encodeURIComponent. Ver decisions.md.
+    return `¡Hola, ${saludoActual()}!!! Te quería recordar el siguiente ${tipoTexto}:\n\n` +
+      `${nombre}\n` +
+      `${cuandoCap} a las ${fmtHora(it.start)}hs\n\n` +
+      `Es importante que entres a este link para confirmar el ${tipoTexto}, si no queda sin confirmar: ${link}\n\n` +
+      `Cualquier cosita que no puedas venir avisar. Te esperamos.`;
   }
 
   function armarLinkWhatsApp(telefonoRaw) {
