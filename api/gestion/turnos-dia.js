@@ -1,7 +1,7 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
   toArgDate, eventBounds, isValidGestionKey, extraerTelefono, extraerEsNuevoPaciente,
-  extraerTelefonoVerificado, extraerConfirmado, extraerDni,
+  extraerTelefonoVerificado, extraerConfirmado, extraerDni, extraerCodigoCorto,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
         allDay,
         telefono: extraerTelefono(ev.description),
         dni: extraerDni(ev.description),
+        codigoCorto: extraerCodigoCorto(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
         confirmado: extraerConfirmado(ev.description),
@@ -69,6 +70,7 @@ export default async function handler(req, res) {
         allDay: !ev.start.dateTime,
         telefono: extraerTelefono(ev.description),
         dni: extraerDni(ev.description),
+        codigoCorto: extraerCodigoCorto(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
         confirmado: extraerConfirmado(ev.description),

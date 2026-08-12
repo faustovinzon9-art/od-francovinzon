@@ -898,6 +898,32 @@
     return `${location.origin}/turno?${params.toString()}`;
   }
 
+  // Link corto /t/CODIGO (ver api/reservar.js) — usa el código que ya venga en el item
+  // (turnos nuevos, generado al crear, ver turnos-dia.js) o lo pide al backend recién
+  // acá, al necesitarlo (turnos viejos sin código todavía) — no hay ninguna migración
+  // masiva, se genera "al vuelo" la primera vez que se manda el WhatsApp o se arma el
+  // ticket de ESE turno puntual. Si el pedido falla por lo que sea, cae al link largo
+  // de siempre (armarLinkTurno) en vez de romper el flujo.
+  async function armarLinkCortoTurno(item) {
+    let codigo = item.codigoCorto;
+    if (!codigo) {
+      try {
+        const r = await fetch('/api/gestion/evento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: gestionKey, accion: 'asegurar-codigo-corto', eventId: item.id, calendarId: item.calendarId }),
+        });
+        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+        const data = await r.json();
+        if (data.success && data.codigoCorto) {
+          codigo = data.codigoCorto;
+          item.codigoCorto = codigo; // cachea en el item para no volver a pedirlo esta sesión
+        }
+      } catch (e) { /* cae al link largo abajo */ }
+    }
+    return codigo ? `${location.origin}/t/${codigo}` : armarLinkTurno(item);
+  }
+
   const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
   let gestionKey = sessionStorage.getItem('gestionKey') || '';
@@ -1455,7 +1481,7 @@
     return digitos;
   }
 
-  function mensajeRecordatorio(it) {
+  async function mensajeRecordatorio(it) {
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(it.start));
     const hoy = todayStr();
     const [hy, hm, hd] = hoy.split('-').map(Number);
@@ -1469,21 +1495,21 @@
     const nombre = it.title || 'paciente';
     const tipoTexto = it.tipo === 'sobreturno' ? 'sobreturno' : 'turno';
     const cuandoCap = cuando.charAt(0).toUpperCase() + cuando.slice(1);
-    const link = armarLinkTurno(it);
-    // Plantilla reescrita de nuevo (2026-08-12, tercera vuelta) — saludo neutral a
-    // propósito: el número de WhatsApp guardado no siempre es el de la persona que
-    // tiene el turno (puede ser un familiar), así que ya no se asume ni se escribe
-    // ningún nombre en el saludo — ni el del paciente ni el de quien recibe el
-    // mensaje. El nombre del paciente va en su propia línea, bien claro, más abajo.
-    // Sigue sin emoji a propósito, re-confirmado empíricamente en esta misma vuelta:
-    // wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text" (se
-    // comprobó de nuevo con 🤗 justo ahora, termina como el carácter de reemplazo "�"
-    // ya en el propio href hacia web.whatsapp.com, antes de llegar al chat) — no es
-    // un problema de nuestro encodeURIComponent. Ver decisions.md.
+    const link = await armarLinkCortoTurno(it);
+    // Plantilla (2026-08-12, novena vuelta): el saludo, el nombre, la fecha/hora y el
+    // cierre son la voz auténtica de Ayelen, sin tocar. Lo único que cambió acá es la
+    // línea del link — antes sonaba acartonada ("Es importante que entres a este link
+    // para confirmar..."), ahora directa e informal, en su propia línea, con el link
+    // corto (/t/CODIGO, ver api/reservar.js) en vez del link largo con el eventId y el
+    // calendarId codificado.
+    // Sin emoji en esa línea a propósito, aunque el pedido original sugería un 👇: sigue
+    // sin resolverse el bug ya comprobado varias veces (ver decisions.md) de que
+    // wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text" antes de
+    // llegar al chat — se avisa explícitamente, no es un olvido.
     return `¡Hola, ${saludoActual()}!!! Te quería recordar el siguiente ${tipoTexto}:\n\n` +
       `${nombre}\n` +
-      `${cuandoCap} a las ${fmtHora(it.start)}hs\n\n` +
-      `Es importante que entres a este link para confirmar el ${tipoTexto}, si no queda sin confirmar: ${link}\n\n` +
+      `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
+      `Tocá este link para confirmarlo:\n${link}\n\n` +
       `Cualquier cosita que no puedas venir avisar. Te esperamos.`;
   }
 
@@ -1498,12 +1524,15 @@
     const badgeLabel = it.tipo === 'turno' ? 'Turno' : it.tipo === 'sobreturno' ? 'Sobreturno' : 'Bloqueado';
     const esNuevo = !!it.esNuevoPaciente;
     const waLinkBase = it.tipo !== 'bloqueo' ? armarLinkWhatsApp(it.telefono) : null;
-    const waLink = waLinkBase ? `${waLinkBase}?text=${encodeURIComponent(mensajeRecordatorio(it))}` : null;
 
     const botones = [];
-    if (waLink) {
+    if (waLinkBase) {
+      // Antes era un <a href> armado eager con el mensaje ya codificado — ahora
+      // mensajeRecordatorio() es async (necesita asegurar el link corto, ver
+      // armarLinkCortoTurno), así que el link final se arma recién al click
+      // (enviarWhatsApp(), delegado más abajo), no de antemano al renderizar la fila.
       botones.push(`<span class="wa-edit-wrap">` +
-        `<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></a>` +
+        `<button type="button" class="icon-btn wa-btn" data-action="enviar-whatsapp" data-idx="${idx}" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></button>` +
         `<button type="button" class="wa-edit-pencil" data-action="editar-tel" data-idx="${idx}" title="Editar teléfono">${PENCIL_ICON}</button>` +
         `</span>`);
     } else if (it.tipo !== 'bloqueo') {
@@ -1602,8 +1631,20 @@
       cancelarTelefonoInline(idx);
     } else if (action === 'confirmar-toggle') {
       confirmarToggle(idx, item);
+    } else if (action === 'enviar-whatsapp') {
+      enviarWhatsApp(item);
     }
   });
+
+  // Arma el mensaje (async, ver mensajeRecordatorio) recién al tocar el ícono de
+  // WhatsApp — antes el link ya estaba en el href de un <a>, armado de antemano al
+  // renderizar la fila; ahora hace falta esperar a asegurar el link corto primero.
+  async function enviarWhatsApp(item) {
+    const base = armarLinkWhatsApp(item.telefono);
+    if (!base) return;
+    const texto = await mensajeRecordatorio(item);
+    window.open(`${base}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+  }
 
   // Toggle manual del indicador verde/rojo (ver renderRow) — pensado para cuando
   // Ayelen se entera por teléfono/WhatsApp de que el paciente confirmó (o para
@@ -1840,7 +1881,7 @@
           const itemTicket = {
             id: res.eventId, calendarId: res.calendarId,
             title: `${nombre} ${apellido}`.trim(), start: `${currentDate}T${hora}:00-03:00`,
-            allDay: false, tipo: 'sobreturno',
+            allDay: false, tipo: 'sobreturno', codigoCorto: res.codigoCorto,
           };
           cargarAgenda().then(() => { resaltarEvento(res.eventId, res.calendarId); ofrecerImprimir(itemTicket); });
         }
@@ -2056,7 +2097,7 @@
           const itemTicket = {
             id: res.eventId, calendarId: res.calendarId,
             title: `${nombre} ${apellido}`.trim(), start: `${mcFecha}T${mcHora}:00-03:00`,
-            allDay: false,
+            allDay: false, codigoCorto: res.codigoCorto,
           };
           cargarAgenda().then(() => { resaltarEvento(res.eventId, res.calendarId); ofrecerImprimir(itemTicket); });
         }
@@ -2282,7 +2323,7 @@
   // Llena #ticket-print con los datos de item — compartido entre la previsualización
   // manual (abrirTicketPreview) y la impresión directa después de crear/mover un
   // turno (imprimirTicketDirecto, ver más abajo), para no duplicar esta lógica.
-  function armarContenidoTicket(item) {
+  async function armarContenidoTicket(item) {
     const fechaLarga = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(item.start));
     document.getElementById('ticket-badge-sobreturno').classList.toggle('hidden', item.tipo !== 'sobreturno');
     document.getElementById('ticket-nombre').textContent = item.title || '(sin título)';
@@ -2293,9 +2334,9 @@
     // El QR apunta a /turno (página propia, distinta de /turnos) — reusa la misma API
     // de "obtener/mover/cancelar/confirmar" de api/reservar.js, pero con su propio
     // diseño y texto ("Detalles de tu turno", no "Reservar turno"). Ver decisions.md.
-    // Mismo link que ahora también manda mensajeRecordatorio() por WhatsApp — ver
-    // armarLinkTurno() más arriba.
-    const ticketUrl = armarLinkTurno(item);
+    // Ahora usa el link corto /t/CODIGO en vez del link largo — menos denso, más fácil
+    // de leer para un QR (ver armarLinkCortoTurno más arriba).
+    const ticketUrl = await armarLinkCortoTurno(item);
 
     const qrEl = document.getElementById('ticket-qr');
     qrEl.innerHTML = '';
@@ -2303,8 +2344,8 @@
     new QRCode(qrEl, { text: ticketUrl, width: 110, height: 110, colorDark: '#000000', colorLight: '#ffffff' });
   }
 
-  function abrirTicketPreview(item) {
-    armarContenidoTicket(item);
+  async function abrirTicketPreview(item) {
+    await armarContenidoTicket(item);
     ticketModalOverlay.classList.remove('hidden');
     requestAnimationFrame(() => ticketModalOverlay.classList.add('show'));
   }
@@ -2316,8 +2357,8 @@
 
   // Impresión directa (sin mostrar la previsualización manual) — la usa
   // ofrecerImprimir() de abajo cuando la secretaria toca "Sí" en el cartel.
-  function imprimirTicketDirecto(item) {
-    armarContenidoTicket(item);
+  async function imprimirTicketDirecto(item) {
+    await armarContenidoTicket(item);
     window.print();
   }
 

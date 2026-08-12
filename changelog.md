@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-12 (novena vuelta) — Link corto de gestión de turno (/t/CODIGO) + tono del link en el WhatsApp
+
+Rama `feature/link-corto-turno`. **Sin probar contra Calendar/Vercel real** — este entorno no tiene credenciales de Google ni acceso a la API de Vercel. Ver `tasks.md` para el detalle exacto de qué se verificó de forma aislada (generación/extracción del código) y qué queda pendiente de confirmar en vivo antes de mergear.
+
+- Código corto de 6 caracteres (`Código corto: XXXXXX` en la description, mismo patrón que el resto de los campos), generado al crear el turno o "al vuelo" la primera vez que hace falta para uno viejo (sin migración masiva).
+- Endpoint público `/t/:codigo` vía rewrite en `vercel.json` (no un archivo nuevo en `api/` — sigue en 12 funciones), busca en los dos calendarios y redirige (302) al link largo; si no existe, página de error simple con WhatsApp.
+- Link corto ahora usado en "Guardar acceso a mi turno" (`/turnos`), el mensaje de WhatsApp y el QR del ticket (`/gestion`).
+- Reescrita solo la línea del link en el mensaje de WhatsApp (tono más directo) — el resto del mensaje (voz de Ayelen) intacto. El 👇 sugerido se dejó afuera por el bug ya conocido de emojis corrompidos en `wa.me`.
+- Meta tags Open Graph agregadas a `/turno` para que el link corto tenga una vista previa decente en WhatsApp (no se pudo confirmar visualmente desde acá).
+
 ## 2026-08-12 (octava vuelta) — Tarjeta de confirmación de /turnos (cartel de horarios, compartir acceso, calendario unificado) + 2 ajustes en /gestion
 
 Rama `feature/turno-confirmacion-mejoras`.

@@ -2,6 +2,7 @@ import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
   toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
   extraerTelefono, extraerMotivo, extraerEsNuevoPaciente, extraerConfirmado, escribirConfirmado,
+  extraerCodigoCorto, asegurarCodigoCorto,
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
 import { conReintentos } from '../lib/retry.js';
@@ -15,6 +16,12 @@ function resolverCalendarId(calendarId) {
 }
 
 export default async function handler(req, res) {
+  // Link corto /t/CODIGO (rewrite en vercel.json, "/t/:codigo" -> "/api/reservar?codigo=:codigo")
+  // — público, GET, sin key. Ver resolverCodigoCorto más abajo.
+  if (req.method === 'GET' && req.query.codigo) {
+    return resolverCodigoCorto(req, res);
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
@@ -67,12 +74,17 @@ async function obtenerPropio(req, res) {
       return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
     }
     const { start } = eventBounds(ev);
+    // Asegura el código corto acá también (turnos viejos, creados antes de este
+    // cambio, podrían no tenerlo todavía) — así /turnos puede armar el link corto
+    // para "Guardar acceso a mi turno" sin importar por dónde se llegó a esta pantalla.
+    const codigoCorto = await asegurarCodigoCorto(calendar, resolverCalendarId(calendarId), eventId, ev.description || '');
     res.status(200).json({
       success: true,
       nombre: ev.summary || '',
       date: formatArgDay(start),
       time: formatArgTime(start),
       confirmado: extraerConfirmado(ev.description || ''),
+      codigoCorto,
     });
   } catch (err) {
     // events.get tira si el turno ya no existe (cancelado, o id inválido/de otro
@@ -80,6 +92,69 @@ async function obtenerPropio(req, res) {
     console.error(err);
     res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
   }
+}
+
+// Resuelve el link corto /t/CODIGO -> redirige (302) al link largo real
+// (/turno?eventId=...&calendarId=...&tipo=...). Público, sin key: el código de 6
+// caracteres cumple el mismo rol que el eventId largo (conocerlo alcanza), ver
+// decisions.md sobre el modelo de seguridad de mover/cancelar/obtener/confirmar.
+// Busca por texto (`q`) en los dos calendarios, sin límite de fecha — mismo criterio
+// que telefonoDesdeTurnos en api/gestion/pacientes.js — y confirma el match EXACTO
+// contra la description antes de redirigir, porque `q` es búsqueda difusa (podría
+// devolver falsos positivos si el código apareciera suelto en otro campo).
+async function resolverCodigoCorto(req, res) {
+  const codigo = (req.query.codigo || '').toString().trim().toUpperCase();
+  if (!codigo) return paginaLinkInvalido(res);
+
+  try {
+    const calendar = getCalendarClient();
+    const [principal, sobreturnos] = await Promise.all([
+      conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, q: codigo, maxResults: 50, singleEvents: true })),
+      conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, q: codigo, maxResults: 50, singleEvents: true })),
+    ]);
+
+    const candidatos = [
+      ...(principal.data.items || []).map((ev) => ({ ev, calendarId: CALENDAR_ID })),
+      ...(sobreturnos.data.items || []).map((ev) => ({ ev, calendarId: SOBRETURNOS_CALENDAR_ID })),
+    ];
+    const match = candidatos.find(({ ev }) => ev.status !== 'cancelled' && extraerCodigoCorto(ev.description) === codigo);
+    if (!match) return paginaLinkInvalido(res);
+
+    const params = new URLSearchParams({ eventId: match.ev.id });
+    if (match.calendarId === SOBRETURNOS_CALENDAR_ID) {
+      params.set('calendarId', match.calendarId);
+      params.set('tipo', 'sobreturno');
+    }
+    res.redirect(302, `/turno?${params.toString()}`);
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'resolver código corto', error: err });
+    paginaLinkInvalido(res);
+  }
+}
+
+// Página simple (sin depender de ningún archivo estático) para un código corto
+// inválido o vencido (turno cancelado, o alguien tipeó mal el link) — mismo número de
+// WhatsApp del consultorio que usa el resto del sitio.
+function paginaLinkInvalido(res) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.status(404).send(`<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Link no válido | Franco Vinzón Odontólogo</title>
+<style>
+  body { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #FAF9F6; color: #2A2A2A; margin: 0; padding: 40px 20px; text-align: center; }
+  .box { max-width: 380px; margin: 60px auto 0; background: #FFFFFF; border-radius: 22px; padding: 32px 24px; box-shadow: 0 2px 18px rgba(30,58,95,.08); }
+  h1 { font-size: 19px; color: #1E3A5F; margin: 0 0 10px; font-family: Georgia, serif; }
+  p { font-size: 14px; line-height: 1.5; color: #6B6656; margin: 0 0 20px; }
+  a.wa { display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: #25D366; color: #fff; text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 11px 20px; border-radius: 100px; }
+</style></head>
+<body>
+  <div class="box">
+    <h1>Este link ya no es válido</h1>
+    <p>Puede que el turno haya sido cancelado o que el link haya vencido. Escribinos y te ayudamos.</p>
+    <a class="wa" href="https://wa.me/5403442457764">Escribinos por WhatsApp</a>
+  </div>
+</body></html>`);
 }
 
 // Acción 'confirmar' — el paciente toca "Confirmo el turno" desde /turno (link que
@@ -193,8 +268,15 @@ async function moverPropio(req, res) {
         message: `Turno reprogramado para el ${date} a las ${time} hs (hora Argentina).`,
         eventId: resultado.eventId,
         calendarId: CALENDAR_ID,
+        codigoCorto: resultado.codigoCorto,
       });
     }
+
+    // Se asegura el código corto antes de reprogramar (un turno viejo podría no
+    // tenerlo todavía) — para turnos que ya lo tienen esto es solo una lectura, no
+    // agrega ninguna escritura de más. Ver asegurarCodigoCorto en lib/googleCalendar.js.
+    const { data: original } = await conReintentos(() => calendar.events.get({ calendarId: CALENDAR_ID, eventId }));
+    const codigoCorto = await asegurarCodigoCorto(calendar, CALENDAR_ID, eventId, original.description || '');
 
     await conReintentos(() => calendar.events.patch({
       calendarId: CALENDAR_ID,
@@ -210,6 +292,7 @@ async function moverPropio(req, res) {
       message: `Turno reprogramado para el ${date} a las ${time} hs (hora Argentina).`,
       eventId,
       calendarId: CALENDAR_ID,
+      codigoCorto,
     });
   } catch (err) {
     console.error(err);

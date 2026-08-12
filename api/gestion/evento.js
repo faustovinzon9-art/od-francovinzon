@@ -1,5 +1,6 @@
 import {
   getCalendarClient, TIME_ZONE, toArgDate, eventBounds, isValidGestionKey, escribirConfirmado,
+  asegurarCodigoCorto,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 
@@ -22,6 +23,16 @@ export default async function handler(req, res) {
     if (accion === 'cancelar') {
       await calendar.events.delete({ calendarId, eventId });
       return res.status(200).json({ success: true, message: 'Turno cancelado.' });
+    }
+
+    // Genera el link corto /t/CODIGO al vuelo para turnos viejos que todavía no lo
+    // tienen (creados antes de este cambio) — la usa gestion/index.html justo antes de
+    // mandar el WhatsApp o armar el QR del ticket, no hay ninguna migración masiva.
+    // Idempotente: si el turno ya tiene código, no escribe nada, solo lo devuelve.
+    if (accion === 'asegurar-codigo-corto') {
+      const { data: original } = await calendar.events.get({ calendarId, eventId });
+      const codigoCorto = await asegurarCodigoCorto(calendar, calendarId, eventId, original.description || '');
+      return res.status(200).json({ success: true, codigoCorto });
     }
 
     // Toggle manual del indicador verde/rojo de la agenda (Ayelen marca "Confirmado" al
