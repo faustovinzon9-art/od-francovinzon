@@ -31,11 +31,47 @@
   .login-box button { width: 100%; background: var(--navy); color: var(--white); border: none; padding: 11px; border-radius: 10px; font-weight: 600; }
   .login-error { color: var(--bloqueo); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
 
-  #app { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; opacity: 0; }
+  #app { max-width: 1240px; margin: 0 auto; padding: 20px 16px 60px; opacity: 0; }
   #app.fade-in { opacity: 1; transition: opacity .2s ease; }
   .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
   .topbar img { width: 190px; max-width: 50vw; height: auto; }
-  .volver-link { margin-left: auto; color: var(--muted); font-size: 12.5px; text-decoration: underline; }
+  #volver-gestion { margin-left: auto; margin-bottom: 0; }
+
+  /* Desktop ancho (≥1000px, mismo breakpoint que /gestion): sidebar de resumen a la
+     izquierda + contenido a la derecha, en vez de todo apilado y centrado en una columna
+     angosta como en mobile. Mobile queda intacto — el sidebar no existe ahí. */
+  .sidebar { display: none; }
+  .main-content { max-width: 720px; margin: 0 auto; }
+  @media (min-width: 1000px) {
+    .layout { display: flex; align-items: flex-start; gap: 32px; }
+    .sidebar {
+      display: block; width: 260px; flex-shrink: 0; position: sticky; top: 20px;
+      background: var(--white); border-radius: 16px; padding: 20px; box-shadow: 0 1px 8px rgba(30,58,95,.06);
+    }
+    .main-content { max-width: 900px; margin: 0; flex: 1; min-width: 0; }
+  }
+  .sidebar h1 { font-size: 19px; margin-bottom: 4px; }
+  .sidebar-date { color: var(--muted); font-size: 12.5px; text-transform: capitalize; margin-bottom: 16px; }
+  .sidebar-summary { display: flex; flex-direction: column; gap: 9px; padding: 15px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  .summary-line { font-size: 13.5px; color: var(--text); line-height: 1.4; }
+  .summary-line strong { color: var(--navy); font-weight: 700; }
+  .sidebar-tasks .tasks-title { font-size: 12.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 10px; }
+  .task-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+  .task-item + .task-item { border-top: 1px solid var(--line); }
+  .task-item.urgent, .task-item.urgent + .task-item { border-top: none; }
+  .task-item.urgent { background: rgba(193,68,55,.07); border: 1px solid rgba(193,68,55,.2); border-radius: 9px; padding: 7px 9px; margin-bottom: 6px; }
+  .task-item-icon { flex-shrink: 0; font-size: 12.5px; line-height: 1; }
+  .task-item-info { flex: 1; min-width: 0; }
+  .task-item-nombre { font-size: 12.5px; font-weight: 600; color: var(--bloqueo); }
+  .task-item-detalle { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .task-item-btn { padding: 5px 11px; border-radius: 100px; border: 1.5px solid var(--gold); background: var(--white); color: var(--gold); font-size: 10.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+
+  /* Detalle de ficha: "Datos del paciente" a la izquierda, Estado financiero +
+     Movimientos a la derecha, en vez de todo apilado — mismo breakpoint que el sidebar. */
+  .ficha-columns { display: block; }
+  @media (min-width: 1000px) {
+    .ficha-columns { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  }
 
   .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .search-box { flex: 1; background: var(--white); border-radius: 14px; padding: 4px 4px 4px 14px; display: flex; align-items: center; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
@@ -219,9 +255,24 @@
 </div>
 
 <div id="app" class="hidden">
+ <div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <h1 id="sidebar-greeting">Hola, Franco</h1>
+    <p class="sidebar-date" id="sidebar-date"></p>
+    <div class="sidebar-summary" id="sidebar-summary">
+      <div class="summary-line"><strong id="sum-turnos">–</strong> turnos hoy</div>
+      <div class="summary-line"><strong id="sum-huecos">–</strong> huecos libres hoy</div>
+    </div>
+    <div class="sidebar-tasks hidden" id="sidebar-tasks">
+      <div class="tasks-title">Tareas pendientes</div>
+      <div id="sidebar-tasks-list"></div>
+    </div>
+  </aside>
+
+  <div class="main-content">
   <div class="topbar">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
-    <a class="volver-link" href="/gestion">← Gestión</a>
+    <button type="button" class="btn-volver hidden" id="volver-gestion">← Gestión</button>
   </div>
 
   <div id="vista-lista" class="vista">
@@ -313,6 +364,8 @@
     </div>
     <button class="btn-obra-social" id="btn-obra-social">🏥 Estado de prestación obra social</button>
 
+    <div class="ficha-columns">
+    <div class="ficha-col-left">
     <div class="panel">
       <h2>Datos del paciente</h2>
       <div class="field-row">
@@ -339,7 +392,9 @@
         <div class="field full"><label>Plan de tratamiento</label><textarea data-campo="planTratamiento"></textarea></div>
       </div>
     </div>
+    </div>
 
+    <div class="ficha-col-right">
     <div class="panel">
       <h2>Estado financiero</h2>
       <div class="financiero-card">
@@ -388,6 +443,8 @@
         <button class="btn-cancel" id="mov-cancelar">Cancelar</button>
       </div>
       <div class="panel-msg hidden" id="mov-msg"></div>
+    </div>
+    </div>
     </div>
 
   </div>
@@ -438,6 +495,8 @@
       <div class="panel-msg hidden" id="pres-msg"></div>
     </div>
   </div>
+  </div>
+ </div>
 </div>
 
 <div id="toast-container"></div>
@@ -465,6 +524,19 @@
   const keyInput = document.getElementById('key-input');
   const loginBtn = document.getElementById('login-btn');
   const loginError = document.getElementById('login-error');
+
+  // "Volver a gestión" solo si se entró desde /gestion (tocando "Acceder a fichas") en
+  // esta sesión de pestaña — no si se entra directo por URL/bookmark. document.referrer
+  // solo refleja la carga de página actual, así que se guarda en sessionStorage para que
+  // sobreviva un F5 dentro de la misma sesión (se borra sola al cerrar la pestaña).
+  if (document.referrer && document.referrer.includes('/gestion')) {
+    sessionStorage.setItem('vinoDesdeGestion', '1');
+  }
+  const btnVolverGestion = document.getElementById('volver-gestion');
+  if (sessionStorage.getItem('vinoDesdeGestion') === '1') {
+    btnVolverGestion.classList.remove('hidden');
+  }
+  btnVolverGestion.addEventListener('click', () => { window.location.href = '/gestion'; });
 
   function tryLogin() {
     const k = keyInput.value.trim();
@@ -586,7 +658,7 @@
       pacientes = await apiGet({ modo: 'listar' });
       renderLista();
       renderBannerDuplicados();
-      cargarPacientesDeHoy(); // no se espera: es una sección secundaria, no bloquea el resto
+      cargarDatosDeHoy(); // no se espera: sección secundaria (carrusel + sidebar), no bloquea el resto
     } catch (e) {
       if (e.message !== 'unauthorized') patientListEl.innerHTML = '<div class="empty-note">No se pudo cargar la lista.</div>';
     }
@@ -635,18 +707,21 @@
     return div.innerHTML;
   }
 
-  // ---------- "Pacientes de hoy": acceso directo de un solo toque ----------
-  // Cruza los turnos de hoy (api/gestion/turnos-dia.js, misma GESTION_KEY que el resto del
-  // panel — no hizo falta ninguna ruta nueva) contra las fichas ya cargadas, con el mismo
-  // criterio best-effort que el autocompletado de teléfono al crear paciente: coincidencia
-  // EXACTA de nombre+apellido normalizado (sin acentos, sin mayúsculas, espacios
-  // colapsados). Si no hay ficha para un turno de hoy, ese turno simplemente no aparece acá
-  // — no crea nada solo, y no queda ningún vínculo permanente entre el turno y la ficha,
-  // es solo una ayuda de acceso rápido que se recalcula cada vez.
+  // ---------- "Pacientes de hoy" + resumen del sidebar + autocompletado cruzado de
+  // teléfono ----------
+  // Un solo fetch de turnos-dia.js (misma GESTION_KEY que el resto del panel — no hizo
+  // falta ninguna ruta nueva) alimenta tres cosas: el carrusel de acceso directo, el
+  // contador "turnos hoy" del sidebar, y el autocompletado cruzado ficha→turno. El match
+  // turno↔ficha usa el mismo criterio best-effort que el autocompletado de teléfono al
+  // crear paciente: coincidencia EXACTA de nombre+apellido normalizado, sin crear ningún
+  // vínculo permanente. Un turno de hoy sin ficha coincidente simplemente no aparece.
   const hoySection = document.getElementById('hoy-section');
   const hoyCarril = document.getElementById('hoy-carril');
   let pacientesDeHoy = [];
 
+  function todayStr() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+  }
   function normalizarNombreCompleto(nombre, apellido) {
     return normalizar(`${(nombre || '').trim()} ${(apellido || '').trim()}`.replace(/\s+/g, ' ').trim());
   }
@@ -654,32 +729,55 @@
     return new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(iso));
   }
 
-  async function cargarPacientesDeHoy() {
+  async function cargarDatosDeHoy() {
+    document.getElementById('sidebar-date').textContent = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', day: 'numeric', month: 'long',
+    }).format(new Date());
+
+    const hoy = todayStr();
+    let turnosReales = [];
     try {
-      const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
       const qs = new URLSearchParams({ date: hoy, key: gestionKey }).toString();
       const r = await fetch(`/api/gestion/turnos-dia?${qs}`);
       if (r.status === 401) { onUnauthorized(); return; }
       const items = await r.json();
-      if (!Array.isArray(items)) { pacientesDeHoy = []; renderPacientesDeHoy(); return; }
+      turnosReales = Array.isArray(items) ? items.filter((it) => it.tipo !== 'bloqueo') : [];
+    } catch (e) { turnosReales = []; }
 
-      const vistos = new Set();
-      pacientesDeHoy = [];
-      items
-        .filter((it) => it.tipo !== 'bloqueo')
-        .sort((a, b) => new Date(a.start) - new Date(b.start))
-        .forEach((it) => {
-          const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
-          if (!nombreTurno) return;
-          const ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
-          if (!ficha || vistos.has(ficha.id)) return;
-          vistos.add(ficha.id);
-          pacientesDeHoy.push({ id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatHoraArg(it.start) });
-        });
+    document.getElementById('sum-turnos').textContent = turnosReales.length;
+    procesarPacientesDeHoy(turnosReales);
+
+    // Huecos libres hoy: mismo endpoint público que ya usa /gestion para su resumen
+    // (api/disponibilidad.js, sin GESTION_KEY — devuelve un array de horarios "HH:mm").
+    try {
+      const r2 = await fetch(`/api/disponibilidad?modo=dia&date=${hoy}`);
+      const huecos = r2.ok ? await r2.json() : [];
+      document.getElementById('sum-huecos').textContent = Array.isArray(huecos) ? huecos.length : '–';
     } catch (e) {
-      pacientesDeHoy = [];
+      document.getElementById('sum-huecos').textContent = '–';
     }
+  }
+
+  function procesarPacientesDeHoy(turnosReales) {
+    const vistos = new Set();
+    const matches = [];
+    turnosReales
+      .slice()
+      .sort((a, b) => new Date(a.start) - new Date(b.start))
+      .forEach((it) => {
+        const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
+        if (!nombreTurno) return;
+        const ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
+        if (!ficha || vistos.has(ficha.id)) return;
+        vistos.add(ficha.id);
+        matches.push({
+          id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatHoraArg(it.start),
+          turnoId: it.id, turnoCalendarId: it.calendarId, turnoTelefono: it.telefono,
+        });
+      });
+    pacientesDeHoy = matches;
     renderPacientesDeHoy();
+    completarTelefonosCruzados(matches); // no se espera: best-effort en segundo plano
   }
 
   function renderPacientesDeHoy() {
@@ -696,6 +794,26 @@
     `).join('');
     hoyCarril.querySelectorAll('.hoy-chip').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
     hoySection.classList.remove('hidden');
+  }
+
+  // ---------- Autocompletado cruzado de teléfono (ver decisions.md): solo cuando el
+  // campo está vacío, nunca pisa un dato ya cargado, y nunca pide confirmación — es
+  // exclusivamente para completar huecos, no para corregir datos existentes. ----------
+  // Dirección ficha → turno: para los turnos de HOY sin teléfono cargado, si la ficha
+  // coincidente sí tiene uno, se escribe en el turno (Sheet → Calendar). La dirección
+  // opuesta (turno → ficha) se resuelve en autocompletarTelefonoDesdeTurnos(), al abrir
+  // cada ficha — ahí no hace falta limitarse a "hoy", usa la búsqueda amplia que ya
+  // existía para el autocompletado al crear un paciente (telefono-turnos).
+  async function completarTelefonosCruzados(matches) {
+    for (const m of matches) {
+      if (m.turnoTelefono) continue; // el turno ya tiene teléfono, nada que completar ahí
+      try {
+        const ficha = await apiGet({ modo: 'ficha', id: m.id });
+        if (ficha && ficha.campos && ficha.campos.telefono) {
+          await apiPost({ accion: 'completar-telefono-turno', eventId: m.turnoId, calendarId: m.turnoCalendarId, telefono: ficha.campos.telefono });
+        }
+      } catch (e) { /* silencioso, best-effort */ }
+    }
   }
 
   // ---------- Mayúsculas automáticas (ver decisions.md): nombre, apellido, localidad,
@@ -849,9 +967,35 @@
       fichaActual = await apiGet({ modo: 'ficha', id });
       renderFicha();
       iniciarPolling(id);
+      autocompletarTelefonoDesdeTurnos();
     } catch (e) {
       if (e.message !== 'unauthorized') toast('No se pudo abrir la ficha.');
     }
+  }
+
+  // Dirección turno → ficha del autocompletado cruzado (ver decisions.md): si la ficha
+  // recién abierta no tiene teléfono, busca un turno con nombre+apellido EXACTO que sí
+  // tenga uno (mismo endpoint de búsqueda amplia que ya usaba el autocompletado al crear
+  // un paciente, `telefono-turnos` — sin límite a "hoy" acá). Sin popup: solo completa un
+  // dato faltante, nunca pisa uno ya cargado.
+  async function autocompletarTelefonoDesdeTurnos() {
+    if (!fichaActual || fichaActual.campos.telefono) return;
+    const { nombre, apellido } = fichaActual.campos;
+    const idAbierta = fichaActual.id;
+    if (!nombre || !apellido) return;
+    try {
+      const r = await apiGet({ modo: 'telefono-turnos', nombre, apellido });
+      if (!r.telefono) return;
+      // Re-chequeo: puede haber pasado tiempo (la búsqueda es amplia) y el usuario ya
+      // pudo haber navegado a otra ficha o cargado el teléfono a mano mientras tanto.
+      if (!fichaActual || fichaActual.id !== idAbierta || fichaActual.campos.telefono) return;
+      fichaActual.campos.telefono = r.telefono;
+      document.querySelectorAll('#vista-ficha [data-campo="telefono"]').forEach((el) => { el.value = r.telefono; });
+      await apiPost({ accion: 'actualizar-campo', id: idAbierta, campo: 'telefono', valor: r.telefono });
+      autosaveStatus.textContent = 'Teléfono completado desde turnos';
+      autosaveStatus.className = 'autosave-status ok';
+      setTimeout(() => { if (autosaveStatus.textContent !== 'Guardando…') autosaveStatus.textContent = ''; }, 3000);
+    } catch (e) { /* silencioso, no bloquea la ficha abierta */ }
   }
 
   function renderFicha() {
@@ -1297,15 +1441,41 @@
     gruposDuplicadosActuales = calcularGruposDuplicados();
     if (!gruposDuplicadosActuales.length) {
       dupBanner.classList.add('hidden');
-      return;
+    } else {
+      const totalFichas = gruposDuplicadosActuales.reduce((acc, g) => acc + g.length, 0);
+      dupBannerText.textContent = gruposDuplicadosActuales.length === 1
+        ? `Hay ${totalFichas} fichas con el mismo DNI`
+        : `Hay ${gruposDuplicadosActuales.length} DNI repetidos (${totalFichas} fichas)`;
+      dupBanner.classList.remove('hidden');
     }
-    const totalFichas = gruposDuplicadosActuales.reduce((acc, g) => acc + g.length, 0);
-    dupBannerText.textContent = gruposDuplicadosActuales.length === 1
-      ? `Hay ${totalFichas} fichas con el mismo DNI`
-      : `Hay ${gruposDuplicadosActuales.length} DNI repetidos (${totalFichas} fichas)`;
-    dupBanner.classList.remove('hidden');
+    renderSidebarTareas();
   }
   document.getElementById('dup-banner-btn').addEventListener('click', abrirVistaDuplicados);
+
+  // ---------- Tareas pendientes del sidebar: únicamente fichas duplicadas por DNI (ver
+  // decisions.md) — a propósito no se agrega ningún otro tipo de tarea acá. Mismo estilo
+  // visual (.task-item.urgent) que la lista de tareas de /gestion. Oculto por completo si
+  // no hay ningún grupo duplicado pendiente de revisar. ----------
+  const sidebarTasks = document.getElementById('sidebar-tasks');
+  const sidebarTasksList = document.getElementById('sidebar-tasks-list');
+  function renderSidebarTareas() {
+    if (!gruposDuplicadosActuales.length) {
+      sidebarTasks.classList.add('hidden');
+      return;
+    }
+    sidebarTasksList.innerHTML = gruposDuplicadosActuales.map((grupo) => `
+      <div class="task-item urgent">
+        <span class="task-item-icon">❗</span>
+        <div class="task-item-info">
+          <div class="task-item-nombre">${escapeHtml(grupo[0].nombre)} ${escapeHtml(grupo[0].apellido)}</div>
+          <div class="task-item-detalle">DNI repetido — ${grupo.length} fichas</div>
+        </div>
+        <button type="button" class="task-item-btn">Revisar</button>
+      </div>
+    `).join('');
+    sidebarTasksList.querySelectorAll('.task-item-btn').forEach((btn) => btn.addEventListener('click', abrirVistaDuplicados));
+    sidebarTasks.classList.remove('hidden');
+  }
 
   // Escaneo continuo: cada 2 minutos, mientras haya sesión, se vuelve a pedir la lista
   // completa (mismo endpoint liviano que ya usa la pantalla principal — no suma ninguna

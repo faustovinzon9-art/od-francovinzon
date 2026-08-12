@@ -50,6 +50,7 @@ export default async function handler(req, res) {
       if (req.body.accion === 'crear') return await crearPaciente(req, res);
       if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
       if (req.body.accion === 'fusionar') return await fusionarPacientes(req, res);
+      if (req.body.accion === 'completar-telefono-turno') return await completarTelefonoTurno(req, res);
       if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
       if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
       if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
@@ -248,6 +249,35 @@ async function telefonoDesdeTurnos(req, res) {
     return res.status(200).json({ telefono: [...telefonos][0], multiple: false });
   }
   res.status(200).json({ telefono: null, multiple: telefonos.size > 1 });
+}
+
+// Autocompletado cruzado ficha → turno (dirección opuesta a telefonoDesdeTurnos): un
+// turno de hoy sin teléfono, cuya ficha coincidente sí tiene uno, se completa solo (sin
+// popup, ver decisions.md — el frontend ya hizo el match exacto de nombre+apellido antes
+// de llamar acá). El teléfono viene tal cual está escrito en la ficha (texto libre, no
+// necesariamente E.164) — a diferencia de agregar-telefono.js de /gestion, acá no se pasa
+// por telefonoParaWhatsApp() porque el dato no viene del selector de país. Re-chequea que
+// el evento siga sin teléfono antes de escribir (defensivo: puede haber pasado tiempo
+// entre que el cliente armó la lista de "hoy" y esta llamada).
+async function completarTelefonoTurno(req, res) {
+  const { eventId, calendarId, telefono } = req.body;
+  if (!eventId || !calendarId || !telefono) {
+    return res.status(400).json({ success: false, message: 'Faltan datos.' });
+  }
+  try {
+    const calendar = getCalendarClient();
+    const { data: ev } = await calendar.events.get({ calendarId, eventId });
+    if (extraerTelefono(ev.description)) {
+      return res.status(200).json({ success: true, sinCambios: true }); // ya tiene, no se pisa
+    }
+    const limpia = (ev.description || '').replace(/\s+$/, '');
+    const nuevaDescripcion = limpia ? `${limpia}\nTeléfono: ${telefono}` : `Teléfono: ${telefono}`;
+    await calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } });
+    res.status(200).json({ success: true, telefono });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'No se pudo completar el teléfono del turno.' });
+  }
 }
 
 // ---------- Escritura ----------
