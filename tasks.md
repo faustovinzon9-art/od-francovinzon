@@ -1,5 +1,7 @@
 # Pendientes activos
 
+**Nuevo pedido (2026-08-12) — Cartel de respeto de horarios en `/turnos`, completo**: ✅ mensaje cálido en la pantalla de éxito (post-reserva/reprogramación/QR) invitando a cancelar o reprogramar con tiempo si no se puede asistir, con botón de WhatsApp para agendar el número del consultorio como canal de modificación/cancelación; más un cartel arriba del calendario avisando que si ningún día u horario sirve, se puede escribir por WhatsApp porque siempre se encuentra un lugar. Ver `changelog.md` para el detalle técnico.
+
 **Nuevo pedido (2026-08-07, decimonovena vuelta) — 4 puntos independientes, los 4 completos**:
 1. ✅ Ícono del chatbot: robot 🤖 — hecho, ver `changelog.md`. Reemplaza el ícono de burbuja SVG (fab) y 💬/✨ (encabezado) en los tres widgets (`index.html`, `/turnos`, `/gestion`). **Confirmado visualmente en producción en las 3 páginas.**
 2. ✅ Markdown crudo en las respuestas (`**texto**`, guiones de lista sin procesar) — hecho, ver `changelog.md`. Dos capas: el system prompt de Gemini ahora pide texto plano explícitamente, y el frontend (los tres widgets) escapa el texto y convierte `**negrita**`/guiones a `<strong>`/viñeta real como respaldo. **Confirmado en producción** simulando una respuesta con markdown (la cuota gratis de Gemini estaba agotada por tanto testeo del día, ver nota abajo): se vio negrita real y viñetas, sin ningún asterisco ni guion crudo, tanto en `/gestion` como en `/turnos`.
