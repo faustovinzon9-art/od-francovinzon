@@ -20,6 +20,7 @@ import {
   rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas,
 } from '../../lib/pacientesSheet.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 export default async function handler(req, res) {
   try {
@@ -63,6 +64,11 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'method not allowed' });
   } catch (err) {
     console.error(err);
+    await avisarFallo({
+      endpoint: 'api/gestion/pacientes.js',
+      detalle: req.query?.modo || req.body?.accion || '(sin modo/acción)',
+      error: err,
+    });
     res.status(500).json({ error: 'Error inesperado.' });
   }
 }
@@ -276,6 +282,7 @@ async function completarTelefonoTurno(req, res) {
     res.status(200).json({ success: true, telefono });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'completar-telefono-turno', error: err });
     res.status(500).json({ success: false, message: 'No se pudo completar el teléfono del turno.' });
   }
 }
@@ -358,6 +365,7 @@ async function actualizarCampo(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'actualizar-campo', { campo, valor });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: `actualizar-campo (${campo}), respaldado`, error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -458,6 +466,7 @@ async function movimientoAgregar(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'movimiento-agregar', { fecha, tratamiento, debe, haber, formaPago });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-agregar, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -472,6 +481,7 @@ async function movimientoEditar(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'movimiento-editar', { fila, fecha, tratamiento, debe, haber, formaPago });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-editar, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -520,6 +530,7 @@ async function movimientoAnular(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'movimiento-anular', { fila });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-anular, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -544,6 +555,7 @@ async function prestacionAgregar(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'prestacion-agregar', { fecha, tratamiento, codigo, autorizado });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'prestacion-agregar, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -558,6 +570,7 @@ async function prestacionEditar(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'prestacion-editar', { fila, fecha, tratamiento, codigo, autorizado });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'prestacion-editar, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }
@@ -572,6 +585,7 @@ async function prestacionEliminar(req, res) {
   } catch (err) {
     console.error(err);
     await respaldarCambioFallido(id, 'prestacion-eliminar', { fila });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'prestacion-eliminar, respaldado', error: err });
     res.status(200).json({ success: true, pendiente: true });
   }
 }

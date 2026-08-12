@@ -1,8 +1,9 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
   toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
-  extraerTelefono, extraerMotivo, extraerEsNuevoPaciente,
+  extraerTelefono, extraerMotivo, extraerEsNuevoPaciente, extraerConfirmado, escribirConfirmado,
 } from '../lib/googleCalendar.js';
+import { avisarFallo } from '../lib/alertas.js';
 
 // El ticket térmico imprime un QR también para sobreturnos (ver gestion/index.html),
 // así que "obtener"/"cancelar" tienen que poder apuntar a SOBRETURNOS_CALENDAR_ID —
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
   if (accion === 'cancelar') return cancelarPropio(req, res);
   if (accion === 'mover') return moverPropio(req, res);
   if (accion === 'obtener') return obtenerPropio(req, res);
+  if (accion === 'confirmar') return confirmarPropio(req, res);
 
   try {
     const { date, time, nombre, apellido, telefono, motivo, esNuevo } = req.body;
@@ -37,6 +39,7 @@ export default async function handler(req, res) {
     res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'crear turno', error: err });
     res.status(500).json({ success: false, message: 'Hubo un error al confirmar el turno. Probá de nuevo.' });
   }
 }
@@ -68,12 +71,41 @@ async function obtenerPropio(req, res) {
       nombre: ev.summary || '',
       date: formatArgDay(start),
       time: formatArgTime(start),
+      confirmado: extraerConfirmado(ev.description || ''),
     });
   } catch (err) {
     // events.get tira si el turno ya no existe (cancelado, o id inválido/de otro
     // calendario) — se trata como "no encontrado" sin filtrar el motivo exacto.
     console.error(err);
     res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
+  }
+}
+
+// Acción 'confirmar' — el paciente toca "Confirmo el turno" desde /turno (link que
+// ahora también va en el mensaje de WhatsApp de recordatorio, ver gestion/index.html).
+// Mismo modelo de seguridad que obtener/mover/cancelar: conocer el eventId alcanza, sin
+// key. A propósito SIN ninguna restricción de fecha (a diferencia de una eventual
+// restricción de "no tocar el mismo día" para mover/cancelar): confirmar asistencia el
+// mismo día del turno sigue siendo útil, así que esta acción está disponible siempre.
+async function confirmarPropio(req, res) {
+  try {
+    const { eventId, calendarId } = req.body;
+    if (!eventId) {
+      return res.status(200).json({ success: false, message: 'Falta el turno a confirmar.' });
+    }
+    const calendar = getCalendarClient();
+    const calId = resolverCalendarId(calendarId);
+    const { data: ev } = await calendar.events.get({ calendarId: calId, eventId });
+    if (ev.status === 'cancelled') {
+      return res.status(200).json({ success: false, message: 'No encontramos ese turno. Puede que ya haya sido cancelado.' });
+    }
+    const nuevaDescripcion = escribirConfirmado(ev.description || '', true);
+    await calendar.events.patch({ calendarId: calId, eventId, requestBody: { description: nuevaDescripcion } });
+    res.status(200).json({ success: true, message: '¡Turno confirmado! Gracias por avisarnos.' });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'confirmar turno (propio)', error: err });
+    res.status(500).json({ success: false, message: 'No se pudo confirmar el turno. Probá de nuevo.' });
   }
 }
 
@@ -88,6 +120,7 @@ async function cancelarPropio(req, res) {
     res.status(200).json({ success: true, message: 'Turno cancelado.' });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'cancelar turno (propio)', error: err });
     res.status(500).json({ success: false, message: 'No se pudo cancelar el turno. Probá de nuevo.' });
   }
 }
@@ -179,6 +212,7 @@ async function moverPropio(req, res) {
     });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'mover turno (propio)', error: err });
     res.status(500).json({ success: false, message: 'No se pudo reprogramar el turno. Probá de nuevo.' });
   }
 }

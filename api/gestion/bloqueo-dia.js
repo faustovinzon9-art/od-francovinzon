@@ -1,6 +1,7 @@
 import {
   getCalendarClient, CALENDAR_ID, BLOCK_MARKER, pad2, toArgDate, isValidGestionKey,
 } from '../../lib/googleCalendar.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 function nextDayStr(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
     res.status(200).json({ success: true, message: `Día ${date} bloqueado.` });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/bloqueo-dia.js', detalle: accion, error: err });
     res.status(500).json({ success: false, message: 'Error al procesar el bloqueo del día.' });
   }
 }

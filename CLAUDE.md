@@ -52,6 +52,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 - `GOOGLE_PRIVATE_KEY` — clave privada de la cuenta de servicio (con `\n` escapados; se des-escapan en `getCalendarClient()`).
 - `GESTION_KEY` — clave de acceso al panel `/gestion` (la usa Ayelen). Se manda como `key` en cada request a `/api/gestion/*`, nunca queda logueada en el cliente salvo `sessionStorage`.
 - `GEMINI_API_KEY` — clave de la API de Gemini, usada solo server-side por `api/gestion/asistente.js` (asistente de ayuda del panel). Nunca se expone al frontend.
+- `RESEND_API_KEY` — opcional. Clave de la API de Resend, usada solo por `lib/alertas.js` (`avisarFallo()`) para mandar un email a Fausto cuando algo falla de verdad después de agotar los reintentos automáticos (`lib/retry.js`). Sin esta variable, `avisarFallo()` no hace más que un `console.error` — nunca tira, nunca rompe el endpoint que la llama.
 
 ## Límite de 12 Serverless Functions (plan Hobby de Vercel)
 

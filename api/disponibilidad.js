@@ -1,4 +1,5 @@
 import { getCalendarClient, getDisponibilidadMes, getHorariosLibresDia } from '../lib/googleCalendar.js';
+import { avisarFallo } from '../lib/alertas.js';
 
 // Fusiona lo que antes eran disponibilidad-mes.js + horarios-dia.js (mismo patrón de
 // "modo" ya usado en api/gestion/buscar.js) para no sumar un archivo nuevo — ver
@@ -22,6 +23,7 @@ export default async function handler(req, res) {
     res.status(200).json(result);
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/disponibilidad.js', detalle: esModoDia ? 'modo=dia' : 'modo=mes', error: err });
     const message = esModoDia ? 'No se pudieron cargar los horarios.' : 'No se pudo cargar la disponibilidad.';
     res.status(500).json({ error: message });
   }

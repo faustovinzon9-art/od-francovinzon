@@ -1,8 +1,9 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
   toArgDate, eventBounds, isValidGestionKey, extraerTelefono, extraerEsNuevoPaciente,
-  extraerTelefonoVerificado,
+  extraerTelefonoVerificado, extraerConfirmado,
 } from '../../lib/googleCalendar.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 export default async function handler(req, res) {
   if (!isValidGestionKey(req.query.key)) {
@@ -49,6 +50,7 @@ export default async function handler(req, res) {
         telefono: extraerTelefono(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
+        confirmado: extraerConfirmado(ev.description),
       });
     });
 
@@ -66,6 +68,7 @@ export default async function handler(req, res) {
         telefono: extraerTelefono(ev.description),
         esNuevoPaciente: extraerEsNuevoPaciente(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
+        confirmado: extraerConfirmado(ev.description),
       });
     });
 
@@ -74,6 +77,7 @@ export default async function handler(req, res) {
     res.status(200).json(items);
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/turnos-dia.js', error: err });
     res.status(500).json({ error: 'No se pudo cargar la agenda del día.' });
   }
 }

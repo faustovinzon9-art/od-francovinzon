@@ -2,6 +2,7 @@ import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, CLINIC_ADDRESS, TIME_ZONE,
   SLOT_MINUTES, SOBRETURNO_MINUTES, toArgDate, eventBounds, isValidGestionKey, telefonoParaWhatsApp,
 } from '../../lib/googleCalendar.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -30,6 +31,7 @@ export default async function handler(req, res) {
     const end = new Date(start.getTime() + duration * 60000);
 
     const calendar = getCalendarClient();
+    const title = `${nombre} ${apellido || ''}`.trim();
 
     const { data: existing } = await calendar.events.list({
       calendarId,
@@ -37,6 +39,22 @@ export default async function handler(req, res) {
       timeMax: end.toISOString(),
       singleEvents: true,
     });
+
+    // Idempotencia ante reintentos — mismo criterio que crearTurno() en
+    // lib/googleCalendar.js: si ya existe un evento del mismo paciente superpuesto acá,
+    // no duplicar ni mostrar "ocupado", devolver éxito con ese evento ya existente.
+    const propio = (existing.items || []).find((ev) => {
+      const { start: evStart, end: evEnd } = eventBounds(ev);
+      return start < evEnd && end > evStart && (ev.summary || '').trim() === title;
+    });
+    if (propio) {
+      return res.status(200).json({
+        success: true,
+        message: `${sobreturno ? 'Sobreturno' : 'Turno'} cargado para el ${date} a las ${time} hs.`,
+        eventId: propio.id,
+        calendarId,
+      });
+    }
 
     const stillFree = !(existing.items || []).some((ev) => {
       const { start: evStart, end: evEnd } = eventBounds(ev);
@@ -50,7 +68,6 @@ export default async function handler(req, res) {
       });
     }
 
-    const title = `${nombre} ${apellido || ''}`.trim();
     const description =
       `Teléfono: ${telNormalizado}\n` +
       'Teléfono verificado: Sí\n' +
@@ -77,6 +94,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/crear-turno.js', detalle: sobreturno ? 'sobreturno' : 'turno', error: err });
     res.status(500).json({ success: false, message: 'Error al cargar el turno.' });
   }
 }

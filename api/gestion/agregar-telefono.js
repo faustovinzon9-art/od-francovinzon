@@ -1,4 +1,5 @@
 import { getCalendarClient, isValidGestionKey, telefonoParaWhatsApp } from '../../lib/googleCalendar.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/agregar-telefono.js', error: err });
     res.status(500).json({ success: false, message: 'No se pudo guardar el teléfono.' });
   }
 }

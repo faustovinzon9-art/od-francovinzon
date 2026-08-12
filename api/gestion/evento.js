@@ -1,4 +1,7 @@
-import { getCalendarClient, TIME_ZONE, toArgDate, eventBounds, isValidGestionKey } from '../../lib/googleCalendar.js';
+import {
+  getCalendarClient, TIME_ZONE, toArgDate, eventBounds, isValidGestionKey, escribirConfirmado,
+} from '../../lib/googleCalendar.js';
+import { avisarFallo } from '../../lib/alertas.js';
 
 // Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
 // para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
@@ -19,6 +22,21 @@ export default async function handler(req, res) {
     if (accion === 'cancelar') {
       await calendar.events.delete({ calendarId, eventId });
       return res.status(200).json({ success: true, message: 'Turno cancelado.' });
+    }
+
+    // Toggle manual del indicador verde/rojo de la agenda (Ayelen marca "Confirmado" al
+    // enterarse por teléfono/WhatsApp, o lo destilda si se equivocó) — mismo campo que
+    // escribe el paciente al tocar "Confirmo el turno" en /turno (ver api/reservar.js).
+    if (accion === 'confirmar') {
+      const { confirmado } = req.body;
+      const { data: original } = await calendar.events.get({ calendarId, eventId });
+      const nuevaDescripcion = escribirConfirmado(original.description || '', !!confirmado);
+      await calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } });
+      return res.status(200).json({
+        success: true,
+        message: confirmado ? 'Turno marcado como confirmado.' : 'Turno marcado como sin confirmar.',
+        confirmado: !!confirmado,
+      });
     }
 
     const { nuevaFecha, nuevaHora, motivo, nombre, apellido } = req.body;
@@ -68,6 +86,7 @@ export default async function handler(req, res) {
     res.status(200).json({ success: true, message: `Movido al ${nuevaFecha} a las ${nuevaHora} hs.` });
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/evento.js', detalle: accion, error: err });
     res.status(500).json({ success: false, message: 'Error al procesar el turno.' });
   }
 }

@@ -15,7 +15,7 @@
     --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
     --cream: #FAF9F6; --line: #E9E4D8; --white: #FFFFFF;
     --text: #2A2A2A; --muted: #8A8578;
-    --turno: #1E3A5F; --sobreturno: #D4A24C; --bloqueo: #C1443A;
+    --turno: #1E3A5F; --sobreturno: #D4A24C; --bloqueo: #C1443A; --confirmado: #4F9A3C;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
@@ -209,6 +209,17 @@
     background: linear-gradient(135deg, #FFE9B3, var(--gold));
     box-shadow: 0 0 0 1px rgba(212,162,76,.5), 0 2px 8px rgba(212,162,76,.55);
   }
+  /* Indicador de confirmación del turno (Confirmado/Sin confirmar) — es a la vez el
+     toggle: un click cambia el estado (ver confirmarToggle()). Verde/rojo intencional
+     (no los mismos colores que .badge.turno/sobreturno) para que se distinga de un
+     vistazo de los otros badges de la fila. */
+  .confirmado-badge {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    padding: 3px 9px; border-radius: 100px; flex-shrink: 0; border: none; white-space: nowrap;
+  }
+  .confirmado-badge.confirmado-si { color: var(--white); background: var(--confirmado); }
+  .confirmado-badge.confirmado-no { color: var(--white); background: var(--bloqueo); }
+  .confirmado-badge:hover { filter: brightness(1.08); }
   .row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
   .add-tel-btn { padding: 5px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
   .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
@@ -851,6 +862,24 @@
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
   const fmtHora = (iso) => new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  // "Buenos días"/"buenas tardes" según la hora real en Argentina en el momento en que
+  // Ayelen toca el botón de WhatsApp (no la hora del turno) — nunca getters locales.
+  const saludoActual = () => {
+    let hora = parseInt(new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, hour: '2-digit', hour12: false }).format(new Date()), 10);
+    if (hora === 24) hora = 0; // algunos motores devuelven "24" para la medianoche con hour12:false
+    return hora < 12 ? 'buenos días' : 'buenas tardes';
+  };
+
+  // Link de "Detalles de tu turno" (/turno) — mismo destino que el QR del ticket
+  // térmico (armarContenidoTicket, más abajo) y del mensaje de WhatsApp de
+  // recordatorio (mensajeRecordatorio) — un solo lugar para no duplicar la
+  // construcción del link entre los dos usos.
+  function armarLinkTurno(item) {
+    const params = new URLSearchParams({ eventId: item.id });
+    if (item.calendarId) params.set('calendarId', item.calendarId);
+    if (item.tipo === 'sobreturno') params.set('tipo', 'sobreturno');
+    return `${location.origin}/turno?${params.toString()}`;
+  }
 
   const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
@@ -1419,11 +1448,18 @@
     if (fechaItem === hoy) cuando = 'hoy';
     else if (fechaItem === manana) cuando = 'mañana';
     else { const [, m, d] = fechaItem.split('-').map(Number); cuando = `el ${d} de ${MESES[m - 1]}`; }
-    // Sin emoji a propósito: wa.me/api.whatsapp.com corrompe cualquier emoji en el
-    // parámetro "text" (se comprobó con 😊🦷✅⏰👍, los cinco terminan como el
-    // carácter de reemplazo "�" ya en el propio href hacia web.whatsapp.com — no es
-    // un problema de nuestro encodeURIComponent). Ver decisions.md.
-    return `¡Hola! Te escribimos para recordarte tu turno de ${cuando} a las ${fmtHora(it.start)}.`;
+
+    const nombre = it.title || 'paciente';
+    const tipoTexto = it.tipo === 'sobreturno' ? 'sobreturno' : 'turno';
+    const link = armarLinkTurno(it);
+    // Texto y estructura a pedido explícito (2026-08-12) — revierte la decisión previa
+    // de no incluir "con Franco"/"Te esperamos" (ver decisions.md). Sigue sin emoji a
+    // propósito: wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text"
+    // (se comprobó con 😊🦷✅⏰👍🤗, todos terminan como el carácter de reemplazo "�" ya
+    // en el propio href hacia web.whatsapp.com — no es un problema de nuestro
+    // encodeURIComponent, así que agregar el 🤗 pedido no se ve bien del otro lado).
+    return `Hola, ${saludoActual()} ${nombre}!!! Te escribía para recordarte que ${cuando} tiene ${tipoTexto} ${nombre} con Franco a las ${fmtHora(it.start)}hs. Cualquier cosita que no puedas venir avisar. Te esperamos.\n\n` +
+      `Para confirmar, cancelar o cambiar el turno, entrá acá: ${link}`;
   }
 
   function armarLinkWhatsApp(telefonoRaw) {
@@ -1464,6 +1500,13 @@
       ? '<span class="tel-pendiente-badge" title="Este teléfono no tiene formato válido: confirmalo con Editar tel.">⚠ Tel. inválido</span>'
       : '';
 
+    // Verde "Confirmado" / rojo "Sin confirmar" — el paciente lo marca desde /turno
+    // (ver el link nuevo en mensajeRecordatorio()) o Ayelen a mano tocando el badge
+    // (confirmarToggle()). No aplica a bloqueos.
+    const confirmadoBadge = it.tipo !== 'bloqueo'
+      ? `<button type="button" class="confirmado-badge ${it.confirmado ? 'confirmado-si' : 'confirmado-no'}" data-action="confirmar-toggle" data-idx="${idx}" title="Click para marcar ${it.confirmado ? 'sin confirmar' : 'como confirmado'}">${it.confirmado ? '✓ Confirmado' : '● Sin confirmar'}</button>`
+      : '';
+
     return `
       <div class="row${esNuevo ? ' row-nuevo' : ''}" data-row-idx="${idx}">
         <div class="hora">${hora}</div>
@@ -1473,6 +1516,7 @@
           ${telefonoLine}
         </div>
         <span class="badge ${it.tipo}">${badgeLabel}</span>
+        ${confirmadoBadge}
         ${nuevoBadge}
         ${pendienteBadge}
         ${acciones}
@@ -1529,8 +1573,31 @@
       guardarTelefonoInline(idx, item);
     } else if (action === 'cancelar-tel') {
       cancelarTelefonoInline(idx);
+    } else if (action === 'confirmar-toggle') {
+      confirmarToggle(idx, item);
     }
   });
+
+  // Toggle manual del indicador verde/rojo (ver renderRow) — pensado para cuando
+  // Ayelen se entera por teléfono/WhatsApp de que el paciente confirmó (o para
+  // destildar si se equivocó). Actualización local sin refetch, mismo patrón que
+  // editar teléfono/cancelar (ver decisions.md).
+  function confirmarToggle(idx, item) {
+    const nuevoValor = !item.confirmado;
+    fetch('/api/gestion/evento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, accion: 'confirmar', eventId: item.id, calendarId: item.calendarId, confirmado: nuevoValor }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        if (!res.success) return;
+        agendaItems[idx] = { ...agendaItems[idx], confirmado: !!res.confirmado };
+        renderAgenda();
+        toast(res.confirmado ? '✅ Turno marcado como confirmado' : 'Turno marcado como sin confirmar');
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
+  }
 
   function abrirAgregarTelefonoInline(idx, modo) {
     const item = agendaItems[idx];
@@ -2196,14 +2263,12 @@
     document.getElementById('ticket-hora').textContent = item.allDay ? '' : `${fmtHora(item.start)} hs`;
     document.getElementById('ticket-footer').innerHTML = `Consultas: WhatsApp<br>${WHATSAPP_CONSULTORIO_DISPLAY}`;
 
-    // El QR apunta a /turno (página propia, distinta de /turnos) con el eventId
-    // (y calendarId/tipo si es sobreturno) — reusa la misma API de "obtener/mover/
-    // cancelar" de api/reservar.js, pero con su propio diseño y texto ("Detalles de
-    // tu turno", no "Reservar turno"). Ver decisions.md.
-    const qrParams = new URLSearchParams({ eventId: item.id });
-    if (item.calendarId) qrParams.set('calendarId', item.calendarId);
-    if (item.tipo === 'sobreturno') qrParams.set('tipo', 'sobreturno');
-    const ticketUrl = `${location.origin}/turno?${qrParams.toString()}`;
+    // El QR apunta a /turno (página propia, distinta de /turnos) — reusa la misma API
+    // de "obtener/mover/cancelar/confirmar" de api/reservar.js, pero con su propio
+    // diseño y texto ("Detalles de tu turno", no "Reservar turno"). Ver decisions.md.
+    // Mismo link que ahora también manda mensajeRecordatorio() por WhatsApp — ver
+    // armarLinkTurno() más arriba.
+    const ticketUrl = armarLinkTurno(item);
 
     const qrEl = document.getElementById('ticket-qr');
     qrEl.innerHTML = '';

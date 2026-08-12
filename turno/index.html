@@ -120,7 +120,17 @@
   .post-action-btn:hover { background: var(--cream-deep); }
   .post-action-btn.danger { border-color: rgba(193, 68, 55, 0.4); color: #C14437; }
   .post-action-btn.danger:hover { background: rgba(193, 68, 55, 0.06); }
+  .post-action-btn.confirmar { background: var(--success); border-color: var(--success); color: var(--white); }
+  .post-action-btn.confirmar:hover { background: var(--success); filter: brightness(1.05); }
+  .post-action-btn:disabled { opacity: .65; cursor: default; }
+  .post-action-btn:disabled:hover { background: var(--white); }
+  .post-action-btn.confirmar:disabled { background: var(--success); filter: none; }
   .reprogramar-note { font-size: 13px; color: var(--navy-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
+
+  /* Botón de WhatsApp (tarjeta "No estoy seguro") — mismo estilo que /turnos, no
+     definido acá todavía porque esta página nunca lo había necesitado antes. */
+  .contact-btn { display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-pill); padding: 10px 16px; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .contact-btn.whatsapp { background: #25D366; color: white; border: none; box-shadow: 0 4px 16px rgba(37, 211, 102, 0.4); }
 
   #toast-container {
     position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999;
@@ -176,11 +186,23 @@
 
   <div class="card hidden" id="post-actions-card">
     <div class="post-actions-row">
+      <button class="post-action-btn confirmar" id="btn-confirmar-turno">✅ Confirmo el turno</button>
       <a class="post-action-btn" id="btn-agregar-apple" href="#">📅 Agregar a Apple Calendar</a>
       <a class="post-action-btn" id="btn-agregar-google" href="#" target="_blank" rel="noopener noreferrer">📅 Agregar a Google Calendar</a>
-      <button class="post-action-btn" id="btn-cambiar-turno">Cambiar día y horario</button>
-      <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelar turno</button>
+      <button class="post-action-btn" id="btn-cambiar-turno">Reprogramo día y horario</button>
+      <button class="post-action-btn" id="btn-no-seguro">No estoy seguro</button>
+      <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelo el turno</button>
     </div>
+  </div>
+
+  <div class="card hidden" id="no-seguro-card">
+    <p class="reprogramar-note">Tal vez sea mejor que reprogrames tu turno para un día que te quede más seguro.</p>
+    <button class="post-action-btn" id="btn-no-seguro-reprogramar">Reprogramar día y horario</button>
+    <p class="reprogramar-note" style="margin-top: 16px;">Si ningún día u horario te sirve, escribinos por WhatsApp — siempre le encontramos la vuelta para conseguirte un lugar.</p>
+    <a class="contact-btn whatsapp" href="https://wa.me/5403442457764" target="_blank" rel="noopener noreferrer">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
+      Escribinos por WhatsApp
+    </a>
   </div>
 
   <div class="card hidden" id="calendar-card">
@@ -275,6 +297,8 @@
   const successCard = document.getElementById('success-card');
   const successTextEl = document.getElementById('success-text');
   const postActionsCard = document.getElementById('post-actions-card');
+  const noSeguroCard = document.getElementById('no-seguro-card');
+  const btnConfirmarTurno = document.getElementById('btn-confirmar-turno');
   const reprogramarCard = document.getElementById('reprogramar-card');
   const canceladoCard = document.getElementById('cancelado-card');
   const confirmOverlay = document.getElementById('confirm-overlay');
@@ -296,8 +320,14 @@
   }
 
   function ocultarTodasLasCards() {
-    [slotsCard, successCard, postActionsCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
+    [slotsCard, successCard, postActionsCard, noSeguroCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
       .forEach((c) => c.classList.add('hidden'));
+  }
+
+  // ---------- Estado visual del botón "Confirmo el turno" ----------
+  function marcarBotonConfirmado(confirmado) {
+    btnConfirmarTurno.disabled = confirmado;
+    btnConfirmarTurno.textContent = confirmado ? '✓ Turno confirmado' : '✅ Confirmo el turno';
   }
 
   function mostrarCardAnimada(el) {
@@ -488,13 +518,49 @@
     btnAgregarGoogle.href = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado);
   }
 
-  // ---------- Cambiar día/horario o cancelar el turno ----------
-  document.getElementById('btn-cambiar-turno').addEventListener('click', () => {
+  // ---------- Confirmar / cambiar día-horario / cancelar / "no estoy seguro" ----------
+  // Acción SIEMPRE disponible, incluso el mismo día del turno — a diferencia de mover/
+  // cancelar no hay ninguna restricción de fecha acá (ver decisions.md): confirmar
+  // asistencia el día de hoy sigue siendo útil.
+  btnConfirmarTurno.addEventListener('click', () => {
+    if (!ultimoEventId || btnConfirmarTurno.disabled) return;
+    btnConfirmarTurno.disabled = true;
+    fetch('/api/reservar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'confirmar', eventId: ultimoEventId, calendarId: ultimoCalendarId }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success) {
+          marcarBotonConfirmado(true);
+          toast('✅ ¡Gracias por confirmar!');
+        } else {
+          btnConfirmarTurno.disabled = false;
+          toast(res.message || 'No se pudo confirmar. Probá de nuevo.');
+        }
+      })
+      .catch(() => {
+        btnConfirmarTurno.disabled = false;
+        toast('Error de red. Probá de nuevo.');
+      });
+  });
+
+  // Mismo flujo (calendario + horarios del turno principal) disparado tanto desde el
+  // botón directo "Reprogramo día y horario" como desde adentro de "No estoy seguro".
+  function abrirReprogramar() {
     ocultarTodasLasCards();
     calendarCard.classList.remove('hidden');
     cargarMes();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.getElementById('btn-cambiar-turno').addEventListener('click', abrirReprogramar);
+
+  document.getElementById('btn-no-seguro').addEventListener('click', () => {
+    mostrarCardAnimada(noSeguroCard);
+    noSeguroCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+  document.getElementById('btn-no-seguro-reprogramar').addEventListener('click', abrirReprogramar);
 
   document.getElementById('reprogramar-confirm-btn').addEventListener('click', () => {
     if (!fechaSeleccionada || !horarioSeleccionado || !ultimoEventId) return;
@@ -524,6 +590,11 @@
           document.getElementById('success-title').textContent = '¡Turno reprogramado!';
           mostrarCardAnimada(successCard);
           actualizarLinksCalendario();
+          // Vuelve a "Confirmo el turno" (habilitado): reprogramar no conserva la
+          // confirmación anterior a propósito — un turno movido a otro día/horario
+          // conviene que se re-confirme, y si venía de un sobreturno convertido, el
+          // evento nuevo en Calendar arranca sin la línea "Confirmado" de todos modos.
+          marcarBotonConfirmado(false);
           postActionsCard.classList.remove('hidden');
           toast('✅ Turno modificado correctamente');
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -593,6 +664,7 @@
         // min) — para un sobreturno, reprogramar acá lo convierte en turno común
         // (ver el handler de reprogramar-confirm-btn). Ver decisions.md.
         actualizarLinksCalendario();
+        marcarBotonConfirmado(!!res.confirmado);
         postActionsCard.classList.remove('hidden');
       })
       .catch(() => {

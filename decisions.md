@@ -59,7 +59,7 @@ genérica: la única fuente de verdad correcta es que la persona diga de qué pa
   `/gestion`: no se muestra un botón de WhatsApp roto, se muestra "+ Agregar teléfono"
   para que se pueda corregir ahí mismo.
 - **El botón de WhatsApp de cada fila usa el ícono real del logo** (SVG, mismo path que "Escribinos por WhatsApp" del resto del sitio) — nunca un emoji de burbuja de mensaje genérica.
-- **Mensaje precargado del botón de WhatsApp (recordatorio, `/gestion`)**: cálido, y con la fecha/hora armada dinámicamente ("hoy" / "mañana" / "el X de mes") según el turno real. Explícitamente **sin** agregar "con el Dr. Franco Vinzón" ni "Te esperamos" — mantenerlo así salvo pedido en contra. **Sin emoji** (ver "WhatsApp: los emoji se corrompen en `wa.me`/`api.whatsapp.com`" más abajo — se probaron y se sacaron a propósito, no es un olvido).
+- **Mensaje precargado del botón de WhatsApp (recordatorio, `/gestion`)**: cálido, y con la fecha/hora armada dinámicamente ("hoy" / "mañana" / "el X de mes") según el turno real. ~~Explícitamente sin agregar "con el Dr. Franco Vinzón" ni "Te esperamos"~~ — **revertido a pedido explícito (2026-08-12)**: el mensaje ahora sí incluye "con Franco" y "Te esperamos", con saludo dinámico ("buenos días"/"buenas tardes" según la hora real en Argentina en que Ayelen toca el botón, no la hora del turno) y una línea final con el link a `/turno` para que el paciente pueda confirmar/cancelar/reprogramar por su cuenta — ver más abajo, "Confirmación de turno". **Sin emoji sigue en pie** (ver "WhatsApp: los emoji se corrompen en `wa.me`/`api.whatsapp.com`" más abajo): se pidió agregar 🤗 en esta misma vuelta y se lo dejó afuera a propósito por el mismo bug ya comprobado, no por criterio propio — si en algún momento se soluciona del lado de WhatsApp, recién ahí reconsiderar.
 - **Botón de WhatsApp en TODAS las filas con teléfono válido**, no solo en las de "paciente nuevo". El badge dorado "Nuevo paciente" y el teléfono en tamaño grande siguen siendo exclusivos de `esNuevoPaciente: true`.
 
 ### Badge "⚠ Tel. inválido": criterio es formato, no origen del dato (2026-08-06, corregido)
@@ -315,6 +315,16 @@ directamente, que era el objetivo. Se cambió a dos opciones:
   generar el badge dorado "✨ Nuevo paciente"/teléfono destacado en la agenda; ahora
   también se puede marcar a mano desde `/gestion`. No se agregó a "Nuevo sobreturno"
   (no se pidió, y `/turnos` tampoco ofrece reservar sobreturnos).
+
+## Confirmación de turno ("Confirmado: Sí/No") (2026-08-12)
+
+- **Campo nuevo en la `description` del evento**, mismo patrón que `Teléfono verificado: Sí` — `extraerConfirmado()`/`escribirConfirmado()` en `lib/googleCalendar.js`. Default `false` (Sin confirmar) para cualquier evento sin la línea, incluidos todos los turnos creados antes de este cambio — no hace falta ninguna migración.
+- **Dos formas de marcarlo, mismo campo**: el paciente tocando "Confirmo el turno" en `/turno` (`api/reservar.js`, `accion: 'confirmar'`, público — mismo modelo de seguridad que `obtener`/`mover`/`cancelar`, conocer el `eventId` alcanza) o Ayelen tocando el badge en `/gestion` (`api/gestion/evento.js`, `accion: 'confirmar'`, con `GESTION_KEY` — funciona como toggle, puede marcar Y desmarcar, para poder corregir un error).
+- **"Confirmo el turno" en `/turno` no tiene ninguna restricción de fecha, a propósito** — está disponible siempre, incluso el mismo día del turno. Es una decisión explícita: aunque en algún momento se agregue una restricción de "no tocar el mismo día" para mover/cancelar (no existe todavía), confirmar asistencia el día de hoy sigue siendo útil y no debería bloquearse igual.
+- **Reprogramar desde `/turno` resetea la confirmación a "Sin confirmar"** (`marcarBotonConfirmado(false)` en el frontend) — un turno movido a otro día/horario conviene que se re-confirme; si además venía de un sobreturno convertido a turno común, el evento nuevo en Calendar arranca sin la línea `Confirmado` de todos modos (es un evento distinto).
+- **Indicador en `/gestion`**: badge verde "✓ Confirmado" / rojo "● Sin confirmar" en cada fila de turno/sobreturno (no en bloqueos), que es a la vez el botón toggle — un solo click cambia el estado, sin abrir ningún panel aparte. Colores explícitamente distintos de `.badge.turno`/`.badge.sobreturno` para que se note de un vistazo. Actualización local (`agendaItems` + `renderAgenda()`) sin refetch, mismo patrón que editar teléfono/cancelar.
+- **El link de "Detalles de tu turno" (`/turno?eventId=...`) ahora se manda por dos canales**: el QR del ticket térmico (como ya hacía) y, desde esta vuelta, también el mensaje de WhatsApp de recordatorio de `/gestion` — mismo link, mismo destino, un solo helper compartido (`armarLinkTurno()` en `gestion/index.html`) para no duplicar la construcción entre los dos usos.
+- **"No estoy seguro" en `/turno`**: cuarto botón, deliberadamente sin acción propia — muestra un disclaimer invitando a reprogramar (mismo flujo/calendario que "Reprogramo día y horario", no uno nuevo) más una nota + botón de WhatsApp para cuando ningún día/horario sirve. No escribe nada en el turno por sí solo.
 
 ## Zona horaria
 

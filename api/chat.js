@@ -2,6 +2,7 @@ import {
   getCalendarClient, getDisponibilidadMes, getHorariosLibresDia, crearTurno,
   CLINIC_ADDRESS, WEEKLY_SCHEDULE,
 } from '../lib/googleCalendar.js';
+import { avisarFallo } from '../lib/alertas.js';
 
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const MAX_MENSAJES = 30; // tope de mensajes por conversación, para cuidar la cuota gratis de Gemini
@@ -129,6 +130,7 @@ export default async function handler(req, res) {
     res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
+    await avisarFallo({ endpoint: 'api/chat.js', detalle: `origen: ${origen || 'web'}`, error: err });
     res.status(500).json({ success: false, message: 'No se pudo consultar al asistente.' });
   }
 }
