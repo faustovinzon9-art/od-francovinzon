@@ -2,7 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
-## 2026-08-12 (séptima vuelta) — DNI en /turnos + cruce de fichas por niveles (Bloque 1 de 3), en curso
+## 2026-08-12 (séptima vuelta) — DNI en /turnos + cruce de fichas + reintentos/cron + formato de fichas, MERGEADO SIN PROBAR EN PREVIEW
+
+**Excepción a la regla permanente de rama+preview** (ver `CLAUDE.md`): este entorno no tuvo `gh` ni acceso a la API de Vercel para encontrar la URL del preview, ni Node instalado para simular localmente como en vueltas anteriores. Se avisó el riesgo explícitamente (la vez que se saltó este paso fue justo el incidente del Proxy que tiró producción abajo, ver más abajo "quinta vuelta") y el usuario pidió mergear a `main` igual. **Falta confirmar en producción real** los 4 escenarios de este pedido y setear `CRON_SECRET` en Vercel.
+
 
 - **Mensaje de WhatsApp**: confirmado contra el pedido nuevo, ya cumplía el texto exacto (sin cambios de código). Emoji 🤗 pedido de nuevo, dejado afuera de nuevo por el mismo motivo ya documentado.
 - **Campo DNI opcional en `/turnos`**: `turnos/index.html` (input `#f-dni`, solo el formulario público del paciente, `/gestion` no se tocó), viaja a `api/reservar.js` → `crearTurno()` (`lib/googleCalendar.js`), se guarda como línea `DNI: ...` en la description del evento. Helper nuevo `extraerDni()`.
