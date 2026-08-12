@@ -214,8 +214,8 @@
      (no los mismos colores que .badge.turno/sobreturno) para que se distinga de un
      vistazo de los otros badges de la fila. */
   .confirmado-badge {
-    font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px;
-    padding: 2px 7px; border-radius: 100px; flex-shrink: 0; border: none; white-space: nowrap;
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px;
+    padding: 2.5px 8px; border-radius: 100px; flex-shrink: 0; border: none; white-space: nowrap;
   }
   .confirmado-badge.confirmado-si { color: var(--white); background: var(--confirmado); }
   .confirmado-badge.confirmado-no { color: var(--white); background: var(--bloqueo); }
@@ -229,12 +229,15 @@
      ícono de WhatsApp (box-shadow, no un border real, para no cambiar el tamaño del
      ícono adentro) con un lapicito chico superpuesto en la esquina — reemplaza el
      botón "Editar tel." aparte que había antes (ver decisions.md). */
-  .wa-edit-wrap { position: relative; display: inline-flex; border-radius: 8px; box-shadow: 0 0 0 1.5px var(--navy-soft); }
+  .wa-edit-wrap { position: relative; display: inline-flex; border-radius: 9px; box-shadow: 0 0 0 1.5px var(--navy-soft); }
+  .wa-edit-wrap .icon-btn.wa-btn { width: 32px; height: 32px; border-radius: 9px; }
+  .wa-edit-wrap .icon-btn.wa-btn svg { width: 16px; height: 16px; }
   .wa-edit-pencil {
-    position: absolute; bottom: -5px; right: -5px; width: 14px; height: 14px; padding: 0;
+    position: absolute; bottom: -6px; right: -6px; width: 16px; height: 16px; padding: 0;
     border-radius: 50%; background: var(--gold); border: 1.5px solid var(--white);
     color: var(--white); display: flex; align-items: center; justify-content: center; cursor: pointer;
   }
+  .wa-edit-pencil svg { width: 9px; height: 9px; }
   .wa-edit-pencil:hover { filter: brightness(1.08); }
 
   .panel { background: var(--white); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }

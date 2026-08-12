@@ -115,6 +115,10 @@
   .success-card h3 { font-size: 18px; margin-bottom: 8px; }
   .success-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
   .success-card p.success-highlight { font-size: 17px; font-weight: 700; color: var(--confirmado); line-height: 1.4; }
+  /* Rojo intencionalmente distinto del rojo de error/alerta (#C14437, ver .post-action-btn.danger
+     y .confirm-actions .btn-danger) — más apagado/terracota, para que se lea como un aviso
+     importante y no como que algo salió mal con la reserva que se acaba de confirmar. */
+  .success-card p.success-warning { font-size: 12.5px; font-weight: 600; color: #A6483A; line-height: 1.45; margin: 6px 0 12px; }
   .success-nuevo-logo { width: 200px; max-width: 70%; height: auto; margin: 0 auto 18px; display: block; }
   .success-nuevo p#success-text-nuevo { margin-bottom: 14px; }
   .success-nuevo-note { margin-bottom: 16px !important; }
@@ -204,6 +208,7 @@
   .confirm-actions .btn-cancel { background: var(--cream-deep); color: var(--navy); }
   .confirm-actions .btn-danger { background: #C14437; color: var(--white); }
   .confirm-actions button:hover { filter: brightness(1.06); }
+  .calendar-choice-actions { display: flex; flex-direction: column; gap: 9px; margin-bottom: 10px; }
 
   /* ---------- Asistente virtual (chatbot público, Gemini) ----------
      Convive con el formulario de arriba, no lo reemplaza — alternativa
@@ -362,12 +367,14 @@
   <div class="card success-card hidden" id="success-card">
     <div class="check">✓</div>
     <h3 id="success-title">¡Turno confirmado!</h3>
+    <p class="success-warning">Si no podés asistir, cancelá o reprogramá con tiempo para que otro paciente pueda tomar ese lugar.</p>
     <p id="success-text" class="success-highlight"></p>
   </div>
 
   <div class="card success-card success-nuevo hidden" id="success-card-nuevo">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo" class="success-nuevo-logo">
     <h3 id="bienvenido-title">¡Bienvenido/a!</h3>
+    <p class="success-warning">Si no podés asistir, cancelá o reprogramá con tiempo para que otro paciente pueda tomar ese lugar.</p>
     <p class="success-nuevo-note">Va a ser un placer tenerte en el consultorio.</p>
     <p id="success-text-nuevo" class="success-highlight"></p>
     <p class="success-nuevo-note">Ante cualquier consulta, escribinos por WhatsApp.</p>
@@ -389,19 +396,11 @@
 
   <div class="card hidden" id="post-actions-card">
     <div class="post-actions-row">
-      <a class="post-action-btn" id="btn-agregar-apple" href="#">📅 Agregar a Apple Calendar</a>
-      <a class="post-action-btn" id="btn-agregar-google" href="#" target="_blank" rel="noopener noreferrer">📅 Agregar a Google Calendar</a>
+      <button type="button" class="post-action-btn" id="btn-agregar-calendario">📅 Agregar al calendario</button>
+      <button type="button" class="post-action-btn" id="btn-guardar-acceso">🔗 Guardar acceso a mi turno</button>
       <button class="post-action-btn" id="btn-cambiar-turno">Cambiar día y horario</button>
       <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelar turno</button>
     </div>
-  </div>
-
-  <div class="card hidden" id="respeto-horarios-card">
-    <p class="reprogramar-note">Si por algún motivo no podés asistir, cancelá o reprogramá tu turno con tiempo, así otro paciente puede aprovechar ese lugar. ¡Gracias por respetar el tiempo de todos! 🦷</p>
-    <a class="contact-btn whatsapp" id="respeto-horarios-wa-link" href="https://wa.me/5403442457764" target="_blank" rel="noopener noreferrer">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
-      Guardá nuestro WhatsApp para modificar o cancelar
-    </a>
   </div>
 
   <div class="card hidden" id="reprogramar-card">
@@ -426,6 +425,20 @@
     <div class="confirm-actions">
       <button class="btn-cancel" id="confirm-volver-btn">Volver</button>
       <button class="btn-danger" id="confirm-cancelar-btn">Cancelar turno</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="calendario-overlay">
+  <div class="confirm-box">
+    <h3>Agregar al calendario</h3>
+    <p>Elegí dónde querés guardar el turno.</p>
+    <div class="calendar-choice-actions">
+      <button type="button" class="post-action-btn" id="cal-choice-google">Google Calendar</button>
+      <button type="button" class="post-action-btn" id="cal-choice-apple">Apple Calendar</button>
+    </div>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="cal-choice-cancelar">Volver</button>
     </div>
   </div>
 </div>
@@ -497,7 +510,6 @@
   const successTextEl = document.getElementById('success-text');
   const confirmBtn = document.getElementById('confirm-btn');
   const postActionsCard = document.getElementById('post-actions-card');
-  const respetoHorariosCard = document.getElementById('respeto-horarios-card');
   const sinHorarioNote = document.getElementById('sin-horario-note');
   const reprogramarCard = document.getElementById('reprogramar-card');
   const canceladoCard = document.getElementById('cancelado-card');
@@ -522,7 +534,7 @@
   }
 
   function ocultarTodasLasCards() {
-    [slotsCard, formCard, successCard, successCardNuevo, postActionsCard, respetoHorariosCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
+    [slotsCard, formCard, successCard, successCardNuevo, postActionsCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
       .forEach((c) => c.classList.add('hidden'));
   }
 
@@ -573,7 +585,7 @@
     slotsCard.classList.add('hidden');
     formCard.classList.add('hidden');
     reprogramarCard.classList.add('hidden');
-    if (!modoReprogramar) { successCard.classList.add('hidden'); successCardNuevo.classList.add('hidden'); postActionsCard.classList.add('hidden'); respetoHorariosCard.classList.add('hidden'); }
+    if (!modoReprogramar) { successCard.classList.add('hidden'); successCardNuevo.classList.add('hidden'); postActionsCard.classList.add('hidden'); }
 
     monthLabelEl.textContent = MESES[viewMonth - 1] + ' ' + viewYear;
     prevBtn.disabled = viewYear === minYear && viewMonth === minMonth;
@@ -628,7 +640,7 @@
     horarioSeleccionado = null;
     formCard.classList.add('hidden');
     reprogramarCard.classList.add('hidden');
-    if (!modoReprogramar) { successCard.classList.add('hidden'); postActionsCard.classList.add('hidden'); respetoHorariosCard.classList.add('hidden'); }
+    if (!modoReprogramar) { successCard.classList.add('hidden'); postActionsCard.classList.add('hidden'); }
 
     slideCalendarGrid(direction, () => renderCalendar());
 
@@ -744,7 +756,6 @@
           if (ultimoEventId) {
             actualizarLinksCalendario();
             postActionsCard.classList.remove('hidden');
-            respetoHorariosCard.classList.remove('hidden');
           }
         } else {
           showFormMsg(res.message, 'error');
@@ -814,14 +825,30 @@
     setTimeout(() => contenedor.remove(), 2600);
   }
 
+  // ---------- Link permanente de gestión del turno ----------
+  // Mismo destino que el QR del ticket térmico y el link del recordatorio de WhatsApp
+  // (ver armarLinkTurno en gestion/index.html): /turno?eventId=... con los botones
+  // Confirmo/Cancelo/Reprogramo. ultimoCalendarId solo se setea al llegar vía QR de un
+  // sobreturno (ver mostrarTurnoDesdeUrl) — si está presente, es justamente por eso, así
+  // que agregar tipo=sobreturno junto con calendarId es seguro acá.
+  function armarLinkGestionTurno() {
+    if (!ultimoEventId) return null;
+    let url = `${location.origin}/turno?eventId=${encodeURIComponent(ultimoEventId)}`;
+    if (ultimoCalendarId) url += `&calendarId=${encodeURIComponent(ultimoCalendarId)}&tipo=sobreturno`;
+    return url;
+  }
+
   // ---------- Agregar al calendario del dispositivo ----------
-  // Dos opciones, sin librerías ni ruta de API nueva:
-  // - Apple Calendar: .ics generado en el cliente, SIN atributo download — se
-  //   navega directo al blob (Content-Type text/calendar), que es lo que hace
-  //   que iOS Safari abra la pantalla nativa "Agregar evento" en vez de forzar
-  //   una descarga a la app Archivos. Ver decisions.md.
-  // - Google Calendar: link directo a calendar.google.com/calendar/render con
-  //   los datos del turno, sin ningún archivo de por medio.
+  // Un solo botón, popup para elegir Google o Apple (antes eran dos links siempre
+  // visibles). Mismo mecanismo de cada uno que antes, sin librerías ni ruta de API nueva:
+  // - Apple Calendar: .ics generado en el cliente, SIN atributo download — se navega
+  //   directo al blob (Content-Type text/calendar), que es lo que hace que iOS Safari
+  //   abra la pantalla nativa "Agregar evento" en vez de forzar una descarga a la app
+  //   Archivos. Ver decisions.md.
+  // - Google Calendar: link directo a calendar.google.com/calendar/render con los datos
+  //   del turno, sin ningún archivo de por medio.
+  // Los dos incluyen el link de gestión del turno en la descripción/notas, así el
+  // paciente lo tiene disponible ahí aunque no haya usado "Guardar acceso a mi turno".
   function limitesUTC(fechaStr, horaStr) {
     const [y, m, d] = fechaStr.split('-').map(Number);
     const [hh, mm] = horaStr.split(':').map(Number);
@@ -831,10 +858,16 @@
     return { startUTC, endUTC };
   }
   const fmtUTC = (dt) => dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  // Escapa texto libre para un campo ICS (RFC 5545: \\, \; \, \n) — LOCATION ya venía
+  // escapado a mano porque es fijo; DESCRIPTION ahora lleva una URL variable, así que
+  // hace falta esto para no romper el archivo si algún caracter especial se cuela.
+  const escaparICS = (texto) => (texto || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
-  function construirICS(fechaStr, horaStr) {
+  function construirICS(fechaStr, horaStr, linkGestion) {
     const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
     const uid = `turno-${fechaStr}-${horaStr.replace(':', '')}-${Math.random().toString(36).slice(2)}@odontologofrancovinzon`;
+    const descripcion = 'Turno en el Consultorio Odontológico Franco Vinzón.' +
+      (linkGestion ? ` Para cancelar o cambiar tu turno: ${linkGestion}` : '');
     return [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Franco Vinzon Odontologo//Turnos//ES', 'CALSCALE:GREGORIAN',
       'BEGIN:VEVENT',
@@ -844,38 +877,107 @@
       `DTEND:${fmtUTC(endUTC)}`,
       'SUMMARY:Turno odontológico - Franco Vinzón',
       'LOCATION:Ameghino 410\\, Concepción del Uruguay',
-      'DESCRIPTION:Turno en el Consultorio Odontológico Franco Vinzón.',
+      `DESCRIPTION:${escaparICS(descripcion)}`,
       'END:VEVENT', 'END:VCALENDAR',
     ].join('\r\n');
   }
 
-  function armarLinkGoogleCalendar(fechaStr, horaStr) {
+  function armarLinkGoogleCalendar(fechaStr, horaStr, linkGestion) {
     const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
+    const details = 'Turno en el Consultorio Odontológico Franco Vinzón.' +
+      (linkGestion ? ` Para cancelar o cambiar tu turno: ${linkGestion}` : '');
     const params = new URLSearchParams({
       action: 'TEMPLATE',
       text: 'Turno odontológico - Franco Vinzón',
       dates: `${fmtUTC(startUTC)}/${fmtUTC(endUTC)}`,
-      details: 'Turno en el Consultorio Odontológico Franco Vinzón.',
+      details,
       location: 'Ameghino 410, Concepción del Uruguay',
     });
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
   }
 
-  const btnAgregarApple = document.getElementById('btn-agregar-apple');
-  const btnAgregarGoogle = document.getElementById('btn-agregar-google');
-  let ultimoIcsUrl = null;
+  let ultimoIcsBlob = null;
+  let ultimoGoogleCalendarLink = null;
 
-  // Arma los dos links con los datos del turno recién confirmado (o
-  // reprogramado) — se llama cada vez que se muestra post-actions-card, porque
-  // la fecha/hora puede cambiar entre una reserva y una reprogramación.
+  // Arma los dos datos con la info del turno recién confirmado (o reprogramado) — se
+  // llama cada vez que se muestra post-actions-card, porque la fecha/hora puede cambiar
+  // entre una reserva y una reprogramación. Ya no toca ningún <a href> directo: ambos
+  // quedan guardados y se usan recién cuando se elige uno en el popup.
   function actualizarLinksCalendario() {
     if (!fechaSeleccionada || !horarioSeleccionado) return;
-    if (ultimoIcsUrl) URL.revokeObjectURL(ultimoIcsUrl);
-    const blob = new Blob([construirICS(fechaSeleccionada, horarioSeleccionado)], { type: 'text/calendar;charset=utf-8' });
-    ultimoIcsUrl = URL.createObjectURL(blob);
-    btnAgregarApple.href = ultimoIcsUrl;
-    btnAgregarGoogle.href = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado);
+    const linkGestion = armarLinkGestionTurno();
+    ultimoIcsBlob = new Blob([construirICS(fechaSeleccionada, horarioSeleccionado, linkGestion)], { type: 'text/calendar;charset=utf-8' });
+    ultimoGoogleCalendarLink = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado, linkGestion);
   }
+
+  // Mismo mecanismo que un <a> real (sin atributo download, ver comentario arriba) pero
+  // disparado por JS — se crea un anchor temporal y se simula el click, en vez de navegar
+  // programáticamente, para que el comportamiento sea idéntico al que ya estaba probado.
+  function abrirGoogleCalendar() {
+    if (!ultimoGoogleCalendarLink) return;
+    const a = document.createElement('a');
+    a.href = ultimoGoogleCalendarLink;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  function abrirIcsApple() {
+    if (!ultimoIcsBlob) return;
+    const url = URL.createObjectURL(ultimoIcsBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  const calendarioOverlay = document.getElementById('calendario-overlay');
+  function mostrarCalendarioOverlay(mostrar) {
+    calendarioOverlay.classList.toggle('hidden', !mostrar);
+    if (mostrar) requestAnimationFrame(() => calendarioOverlay.classList.add('show'));
+    else calendarioOverlay.classList.remove('show');
+  }
+  document.getElementById('btn-agregar-calendario').addEventListener('click', () => mostrarCalendarioOverlay(true));
+  document.getElementById('cal-choice-cancelar').addEventListener('click', () => mostrarCalendarioOverlay(false));
+  document.getElementById('cal-choice-google').addEventListener('click', () => { mostrarCalendarioOverlay(false); abrirGoogleCalendar(); });
+  document.getElementById('cal-choice-apple').addEventListener('click', () => { mostrarCalendarioOverlay(false); abrirIcsApple(); });
+
+  // ---------- Guardar/copiar el acceso permanente al turno ----------
+  // Web Share API nativa primero (el usuario elige dónde guardarlo: Notas, Mensajes,
+  // WhatsApp, Mail...), nunca se muestra el link como texto plano en la pantalla. Sin
+  // soporte (desktop, algunos Android viejos), fallback fijo a copiar al portapapeles —
+  // la detección es una sola vez al cargar la página, el soporte no cambia en la sesión.
+  const btnGuardarAcceso = document.getElementById('btn-guardar-acceso');
+  const hayWebShare = typeof navigator.share === 'function';
+  if (!hayWebShare) btnGuardarAcceso.textContent = '🔗 Copiar acceso a mi turno';
+
+  btnGuardarAcceso.addEventListener('click', async () => {
+    const link = armarLinkGestionTurno();
+    if (!link) return;
+    if (hayWebShare) {
+      try {
+        await navigator.share({
+          title: 'Mi turno — Consultorio Franco Vinzón',
+          text: 'Guardá este acceso para poder cancelar o cambiar tu turno cuando quieras.',
+          url: link,
+        });
+      } catch (err) {
+        // El usuario cerró el panel de compartir sin elegir nada (AbortError, lo más
+        // común) — no es un error real, no hace falta mostrar nada.
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(link);
+        toast('Copiado ✓');
+      } catch (err) {
+        toast('No se pudo copiar. Probá de nuevo.');
+      }
+    }
+  });
 
   // ---------- Cambiar día/horario o cancelar el turno recién confirmado ----------
   document.getElementById('btn-cambiar-turno').addEventListener('click', () => {
@@ -907,7 +1009,6 @@
           mostrarCardAnimada(successCard);
           actualizarLinksCalendario();
           postActionsCard.classList.remove('hidden');
-          respetoHorariosCard.classList.remove('hidden');
           renderCalendar();
           toast('✅ Turno modificado correctamente');
         } else {
@@ -1136,7 +1237,6 @@
         document.getElementById('btn-cambiar-turno').classList.toggle('hidden', esSobreturno);
         actualizarLinksCalendario();
         postActionsCard.classList.remove('hidden');
-        respetoHorariosCard.classList.remove('hidden');
       })
       .catch(() => {
         document.getElementById('turno-lookup-error-text').textContent = 'No se pudo consultar el turno. Probá de nuevo en un momento.';

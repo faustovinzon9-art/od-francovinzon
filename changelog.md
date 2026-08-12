@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-12 (octava vuelta) — Tarjeta de confirmación de /turnos (cartel de horarios, compartir acceso, calendario unificado) + 2 ajustes en /gestion
+
+Rama `feature/turno-confirmacion-mejoras`.
+
+- Cartel de "respetá los horarios" movido adentro de `#success-card`/`#success-card-nuevo` (texto corto, rojo terracota, ya no una tarjeta aparte perdida al final).
+- Botón de WhatsApp reemplazado por "Guardar acceso a mi turno": `navigator.share()` nativo con el link permanente del turno, nunca visible como texto; fallback a copiar al portapapeles + toast cuando no hay Web Share API.
+- Botones de Apple/Google Calendar unificados en uno con popup de elección. Se agregó el link de gestión del turno en la descripción/notas de ambos. Se confirmó (con un test aislado de las funciones de fecha, ver `tasks.md`) que la URL de Google Calendar arma bien fecha/hora/título/ubicación — antes no estaba confirmado.
+- `/gestion`: badge Confirmado/Sin confirmar y el ícono de WhatsApp+lápiz, un poco más grandes que la vuelta anterior (habían quedado muy chicos).
+- Probado con clicks reales sobre una copia temporal (CDN externo mockeado, sin acceso a internet en este entorno de test) — ver `tasks.md` para el detalle completo de qué se confirmó y qué queda pendiente de probar en un iPhone/Android real (Web Share API, .ics en Apple Calendar).
+
 ## 2026-08-12 (séptima vuelta) — DNI en /turnos + cruce de fichas + reintentos/cron + formato de fichas, MERGEADO SIN PROBAR EN PREVIEW
 
 **Excepción a la regla permanente de rama+preview** (ver `CLAUDE.md`): este entorno no tuvo `gh` ni acceso a la API de Vercel para encontrar la URL del preview, ni Node instalado para simular localmente como en vueltas anteriores. Se avisó el riesgo explícitamente (la vez que se saltó este paso fue justo el incidente del Proxy que tiró producción abajo, ver más abajo "quinta vuelta") y el usuario pidió mergear a `main` igual. **Falta confirmar en producción real** los 4 escenarios de este pedido y setear `CRON_SECRET` en Vercel.
