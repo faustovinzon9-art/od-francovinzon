@@ -83,6 +83,19 @@ Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el ar
 
 ## Deploy: cosas a tener en cuenta
 
+### Regla permanente (2026-08-12): nunca trabajar directo en `main` — rama + preview primero
+
+El consultorio tiene que poder seguir funcionando **en todo momento** — `/turnos`, `/gestion` y `/pacientes` los usan Ayelen, Franco y los pacientes en tiempo real, no hay ventana de mantenimiento. Ningún cambio puede arriesgar interrumpirlos mientras se está trabajando. Motivo: un push directo a `main` (2026-08-12) rompió Calendar/Sheets/Drive en producción entera — agenda de `/gestion` y reserva de `/turnos` caídas al mismo tiempo — por código nunca probado contra la API real (ver `decisions.md`, "Incidentes en producción").
+
+De acá en adelante, **todo cambio de código sigue este flujo, sin excepción**:
+
+1. Crear una rama nueva (`git checkout -b <nombre>`) — nunca commitear directo en `main`.
+2. Pushear la rama a GitHub. Vercel genera automáticamente un deploy de **preview** en una URL propia de esa rama (Hobby plan lo hace solo, sin configuración extra) — nada de esto toca `od-francovinzon.vercel.app` (producción).
+3. Probar el cambio contra ese preview (no contra producción, no solo con datos mockeados localmente si el cambio toca algo sensible como los clientes de Google — ver el incidente de arriba, un mock local no lo hubiera detectado).
+4. Recién con el preview confirmado andando bien, mergear/pushear a `main`.
+
+Esto aplica en particular a cualquier cosa que toque `lib/googleCalendar.js`, `lib/googleOAuthPacientes.js`, o cualquier endpoint bajo `api/` — son compartidos por las tres superficies (`/turnos`, `/gestion`, `/pacientes`), así que un error ahí las tira a las tres juntas.
+
 - Push a `main` dispara deploy automático en Vercel. **A veces tarda varios minutos** en propagar (no es un bug, es normal para este proyecto — no asumir que falló solo por tardanza).
 - **Una vez el webhook de GitHub→Vercel no disparó** un deploy con un push válido; se resolvió con un commit vacío/trivial para forzar un nuevo push. Si un deploy no aparece en absoluto en el dashboard de Vercel después de varios minutos (no "Building", directamente no existe), sospechar esto antes que un error de código.
 - **No hacer polling agresivo (loops cortos de curl) contra el dominio de producción** — en algún momento disparó el modo de protección anti-bot de Vercel (`x-vercel-mitigated: challenge`) y bloqueó el sitio real para visitantes reales, no solo para mí. Espaciar los chequeos (≥20-30s entre intentos) y avisar al usuario para que confirme desde su propio navegador en vez de insistir con requests automáticos.

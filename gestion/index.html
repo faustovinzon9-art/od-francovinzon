@@ -214,8 +214,8 @@
      (no los mismos colores que .badge.turno/sobreturno) para que se distinga de un
      vistazo de los otros badges de la fila. */
   .confirmado-badge {
-    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
-    padding: 3px 9px; border-radius: 100px; flex-shrink: 0; border: none; white-space: nowrap;
+    font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px;
+    padding: 2px 7px; border-radius: 100px; flex-shrink: 0; border: none; white-space: nowrap;
   }
   .confirmado-badge.confirmado-si { color: var(--white); background: var(--confirmado); }
   .confirmado-badge.confirmado-no { color: var(--white); background: var(--bloqueo); }
@@ -225,6 +225,17 @@
   .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--white); color: var(--navy); font-size: 12px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
   .icon-btn.trash { color: var(--bloqueo); border-color: rgba(193,68,55,.3); }
   .icon-btn.wa-btn { background: #25D366; border-color: #25D366; color: var(--white); }
+  /* WhatsApp + editar teléfono en un solo botón visual: un recuadro alrededor del
+     ícono de WhatsApp (box-shadow, no un border real, para no cambiar el tamaño del
+     ícono adentro) con un lapicito chico superpuesto en la esquina — reemplaza el
+     botón "Editar tel." aparte que había antes (ver decisions.md). */
+  .wa-edit-wrap { position: relative; display: inline-flex; border-radius: 8px; box-shadow: 0 0 0 1.5px var(--navy-soft); }
+  .wa-edit-pencil {
+    position: absolute; bottom: -5px; right: -5px; width: 14px; height: 14px; padding: 0;
+    border-radius: 50%; background: var(--gold); border: 1.5px solid var(--white);
+    color: var(--white); display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .wa-edit-pencil:hover { filter: brightness(1.08); }
 
   .panel { background: var(--white); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .panel h2 { font-size: 15px; margin-bottom: 12px; }
@@ -850,6 +861,9 @@
   const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
   // Ícono de impresora (Feather "printer") para el ticket térmico.
   const PRINTER_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>';
+  // Lapicito (Feather "edit-2"), superpuesto en la esquina del botón de WhatsApp para
+  // editar el teléfono sin sumar un botón aparte en la fila — ver .wa-edit-wrap.
+  const PENCIL_ICON = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>';
   // Número de WhatsApp del consultorio (turnos y consultas) — el mismo que usan los
   // botones "Escribinos por WhatsApp" de index.html y turnos/index.html. Se define acá
   // una sola vez porque no hay bundler para compartir una constante entre archivos
@@ -1458,7 +1472,10 @@
     // (se comprobó con 😊🦷✅⏰👍🤗, todos terminan como el carácter de reemplazo "�" ya
     // en el propio href hacia web.whatsapp.com — no es un problema de nuestro
     // encodeURIComponent, así que agregar el 🤗 pedido no se ve bien del otro lado).
-    return `Hola, ${saludoActual()} ${nombre}!!! Te escribía para recordarte que ${cuando} tiene ${tipoTexto} ${nombre} con Franco a las ${fmtHora(it.start)}hs. Cualquier cosita que no puedas venir avisar. Te esperamos.\n\n` +
+    // Corregido (2026-08-12, segunda vuelta): el saludo NO lleva el nombre — quedaba
+    // repetido dos veces en la misma oración ("Hola ... Fausto Vinzon ... turno Fausto
+    // Vinzon..."). El nombre va una sola vez, en la parte del turno.
+    return `¡Hola, ${saludoActual()}! Te escribía para recordarte que ${cuando} tiene ${tipoTexto} ${nombre} con Franco a las ${fmtHora(it.start)}hs. Cualquier cosita que no puedas venir avisar. Te esperamos.\n\n` +
       `Para confirmar, cancelar o cambiar el turno, entrá acá: ${link}`;
   }
 
@@ -1477,8 +1494,10 @@
 
     const botones = [];
     if (waLink) {
-      botones.push(`<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></a>`);
-      botones.push(`<button class="add-tel-btn" data-action="editar-tel" data-idx="${idx}" title="Editar teléfono">Editar tel.</button>`);
+      botones.push(`<span class="wa-edit-wrap">` +
+        `<a class="icon-btn wa-btn" href="${waLink}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></a>` +
+        `<button type="button" class="wa-edit-pencil" data-action="editar-tel" data-idx="${idx}" title="Editar teléfono">${PENCIL_ICON}</button>` +
+        `</span>`);
     } else if (it.tipo !== 'bloqueo') {
       botones.push(`<button class="add-tel-btn" data-action="agregar-tel" data-idx="${idx}">+ Agregar teléfono</button>`);
     }

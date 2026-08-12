@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-12 (sexta vuelta) — Fila de `/gestion` más liviana + fix del mensaje de WhatsApp, primera vez en rama+preview
+
+- **Proceso nuevo**: primera vuelta hecha siguiendo la regla recién agregada a `CLAUDE.md` — rama separada (`fix/gestion-fila-botones-whatsapp`), probada en el deploy de preview de Vercel de esa rama, recién mergeada a `main` después de confirmar. Directamente a raíz del incidente de la vuelta anterior.
+- **Badge "Confirmado"/"Sin confirmar" más chico**: 10.5px → 8.5px, padding 3px 9px → 2px 7px, mismos colores.
+- **"Editar tel." integrado al botón de WhatsApp**: en vez del botón "Editar tel." aparte, un recuadro (`box-shadow`, sin agregar un border real que cambie el tamaño) alrededor del ícono verde de WhatsApp con un lapicito SVG chico superpuesto en la esquina inferior derecha (`PENCIL_ICON` nuevo, mismo estilo Feather que `TRASH_ICON`/`PRINTER_ICON`). Mismo `data-action="editar-tel"` de siempre — cero cambios en `abrirAgregarTelefonoInline()` ni en el backend.
+- **Mensaje de WhatsApp**: sacado el nombre del saludo (decía "Hola, buenas tardes [Nombre]!!! ... tiene turno [Nombre] con Franco...", repetido dos veces) — ahora "¡Hola, buenos días/buenas tardes!" genérico, el nombre queda una sola vez en la parte del turno.
+
 ## 2026-08-12 (quinta vuelta) — INCIDENTE: producción caída (Calendar/Sheets/Drive), hotfix
 
 - **Síntoma**: agenda de `/gestion` mostrando "No se pudo cargar la agenda" — reportado urgente por el usuario, consultorio sin poder trabajar. Diagnóstico encontró que el alcance era mayor: `api/disponibilidad` (público, usado por `/turnos` para reservar) también devolvía 500, así que la reserva de turnos también estaba caída.
