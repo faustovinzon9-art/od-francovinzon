@@ -495,6 +495,7 @@
   let horarioSeleccionado = null;
   let ultimoEventId = null;
   let ultimoCalendarId = null; // solo se usa al llegar vía QR de un sobreturno (ver mostrarTurnoDesdeUrl)
+  let ultimoCodigoCorto = null; // link corto /t/CODIGO (ver api/reservar.js), viene en la respuesta de crear/mover/obtener
   let modoReprogramar = false;
 
   const monthLabelEl = document.getElementById('month-label');
@@ -741,6 +742,7 @@
         confirmBtn.disabled = false;
         if (res.success) {
           ultimoEventId = res.eventId || null;
+          ultimoCodigoCorto = res.codigoCorto || null;
           formCard.classList.add('hidden');
           if (esNuevo) {
             document.getElementById('success-text-nuevo').textContent = res.message;
@@ -826,13 +828,18 @@
   }
 
   // ---------- Link permanente de gestión del turno ----------
-  // Mismo destino que el QR del ticket térmico y el link del recordatorio de WhatsApp
-  // (ver armarLinkTurno en gestion/index.html): /turno?eventId=... con los botones
-  // Confirmo/Cancelo/Reprogramo. ultimoCalendarId solo se setea al llegar vía QR de un
-  // sobreturno (ver mostrarTurnoDesdeUrl) — si está presente, es justamente por eso, así
-  // que agregar tipo=sobreturno junto con calendarId es seguro acá.
+  // Preferí el link corto /t/CODIGO (ver api/reservar.js) — llega en la respuesta de
+  // crear/mover/obtener (ultimoCodigoCorto). Si por lo que sea no vino (turno viejo que
+  // por algún motivo no se pudo asegurar, error de red puntual), cae al link largo de
+  // siempre como red de seguridad, nunca se rompe el flujo.
   function armarLinkGestionTurno() {
+    if (ultimoCodigoCorto) return `${location.origin}/t/${ultimoCodigoCorto}`;
     if (!ultimoEventId) return null;
+    // Mismo destino que el QR del ticket térmico y el link del recordatorio de WhatsApp
+    // (ver armarLinkTurno en gestion/index.html): /turno?eventId=... con los botones
+    // Confirmo/Cancelo/Reprogramo. ultimoCalendarId solo se setea al llegar vía QR de un
+    // sobreturno (ver mostrarTurnoDesdeUrl) — si está presente, es justamente por eso,
+    // así que agregar tipo=sobreturno junto con calendarId es seguro acá.
     let url = `${location.origin}/turno?eventId=${encodeURIComponent(ultimoEventId)}`;
     if (ultimoCalendarId) url += `&calendarId=${encodeURIComponent(ultimoCalendarId)}&tipo=sobreturno`;
     return url;
@@ -1003,6 +1010,7 @@
       .then((res) => {
         if (res.success) {
           modoReprogramar = false;
+          ultimoCodigoCorto = res.codigoCorto || null;
           reprogramarCard.classList.add('hidden');
           successTextEl.textContent = res.message;
           document.getElementById('success-title').textContent = '¡Turno reprogramado!';
@@ -1224,6 +1232,7 @@
         }
         ultimoEventId = eventId;
         ultimoCalendarId = calendarId;
+        ultimoCodigoCorto = res.codigoCorto || null;
         fechaSeleccionada = res.date;
         horarioSeleccionado = res.time;
         const [, m, d] = res.date.split('-').map(Number);

@@ -1,8 +1,10 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, CLINIC_ADDRESS, TIME_ZONE,
   SLOT_MINUTES, SOBRETURNO_MINUTES, toArgDate, eventBounds, isValidGestionKey, telefonoParaWhatsApp,
+  generarCodigoCorto, extraerCodigoCorto,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
+import { conReintentos } from '../../lib/retry.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -33,12 +35,12 @@ export default async function handler(req, res) {
     const calendar = getCalendarClient();
     const title = `${nombre} ${apellido || ''}`.trim();
 
-    const { data: existing } = await calendar.events.list({
+    const { data: existing } = await conReintentos(() => calendar.events.list({
       calendarId,
       timeMin: start.toISOString(),
       timeMax: end.toISOString(),
       singleEvents: true,
-    });
+    }));
 
     // Idempotencia ante reintentos — mismo criterio que crearTurno() en
     // lib/googleCalendar.js: si ya existe un evento del mismo paciente superpuesto acá,
@@ -53,6 +55,7 @@ export default async function handler(req, res) {
         message: `${sobreturno ? 'Sobreturno' : 'Turno'} cargado para el ${date} a las ${time} hs.`,
         eventId: propio.id,
         calendarId,
+        codigoCorto: extraerCodigoCorto(propio.description),
       });
     }
 
@@ -68,14 +71,16 @@ export default async function handler(req, res) {
       });
     }
 
+    const codigoCorto = generarCodigoCorto();
     const description =
       `Teléfono: ${telNormalizado}\n` +
       'Teléfono verificado: Sí\n' +
       `Motivo: ${motivo}\n` +
       `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
+      `Código corto: ${codigoCorto}\n` +
       'Cargado manualmente desde el panel de gestión.';
 
-    const { data: created } = await calendar.events.insert({
+    const { data: created } = await conReintentos(() => calendar.events.insert({
       calendarId,
       requestBody: {
         summary: title,
@@ -84,13 +89,14 @@ export default async function handler(req, res) {
         start: { dateTime: start.toISOString(), timeZone: TIME_ZONE },
         end: { dateTime: end.toISOString(), timeZone: TIME_ZONE },
       },
-    });
+    }));
 
     res.status(200).json({
       success: true,
       message: `${sobreturno ? 'Sobreturno' : 'Turno'} cargado para el ${date} a las ${time} hs.`,
       eventId: created.id,
       calendarId,
+      codigoCorto,
     });
   } catch (err) {
     console.error(err);
