@@ -109,6 +109,10 @@
   .checkbox-row input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--navy); flex-shrink: 0; }
   .checkbox-row label { display: inline; margin: 0; font-size: 13px; font-weight: 500; color: var(--text); text-transform: none; }
 
+  .pres-autorizado-cell { text-align: center; }
+  .chk-pres-autorizado { width: 19px; height: 19px; accent-color: var(--confirmado); cursor: pointer; }
+  .chk-pres-autorizado:disabled { opacity: .5; cursor: wait; }
+
   .volver-ficha { color: var(--muted); font-size: 12.5px; text-decoration: underline; margin-bottom: 14px; display: inline-block; }
 
   .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
@@ -362,8 +366,18 @@
       <div class="panel-msg hidden" id="mov-msg"></div>
     </div>
 
+  </div>
+
+  <div id="vista-obra-social" class="vista hidden">
+    <a class="volver-ficha" id="volver-ficha-desde-obra-social">← Volver a la ficha</a>
+    <div class="ficha-header">
+      <div>
+        <h1 style="font-size:20px;">🏥 Estado de prestación obra social</h1>
+        <div class="dni" id="os-paciente-nombre"></div>
+      </div>
+    </div>
+
     <div class="panel" id="panel-obra-social">
-      <h2>Estado de prestación obra social</h2>
       <div class="field-row">
         <div class="field"><label>Obra social</label><input type="text" data-campo="obraSocial"></div>
         <div class="field"><label>Nº de afiliado</label><input type="text" data-campo="nAfiliado"></div>
@@ -728,6 +742,7 @@
   const vistaFicha = document.getElementById('vista-ficha');
   const vistaDuplicados = document.getElementById('vista-duplicados');
   const vistaFusion = document.getElementById('vista-fusion');
+  const vistaObraSocial = document.getElementById('vista-obra-social');
   const autosaveStatus = document.getElementById('autosave-status');
 
   document.getElementById('volver-lista').addEventListener('click', () => {
@@ -737,7 +752,7 @@
   });
 
   async function abrirFicha(id) {
-    cambiarVista(vistaFicha, vistaLista, vistaDuplicados, vistaFusion);
+    cambiarVista(vistaFicha, vistaLista, vistaDuplicados, vistaFusion, vistaObraSocial);
     document.getElementById('f-titulo').textContent = 'Cargando…';
     try {
       fichaActual = await apiGet({ modo: 'ficha', id });
@@ -750,10 +765,14 @@
 
   function renderFicha() {
     const c = fichaActual.campos;
-    document.getElementById('f-titulo').textContent = `${c.nombre} ${c.apellido}`.trim() || 'Sin nombre';
+    const nombreCompleto = `${c.nombre} ${c.apellido}`.trim() || 'Sin nombre';
+    document.getElementById('f-titulo').textContent = nombreCompleto;
     document.getElementById('f-dni-header').textContent = c.dni ? `DNI ${c.dni}` : '';
+    document.getElementById('os-paciente-nombre').textContent = c.dni ? `${nombreCompleto} · DNI ${c.dni}` : nombreCompleto;
 
-    document.querySelectorAll('#vista-ficha [data-campo]').forEach((input) => {
+    // Obra social/Nº de afiliado/Plan viven duplicados (ficha principal + vista aparte,
+    // mismos data-campo) — este selector cubre las dos vistas a propósito.
+    document.querySelectorAll('#vista-ficha [data-campo], #vista-obra-social [data-campo]').forEach((input) => {
       if (input === campoConFoco) return; // no pisar lo que se está escribiendo ahora mismo
       input.value = c[input.dataset.campo] || '';
     });
@@ -808,7 +827,7 @@
 
   // ---------- Autosave de campos ----------
   const CAMPOS_FICHA_MAYUSCULAS = new Set(['nombre', 'apellido', 'localidad', 'domicilio', 'obraSocial', 'plan', 'planTratamiento']);
-  document.querySelectorAll('#vista-ficha [data-campo]').forEach((input) => {
+  document.querySelectorAll('#vista-ficha [data-campo], #vista-obra-social [data-campo]').forEach((input) => {
     if (CAMPOS_FICHA_MAYUSCULAS.has(input.dataset.campo)) conectarMayusculas(input);
     input.addEventListener('focus', () => { campoConFoco = input; });
     input.addEventListener('blur', async () => {
@@ -817,10 +836,10 @@
       const valor = input.value;
       if (!fichaActual || fichaActual.campos[campo] === valor) return;
       fichaActual.campos[campo] = valor;
-      // Obra social / Nº de afiliado / Plan aparecen duplicados (sección principal +
-      // sección de obra social, mismos data-campo) — al guardar desde cualquiera de los
-      // dos lados, se reflejan los dos al toque, sin esperar un refetch.
-      document.querySelectorAll(`#vista-ficha [data-campo="${campo}"]`).forEach((el) => {
+      // Obra social / Nº de afiliado / Plan aparecen duplicados (ficha principal + vista
+      // aparte, mismos data-campo) — al guardar desde cualquiera de los dos lados, se
+      // reflejan los dos al toque, sin esperar un refetch.
+      document.querySelectorAll(`#vista-ficha [data-campo="${campo}"], #vista-obra-social [data-campo="${campo}"]`).forEach((el) => {
         if (el !== input) el.value = valor;
       });
       autosaveStatus.textContent = 'Guardando…';
@@ -996,8 +1015,13 @@
   }
 
   // ---------- Estado de prestación obra social ----------
+  // Vista aparte (no un panel apilado debajo de la ficha): mismo mecanismo de
+  // cambiarVista() que duplicados/fusión, con su propio link de vuelta.
   document.getElementById('btn-obra-social').addEventListener('click', () => {
-    document.getElementById('panel-obra-social').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    cambiarVista(vistaObraSocial, vistaFicha);
+  });
+  document.getElementById('volver-ficha-desde-obra-social').addEventListener('click', () => {
+    cambiarVista(vistaFicha, vistaObraSocial);
   });
 
   function renderPrestaciones() {
@@ -1012,7 +1036,7 @@
         <td>${escapeHtml(p.fecha)}</td>
         <td>${escapeHtml(p.tratamiento)}</td>
         <td>${escapeHtml(p.codigo)}</td>
-        <td>${p.autorizado ? '✅' : '—'}</td>
+        <td class="pres-autorizado-cell"><input type="checkbox" class="chk-pres-autorizado" data-fila="${p.fila}" ${p.autorizado ? 'checked' : ''}></td>
         <td>
           <div class="mov-actions">
             <button class="icon-btn btn-editar-pres" title="Editar" data-fila="${p.fila}">✎</button>
@@ -1023,6 +1047,35 @@
     `).join('');
     tbody.querySelectorAll('.btn-editar-pres').forEach((btn) => btn.addEventListener('click', () => abrirFormPres(Number(btn.dataset.fila))));
     tbody.querySelectorAll('.btn-eliminar-pres').forEach((btn) => btn.addEventListener('click', () => eliminarPrestacion(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.chk-pres-autorizado').forEach((chk) => chk.addEventListener('change', () => toggleAutorizado(Number(chk.dataset.fila), chk.checked, chk)));
+  }
+
+  // Tilda/destilda "Autorizado" con un solo clic, sin abrir el form de edición completo.
+  // Reusa la acción prestacion-editar (mismos fecha/tratamiento/código que ya tiene la
+  // fila, solo cambia autorizado) en vez de sumar una acción nueva al backend.
+  async function toggleAutorizado(fila, checked, chk) {
+    const pres = fichaActual.prestacionesObraSocial.find((p) => p.fila === fila);
+    if (!pres) return;
+    chk.disabled = true;
+    try {
+      const r = await apiPost({
+        accion: 'prestacion-editar',
+        id: fichaActual.id,
+        fila,
+        fecha: pres.fecha,
+        tratamiento: pres.tratamiento,
+        codigo: pres.codigo,
+        autorizado: checked,
+      });
+      if (!r.success) throw new Error(r.message || 'error');
+      pres.autorizado = checked;
+      if (r.pendiente) toast('✅ Guardado (pendiente de sincronizar)');
+    } catch (e) {
+      chk.checked = !checked; // revertir, no se pudo guardar
+      toast('No se pudo actualizar "Autorizado".');
+    } finally {
+      chk.disabled = false;
+    }
   }
 
   const panelPres = document.getElementById('panel-pres');
