@@ -134,6 +134,53 @@
   }
   button:active:not(:disabled), .icon-btn:active { transform: scale(0.96); }
   input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(212,162,76,.15); }
+
+  /* Transición de entrada compartida por vistas (lista/ficha/duplicados/fusión) y
+     paneles que se despliegan (nuevo paciente, movimiento, prestación, fusión) — mismo
+     mecanismo y timing que mostrarCardAnimada() de /turnos y /gestion: sacar .hidden,
+     forzar reflow, agregar .card-visible en el frame siguiente (ver JS). */
+  .vista, .reveal { opacity: 0; transform: translateY(10px); transition: opacity .2s ease, transform .2s ease; }
+  .vista.card-visible, .reveal.card-visible { opacity: 1; transform: translateY(0); }
+
+  /* Resaltado breve de la fila recién creada/fusionada, mismo patrón que .row-highlight
+     de /gestion (decisions.md). */
+  .patient-row.row-highlight { background: rgba(212,162,76,.18); }
+
+  /* Cartel de fichas duplicadas en la pantalla principal — mismo rojo suave, no
+     saturado, que .task-item.urgent de /gestion. */
+  .dup-banner { display: flex; align-items: center; gap: 10px; background: rgba(193,68,55,.07); border: 1px solid rgba(193,68,55,.2); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .dup-banner-icon { font-size: 16px; flex-shrink: 0; }
+  .dup-banner-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--bloqueo); }
+  .dup-banner-btn { background: var(--bloqueo); color: var(--white); border: none; padding: 7px 14px; border-radius: 100px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+
+  .dup-warning { background: rgba(193,68,55,.08); border: 1px solid rgba(193,68,55,.25); border-radius: 10px; padding: 12px 14px; margin-top: 4px; }
+  .dup-warning-text { color: var(--bloqueo); font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+  .dup-warning button { width: 100%; }
+
+  .dup-group-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .dup-group-count { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .dup-check-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
+  .dup-check-row:last-of-type { border-bottom: none; }
+  .dup-check-row input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--navy); flex-shrink: 0; }
+
+  .fusion-pick-btn { flex: 1; padding: 12px 10px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--white); font-weight: 700; font-size: 13px; color: var(--navy); text-align: center; line-height: 1.5; }
+  .fusion-pick-btn small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .fusion-pick-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
+  .fusion-pick-btn.selected small { color: rgba(255,255,255,.75); }
+
+  .fusion-compare { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .fusion-compare th, .fusion-compare td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+  .fusion-compare th { font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
+  .fusion-compare tr:last-child td { border-bottom: none; }
+  .fusion-compare tr.conflict td { background: rgba(193,68,55,.05); }
+  .fusion-campo { font-weight: 600; white-space: nowrap; }
+  .fusion-val { display: block; cursor: pointer; padding: 6px 7px; border-radius: 8px; border: 1.5px solid transparent; min-height: 14px; word-break: break-word; }
+  .fusion-val:hover { background: var(--cream); }
+  .fusion-val.chosen { border-color: var(--gold); background: rgba(212,162,76,.14); font-weight: 600; }
+  .fusion-val.vacio { color: var(--muted); font-style: italic; }
+  .fusion-final-input { width: 100%; min-width: 110px; padding: 6px 8px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 12px; }
+  .fusion-final-input.pendiente { border-color: var(--bloqueo); background: rgba(193,68,55,.06); }
+  .fusion-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -154,7 +201,13 @@
     <a class="volver-link" href="/gestion">← Gestión</a>
   </div>
 
-  <div id="vista-lista">
+  <div id="vista-lista" class="vista">
+    <div class="dup-banner hidden" id="dup-banner">
+      <span class="dup-banner-icon">❗</span>
+      <span class="dup-banner-text" id="dup-banner-text">Hay fichas duplicadas</span>
+      <button class="dup-banner-btn" id="dup-banner-btn">Revisar</button>
+    </div>
+
     <div class="search-row">
       <div class="search-box">
         <input type="text" id="search-input" placeholder="Buscar por nombre o DNI...">
@@ -162,7 +215,7 @@
       <button class="btn-nuevo" id="btn-nuevo-paciente">+ Nuevo paciente</button>
     </div>
 
-    <div class="panel hidden" id="panel-nuevo">
+    <div class="panel reveal hidden" id="panel-nuevo">
       <h2>Nuevo paciente</h2>
       <div class="field-row">
         <div class="field"><label>Nombre *</label><input type="text" id="np-nombre"></div>
@@ -171,6 +224,10 @@
       <div class="field-row">
         <div class="field"><label>DNI</label><input type="text" id="np-dni"></div>
         <div class="field"><label>Teléfono</label><input type="text" id="np-telefono"></div>
+      </div>
+      <div class="dup-warning hidden" id="np-dup-warning">
+        <div class="dup-warning-text">Ya existe una ficha con este DNI: <span id="np-dup-nombre"></span></div>
+        <button class="btn-confirm" id="np-dup-abrir">Abrir ficha</button>
       </div>
       <div class="panel-actions">
         <button class="btn-confirm" id="np-guardar">Crear ficha</button>
@@ -184,7 +241,39 @@
     </div>
   </div>
 
-  <div id="vista-ficha" class="hidden">
+  <div id="vista-duplicados" class="vista hidden">
+    <a class="volver-ficha" id="volver-lista-desde-dup">← Volver a la lista</a>
+    <div class="ficha-header"><div><h1 style="font-size:20px;">Fichas duplicadas</h1></div></div>
+    <div id="dup-grupos"></div>
+  </div>
+
+  <div id="vista-fusion" class="vista hidden">
+    <a class="volver-ficha" id="volver-duplicados-desde-fusion">← Volver a duplicados</a>
+    <div class="panel">
+      <h2>Elegí cuál ficha mantener</h2>
+      <div class="field-row" style="gap:10px;">
+        <button class="fusion-pick-btn" id="fusion-pick-a">Mantener esta<small id="fusion-pick-a-info"></small></button>
+        <button class="fusion-pick-btn" id="fusion-pick-b">Mantener esta<small id="fusion-pick-b-info"></small></button>
+      </div>
+      <div class="fusion-meta">La otra ficha se manda a la papelera de Drive (no se borra para siempre) y todos sus movimientos y prestaciones se combinan en la que elijas mantener.</div>
+    </div>
+    <div class="panel">
+      <h2>Comparar datos</h2>
+      <div class="mov-table-wrap">
+        <table class="fusion-compare">
+          <thead><tr><th>Campo</th><th id="fusion-th-a"></th><th id="fusion-th-b"></th><th>Valor final</th></tr></thead>
+          <tbody id="fusion-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel-actions" style="margin-bottom:20px;">
+      <button class="btn-confirm" id="fusion-confirmar">Confirmar fusión</button>
+      <button class="btn-cancel" id="fusion-cancelar">Cancelar</button>
+    </div>
+    <div class="panel-msg hidden" id="fusion-msg"></div>
+  </div>
+
+  <div id="vista-ficha" class="vista hidden">
     <a class="volver-ficha" id="volver-lista">← Volver a la lista</a>
 
     <div class="ficha-header">
@@ -250,7 +339,7 @@
       </div>
     </div>
 
-    <div class="panel hidden" id="panel-mov">
+    <div class="panel reveal hidden" id="panel-mov">
       <h2 id="mov-form-titulo">Nuevo movimiento</h2>
       <div class="field-row">
         <div class="field"><label>Fecha</label><input type="date" id="mov-fecha"></div>
@@ -291,7 +380,7 @@
       <button class="btn-add-mov" id="btn-add-pres">+ Agregar prestación</button>
     </div>
 
-    <div class="panel hidden" id="panel-pres">
+    <div class="panel reveal hidden" id="panel-pres">
       <h2 id="pres-form-titulo">Nueva prestación</h2>
       <div class="field-row">
         <div class="field"><label>Fecha</label><input type="date" id="pres-fecha"></div>
@@ -355,6 +444,8 @@
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     loginError.textContent = 'Clave incorrecta.';
+    detenerPolling();
+    detenerEscaneoDuplicados();
   }
 
   async function apiGet(params) {
@@ -378,9 +469,34 @@
     loginScreen.classList.add('hidden');
     appEl.classList.remove('hidden');
     requestAnimationFrame(() => requestAnimationFrame(() => appEl.classList.add('fade-in')));
+    // getElementById directo (no la const vistaLista, declarada más abajo): si ya hay
+    // gestionKey en sessionStorage, arrancar() se llama de forma síncrona acá mismo, antes
+    // de que el resto del script llegue a declarar esa const (evita un ReferenceError por
+    // temporal dead zone en el reingreso de una sesión ya logueada).
+    mostrarAnimado(document.getElementById('vista-lista'));
     cargarLista();
+    iniciarEscaneoDuplicados();
   }
   if (gestionKey) arrancar();
+
+  // ---------- Transición de entrada de vistas/paneles (mismo mecanismo que
+  // mostrarCardAnimada() de /turnos y /gestion): saca .hidden, fuerza reflow para poder
+  // repetirla aunque el elemento ya se haya mostrado antes, agrega .card-visible en el
+  // frame siguiente. ----------
+  function mostrarAnimado(el) {
+    el.classList.remove('hidden');
+    el.classList.remove('card-visible');
+    void el.offsetWidth;
+    requestAnimationFrame(() => el.classList.add('card-visible'));
+  }
+  function ocultarAnimado(el) {
+    el.classList.remove('card-visible');
+    el.classList.add('hidden');
+  }
+  function cambiarVista(vistaMostrar, ...vistasOcultar) {
+    vistasOcultar.forEach((v) => ocultarAnimado(v));
+    mostrarAnimado(vistaMostrar);
+  }
 
   // ---------- Toast / confirm (mismo patrón que /gestion) ----------
   const toastContainer = document.getElementById('toast-container');
@@ -422,10 +538,13 @@
   const searchInput = document.getElementById('search-input');
   const patientListEl = document.getElementById('patient-list');
 
+  let resaltarIdPendiente = null; // fila a resaltar en el próximo renderLista() (fusión/creación)
+
   async function cargarLista() {
     try {
       pacientes = await apiGet({ modo: 'listar' });
       renderLista();
+      renderBannerDuplicados();
     } catch (e) {
       if (e.message !== 'unauthorized') patientListEl.innerHTML = '<div class="empty-note">No se pudo cargar la lista.</div>';
     }
@@ -453,6 +572,15 @@
     patientListEl.querySelectorAll('.patient-row').forEach((row) => {
       row.addEventListener('click', () => abrirFicha(row.dataset.id));
     });
+    if (resaltarIdPendiente) {
+      const fila = patientListEl.querySelector(`.patient-row[data-id="${resaltarIdPendiente}"]`);
+      if (fila) {
+        fila.classList.add('row-highlight');
+        fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => fila.classList.remove('row-highlight'), 2200);
+      }
+      resaltarIdPendiente = null;
+    }
   }
   searchInput.addEventListener('input', renderLista);
 
@@ -465,6 +593,26 @@
     return div.innerHTML;
   }
 
+  // ---------- Mayúsculas automáticas (ver decisions.md): nombre, apellido, localidad,
+  // domicilio, obra social, plan y tratamiento se guardan siempre en mayúsculas, sin
+  // importar cómo los tipeen — se transforma en vivo, no solo al guardar. DNI, nº de
+  // afiliado, teléfono y fecha quedan en formato normal (numéricos/identificación, no
+  // texto legible). El backend aplica el mismo criterio como red de seguridad
+  // (CAMPOS_MAYUSCULAS en lib/pacientesSheet.js) por si algo llega directo a la API. ----
+  function conectarMayusculas(el) {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const pos = el.selectionStart;
+      el.value = el.value.toUpperCase();
+      if (pos != null && el === document.activeElement) {
+        try { el.setSelectionRange(pos, pos); } catch (e) { /* selects sin soporte, ignorar */ }
+      }
+    });
+  }
+  function normalizarDni(dni) {
+    return (dni || '').replace(/\D/g, '');
+  }
+
   // ---------- Nuevo paciente ----------
   const panelNuevo = document.getElementById('panel-nuevo');
   const npNombre = document.getElementById('np-nombre');
@@ -472,14 +620,48 @@
   const npDni = document.getElementById('np-dni');
   const npTelefono = document.getElementById('np-telefono');
   const npMsg = document.getElementById('np-msg');
+  const npDupWarning = document.getElementById('np-dup-warning');
+  const npDupNombre = document.getElementById('np-dup-nombre');
+  [npNombre, npApellido].forEach(conectarMayusculas);
 
   document.getElementById('btn-nuevo-paciente').addEventListener('click', () => {
-    panelNuevo.classList.remove('hidden');
     npNombre.value = ''; npApellido.value = ''; npDni.value = ''; npTelefono.value = '';
     npMsg.classList.add('hidden');
+    npDupWarning.classList.add('hidden');
+    npDuplicadoActual = null;
+    mostrarAnimado(panelNuevo);
     npNombre.focus();
   });
-  document.getElementById('np-cancelar').addEventListener('click', () => panelNuevo.classList.add('hidden'));
+  document.getElementById('np-cancelar').addEventListener('click', () => ocultarAnimado(panelNuevo));
+
+  // Detección de duplicados por DNI (único criterio, ver decisions.md): se chequea "de
+  // inmediato" contra la lista ya cargada en memoria (sin ida y vuelta al servidor) apenas
+  // se completa el DNI, y de nuevo al confirmar (por si se pegó el DNI sin pasar por blur).
+  let npDuplicadoActual = null;
+  function buscarDuplicadoPorDni(dni) {
+    const norm = normalizarDni(dni);
+    if (!norm) return null;
+    return pacientes.find((p) => normalizarDni(p.dni) === norm) || null;
+  }
+  function chequearDniEnNuevoPaciente() {
+    npDuplicadoActual = buscarDuplicadoPorDni(npDni.value);
+    if (npDuplicadoActual) {
+      npDupNombre.textContent = `${npDuplicadoActual.nombre} ${npDuplicadoActual.apellido}`.trim();
+      mostrarAnimado(npDupWarning);
+    } else {
+      npDupWarning.classList.add('hidden');
+    }
+  }
+  npDni.addEventListener('blur', chequearDniEnNuevoPaciente);
+  npDni.addEventListener('input', () => {
+    if (!npDupWarning.classList.contains('hidden')) npDupWarning.classList.add('hidden');
+    npDuplicadoActual = null;
+  });
+  document.getElementById('np-dup-abrir').addEventListener('click', () => {
+    if (!npDuplicadoActual) return;
+    ocultarAnimado(panelNuevo);
+    abrirFicha(npDuplicadoActual.id);
+  });
 
   let telefonoAutocompletadoConsultado = false;
   npApellido.addEventListener('blur', async () => {
@@ -511,6 +693,8 @@
       npMsg.classList.remove('hidden');
       return;
     }
+    chequearDniEnNuevoPaciente();
+    if (npDuplicadoActual) return; // ya se muestra el cartel "Abrir ficha", no se crea nada
     const btn = document.getElementById('np-guardar');
     btn.disabled = true;
     try {
@@ -520,10 +704,15 @@
         campos: { dni: npDni.value.trim(), telefono: npTelefono.value.trim() },
       });
       if (r.success) {
-        panelNuevo.classList.add('hidden');
+        ocultarAnimado(panelNuevo);
         toast('✅ Ficha creada');
+        resaltarIdPendiente = r.id;
         await cargarLista();
         abrirFicha(r.id);
+      } else if (r.duplicado) {
+        npDuplicadoActual = { id: r.id, nombre: r.nombre, apellido: r.apellido };
+        npDupNombre.textContent = `${r.nombre} ${r.apellido}`.trim();
+        mostrarAnimado(npDupWarning);
       } else {
         npMsg.textContent = r.message || 'No se pudo crear la ficha.';
         npMsg.className = 'panel-msg error';
@@ -537,18 +726,18 @@
   // ---------- Ficha ----------
   const vistaLista = document.getElementById('vista-lista');
   const vistaFicha = document.getElementById('vista-ficha');
+  const vistaDuplicados = document.getElementById('vista-duplicados');
+  const vistaFusion = document.getElementById('vista-fusion');
   const autosaveStatus = document.getElementById('autosave-status');
 
   document.getElementById('volver-lista').addEventListener('click', () => {
     detenerPolling();
-    vistaFicha.classList.add('hidden');
-    vistaLista.classList.remove('hidden');
+    cambiarVista(vistaLista, vistaFicha);
     cargarLista();
   });
 
   async function abrirFicha(id) {
-    vistaLista.classList.add('hidden');
-    vistaFicha.classList.remove('hidden');
+    cambiarVista(vistaFicha, vistaLista, vistaDuplicados, vistaFusion);
     document.getElementById('f-titulo').textContent = 'Cargando…';
     try {
       fichaActual = await apiGet({ modo: 'ficha', id });
@@ -618,7 +807,9 @@
   }
 
   // ---------- Autosave de campos ----------
+  const CAMPOS_FICHA_MAYUSCULAS = new Set(['nombre', 'apellido', 'localidad', 'domicilio', 'obraSocial', 'plan', 'planTratamiento']);
   document.querySelectorAll('#vista-ficha [data-campo]').forEach((input) => {
+    if (CAMPOS_FICHA_MAYUSCULAS.has(input.dataset.campo)) conectarMayusculas(input);
     input.addEventListener('focus', () => { campoConFoco = input; });
     input.addEventListener('blur', async () => {
       campoConFoco = null;
@@ -667,6 +858,7 @@
   const movFormaPago = document.getElementById('mov-forma-pago');
   const movMsg = document.getElementById('mov-msg');
   const movTipoHint = document.getElementById('mov-tipo-hint');
+  [movTratamiento, movFormaPago].forEach(conectarMayusculas);
   let cargaHistorica = false;
 
   function tipoInferido() {
@@ -695,7 +887,7 @@
 
   document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null, false));
   document.getElementById('btn-add-mov-historica').addEventListener('click', () => abrirFormMov(null, true));
-  document.getElementById('mov-cancelar').addEventListener('click', () => panelMov.classList.add('hidden'));
+  document.getElementById('mov-cancelar').addEventListener('click', () => ocultarAnimado(panelMov));
 
   function fechaSheetAInput(fechaStr) {
     // "27/7/2026" -> "2026-07-27" para <input type=date>. Si no matchea, deja vacío.
@@ -738,7 +930,7 @@
       movFormaPago.value = '';
     }
     actualizarHintTipo();
-    panelMov.classList.remove('hidden');
+    mostrarAnimado(panelMov);
     panelMov.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
@@ -771,7 +963,7 @@
         ? await apiPost({ accion: 'movimiento-editar', fila: editandoMovFila, ...payload })
         : await apiPost({ accion: 'movimiento-agregar', ...payload });
       if (r.success) {
-        panelMov.classList.add('hidden');
+        ocultarAnimado(panelMov);
         toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Movimiento guardado');
         fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
         renderFicha();
@@ -839,10 +1031,11 @@
   const presCodigo = document.getElementById('pres-codigo');
   const presAutorizado = document.getElementById('pres-autorizado');
   const presMsg = document.getElementById('pres-msg');
+  [presTratamiento, presCodigo].forEach(conectarMayusculas);
   let editandoPresFila = null;
 
   document.getElementById('btn-add-pres').addEventListener('click', () => abrirFormPres(null));
-  document.getElementById('pres-cancelar').addEventListener('click', () => panelPres.classList.add('hidden'));
+  document.getElementById('pres-cancelar').addEventListener('click', () => ocultarAnimado(panelPres));
 
   function abrirFormPres(fila) {
     editandoPresFila = fila;
@@ -861,7 +1054,7 @@
       presCodigo.value = '';
       presAutorizado.checked = false;
     }
-    panelPres.classList.remove('hidden');
+    mostrarAnimado(panelPres);
     panelPres.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
@@ -887,7 +1080,7 @@
         ? await apiPost({ accion: 'prestacion-editar', fila: editandoPresFila, ...payload })
         : await apiPost({ accion: 'prestacion-agregar', ...payload });
       if (r.success) {
-        panelPres.classList.add('hidden');
+        ocultarAnimado(panelPres);
         toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Prestación guardada');
         fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
         renderFicha();
@@ -937,6 +1130,281 @@
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = null;
   }
+
+  // ---------- Fichas duplicadas por DNI (ver decisions.md) ----------
+  // Único criterio: mismo DNI (nombre/apellido iguales no cuentan solos). El sistema
+  // nunca fusiona solo — solo detecta, avisa con un cartel y ofrece revisar; la fusión
+  // siempre pasa por comparar campo a campo y una confirmación explícita.
+  const dupBanner = document.getElementById('dup-banner');
+  const dupBannerText = document.getElementById('dup-banner-text');
+  let gruposDuplicadosActuales = [];
+
+  function calcularGruposDuplicados() {
+    const porDni = {};
+    pacientes.forEach((p) => {
+      const dni = normalizarDni(p.dni);
+      if (!dni) return;
+      (porDni[dni] = porDni[dni] || []).push(p);
+    });
+    return Object.values(porDni).filter((grupo) => grupo.length > 1);
+  }
+
+  function renderBannerDuplicados() {
+    gruposDuplicadosActuales = calcularGruposDuplicados();
+    if (!gruposDuplicadosActuales.length) {
+      dupBanner.classList.add('hidden');
+      return;
+    }
+    const totalFichas = gruposDuplicadosActuales.reduce((acc, g) => acc + g.length, 0);
+    dupBannerText.textContent = gruposDuplicadosActuales.length === 1
+      ? `Hay ${totalFichas} fichas con el mismo DNI`
+      : `Hay ${gruposDuplicadosActuales.length} DNI repetidos (${totalFichas} fichas)`;
+    dupBanner.classList.remove('hidden');
+  }
+  document.getElementById('dup-banner-btn').addEventListener('click', abrirVistaDuplicados);
+
+  // Escaneo continuo: cada 2 minutos, mientras haya sesión, se vuelve a pedir la lista
+  // completa (mismo endpoint liviano que ya usa la pantalla principal — no suma ninguna
+  // ruta nueva) y se recalculan los duplicados, así el cartel puede aparecer solo sin que
+  // nadie tenga que salir y volver a entrar a Pacientes. Se salta el ciclo si hay algo
+  // abierto, para no interrumpir (mismo criterio que el auto-refresh de /gestion).
+  let duplicadosTimer = null;
+  function haySesionOcupadaPacientes() {
+    return !panelNuevo.classList.contains('hidden')
+      || !vistaDuplicados.classList.contains('hidden')
+      || !vistaFusion.classList.contains('hidden')
+      || document.activeElement === searchInput;
+  }
+  function iniciarEscaneoDuplicados() {
+    detenerEscaneoDuplicados();
+    duplicadosTimer = setInterval(() => {
+      if (haySesionOcupadaPacientes()) return;
+      cargarLista();
+    }, 120000);
+  }
+  function detenerEscaneoDuplicados() {
+    if (duplicadosTimer) clearInterval(duplicadosTimer);
+    duplicadosTimer = null;
+  }
+
+  // ---------- Vista "Fichas duplicadas": un grupo por DNI, se eligen 2 para comparar ----------
+  const dupGruposEl = document.getElementById('dup-grupos');
+
+  async function abrirVistaDuplicados() {
+    cambiarVista(vistaDuplicados, vistaLista, vistaFicha, vistaFusion);
+    try {
+      pacientes = await apiGet({ modo: 'listar' });
+    } catch (e) { /* si falla, se usa lo que ya había en memoria */ }
+    renderVistaDuplicados();
+  }
+  document.getElementById('volver-lista-desde-dup').addEventListener('click', () => {
+    cambiarVista(vistaLista, vistaDuplicados);
+    cargarLista();
+  });
+
+  function renderVistaDuplicados() {
+    const grupos = calcularGruposDuplicados();
+    gruposDuplicadosActuales = grupos;
+    if (!grupos.length) {
+      dupGruposEl.innerHTML = '<div class="empty-note">No hay fichas duplicadas por el momento.</div>';
+      return;
+    }
+    dupGruposEl.innerHTML = grupos.map((grupo, gi) => `
+      <div class="panel">
+        <div class="dup-group-header">
+          <h2>${escapeHtml(grupo[0].nombre)} ${escapeHtml(grupo[0].apellido)} — DNI ${escapeHtml(grupo[0].dni)}</h2>
+          <span class="dup-group-count">${grupo.length} fichas</span>
+        </div>
+        ${grupo.map((p, pi) => `
+          <label class="dup-check-row">
+            <input type="checkbox" data-grupo="${gi}" data-id="${p.id}" ${pi < 2 ? 'checked' : ''}>
+            <span>${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
+          </label>
+        `).join('')}
+        <div class="panel-actions">
+          <button class="btn-confirm btn-comparar-grupo" data-grupo="${gi}">Comparar seleccionadas</button>
+        </div>
+      </div>
+    `).join('');
+
+    dupGruposEl.querySelectorAll('.btn-comparar-grupo').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const gi = btn.dataset.grupo;
+        const checks = dupGruposEl.querySelectorAll(`input[data-grupo="${gi}"]:checked`);
+        if (checks.length !== 2) {
+          toast('Elegí exactamente 2 fichas para comparar.');
+          return;
+        }
+        abrirFusion(checks[0].dataset.id, checks[1].dataset.id);
+      });
+    });
+    // Como mucho 2 tildadas por grupo a la vez (un grupo puede tener más de 2 fichas).
+    dupGruposEl.querySelectorAll('input[type=checkbox]').forEach((chk) => {
+      chk.addEventListener('change', () => {
+        const gi = chk.dataset.grupo;
+        const marcadas = dupGruposEl.querySelectorAll(`input[data-grupo="${gi}"]:checked`);
+        if (marcadas.length > 2) chk.checked = false;
+      });
+    });
+  }
+
+  // ---------- Vista "Fusión": comparación campo a campo + elegir cuál ficha mantener.
+  // Nunca se elige solo: cada campo en conflicto (ambas fichas con datos distintos)
+  // arranca vacío y hace falta resolverlo a mano (clickeando uno de los dos valores o
+  // escribiendo uno nuevo) antes de poder confirmar. ----------
+  const CAMPOS_FUSION = [
+    ['nombre', 'Nombre'], ['apellido', 'Apellido'], ['dni', 'DNI'],
+    ['fechaNacimiento', 'Fecha de nacimiento'], ['domicilio', 'Domicilio'], ['localidad', 'Localidad'],
+    ['telefono', 'Teléfono'], ['obraSocial', 'Obra social'], ['nAfiliado', 'Nº de afiliado'],
+    ['plan', 'Plan'], ['planTratamiento', 'Plan de tratamiento'],
+  ];
+  const CAMPOS_FUSION_MAYUSCULAS = new Set(['nombre', 'apellido', 'domicilio', 'localidad', 'obraSocial', 'plan', 'planTratamiento']);
+  let fusionFichaA = null;
+  let fusionFichaB = null;
+  let fusionMantener = null; // 'a' | 'b'
+
+  async function abrirFusion(idA, idB) {
+    cambiarVista(vistaFusion, vistaLista, vistaFicha, vistaDuplicados);
+    document.getElementById('fusion-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">Cargando…</td></tr>';
+    document.getElementById('fusion-msg').classList.add('hidden');
+    fusionMantener = null;
+    try {
+      [fusionFichaA, fusionFichaB] = await Promise.all([
+        apiGet({ modo: 'ficha', id: idA }),
+        apiGet({ modo: 'ficha', id: idB }),
+      ]);
+      renderFusion();
+    } catch (e) {
+      if (e.message !== 'unauthorized') toast('No se pudieron cargar las fichas a comparar.');
+    }
+  }
+  document.getElementById('volver-duplicados-desde-fusion').addEventListener('click', () => abrirVistaDuplicados());
+  document.getElementById('fusion-cancelar').addEventListener('click', () => abrirVistaDuplicados());
+
+  function nombreCorto(ficha) {
+    return `${ficha.campos.nombre} ${ficha.campos.apellido}`.trim() || 'Sin nombre';
+  }
+
+  // Separado en dos funciones a propósito: elegir "Mantener esta" NO puede volver a
+  // construir la tabla de comparación (perdería los conflictos que la secretaria ya
+  // resolvió a mano). renderFusion() arma todo una sola vez, al cargar las dos fichas;
+  // actualizarBotonesMantener() solo cambia el estado visual de los dos botones.
+  function actualizarBotonesMantener() {
+    const infoA = `${fusionFichaA.movimientos.length} mov. / ${fusionFichaA.prestacionesObraSocial.length} prest.`;
+    const infoB = `${fusionFichaB.movimientos.length} mov. / ${fusionFichaB.prestacionesObraSocial.length} prest.`;
+    document.getElementById('fusion-pick-a').innerHTML = `Mantener esta<small>${escapeHtml(nombreCorto(fusionFichaA))} — ${infoA}</small>`;
+    document.getElementById('fusion-pick-b').innerHTML = `Mantener esta<small>${escapeHtml(nombreCorto(fusionFichaB))} — ${infoB}</small>`;
+    document.getElementById('fusion-pick-a').classList.toggle('selected', fusionMantener === 'a');
+    document.getElementById('fusion-pick-b').classList.toggle('selected', fusionMantener === 'b');
+  }
+
+  function renderFusion() {
+    document.getElementById('fusion-th-a').textContent = nombreCorto(fusionFichaA);
+    document.getElementById('fusion-th-b').textContent = nombreCorto(fusionFichaB);
+    actualizarBotonesMantener();
+
+    const tbody = document.getElementById('fusion-tbody');
+    tbody.innerHTML = CAMPOS_FUSION.map(([campo, label]) => {
+      const valA = (fusionFichaA.campos[campo] || '').trim();
+      const valB = (fusionFichaB.campos[campo] || '').trim();
+      const conflicto = valA && valB && valA !== valB;
+      const valorFinal = conflicto ? '' : (valA || valB || '');
+      return `
+        <tr class="${conflicto ? 'conflict' : ''}" data-campo="${campo}">
+          <td class="fusion-campo">${label}</td>
+          <td><span class="fusion-val ${valA ? '' : 'vacio'}" data-campo="${campo}" data-valor="${escapeHtml(valA)}">${valA ? escapeHtml(valA) : '—'}</span></td>
+          <td><span class="fusion-val ${valB ? '' : 'vacio'}" data-campo="${campo}" data-valor="${escapeHtml(valB)}">${valB ? escapeHtml(valB) : '—'}</span></td>
+          <td><input type="text" class="fusion-final-input ${conflicto ? 'pendiente' : ''}" data-campo="${campo}" value="${escapeHtml(valorFinal)}"></td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('.fusion-val').forEach((span) => {
+      span.addEventListener('click', () => {
+        const campo = span.dataset.campo;
+        const input = tbody.querySelector(`.fusion-final-input[data-campo="${campo}"]`);
+        input.value = span.dataset.valor;
+        input.classList.remove('pendiente');
+        tbody.querySelectorAll(`.fusion-val[data-campo="${campo}"]`).forEach((s) => s.classList.remove('chosen'));
+        span.classList.add('chosen');
+      });
+    });
+    tbody.querySelectorAll('.fusion-final-input').forEach(conectarMayusculasSiCorresponde);
+    tbody.querySelectorAll('.fusion-final-input').forEach((input) => {
+      input.addEventListener('input', () => input.classList.toggle('pendiente', !input.value.trim()));
+    });
+  }
+  function conectarMayusculasSiCorresponde(input) {
+    if (CAMPOS_FUSION_MAYUSCULAS.has(input.dataset.campo)) conectarMayusculas(input);
+  }
+
+  document.getElementById('fusion-pick-a').addEventListener('click', () => { fusionMantener = 'a'; actualizarBotonesMantener(); });
+  document.getElementById('fusion-pick-b').addEventListener('click', () => { fusionMantener = 'b'; actualizarBotonesMantener(); });
+
+  document.getElementById('fusion-confirmar').addEventListener('click', async () => {
+    const msgEl = document.getElementById('fusion-msg');
+    msgEl.classList.add('hidden');
+
+    if (!fusionMantener) {
+      msgEl.textContent = 'Elegí cuál ficha mantener.';
+      msgEl.className = 'panel-msg error';
+      msgEl.classList.remove('hidden');
+      return;
+    }
+    const tbody = document.getElementById('fusion-tbody');
+    const pendientes = tbody.querySelectorAll('.fusion-final-input.pendiente');
+    if (pendientes.length) {
+      msgEl.textContent = 'Completá los campos en conflicto resaltados en rojo antes de fusionar.';
+      msgEl.className = 'panel-msg error';
+      msgEl.classList.remove('hidden');
+      pendientes[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    const campos = {};
+    tbody.querySelectorAll('.fusion-final-input').forEach((input) => {
+      const campo = input.dataset.campo;
+      let valor = input.value.trim();
+      if (CAMPOS_FUSION_MAYUSCULAS.has(campo)) valor = valor.toUpperCase();
+      campos[campo] = valor;
+    });
+
+    const idMantener = fusionMantener === 'a' ? fusionFichaA.id : fusionFichaB.id;
+    const idEliminar = fusionMantener === 'a' ? fusionFichaB.id : fusionFichaA.id;
+    const nombreMantener = nombreCorto(fusionMantener === 'a' ? fusionFichaA : fusionFichaB);
+    const nombreEliminar = nombreCorto(fusionMantener === 'a' ? fusionFichaB : fusionFichaA);
+
+    const ok = await confirmDialog({
+      title: 'Fusionar fichas',
+      message: `Se va a mantener la ficha de ${nombreMantener}. La ficha de ${nombreEliminar} se manda a la papelera de Drive (no se borra para siempre) y todos sus movimientos y prestaciones se combinan en la que queda. ¿Confirmás?`,
+      confirmLabel: 'Fusionar',
+      danger: true,
+    });
+    if (!ok) return;
+
+    const btn = document.getElementById('fusion-confirmar');
+    btn.disabled = true;
+    try {
+      const r = await apiPost({ accion: 'fusionar', idMantener, idEliminar, campos });
+      if (r.success) {
+        toast('✅ Fichas fusionadas');
+        resaltarIdPendiente = idMantener;
+        abrirFicha(idMantener);
+      } else {
+        msgEl.textContent = r.message || 'No se pudo fusionar. Revisá ambas fichas antes de reintentar.';
+        msgEl.className = 'panel-msg error';
+        msgEl.classList.remove('hidden');
+      }
+    } catch (e) {
+      if (e.message !== 'unauthorized') {
+        msgEl.textContent = 'No se pudo fusionar (falló la conexión). Revisá ambas fichas antes de reintentar.';
+        msgEl.className = 'panel-msg error';
+        msgEl.classList.remove('hidden');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
 </script>
 </body>
 </html>

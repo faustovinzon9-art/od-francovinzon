@@ -18,6 +18,7 @@ import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
   rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
+  normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas,
 } from '../../lib/pacientesSheet.js';
 
 export default async function handler(req, res) {
@@ -48,6 +49,7 @@ export default async function handler(req, res) {
       if (!isValidGestionKey(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.body.accion === 'crear') return await crearPaciente(req, res);
       if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
+      if (req.body.accion === 'fusionar') return await fusionarPacientes(req, res);
       if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
       if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
       if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
@@ -98,17 +100,22 @@ async function oauthCallback(req, res) {
 
 // ---------- Lectura ----------
 
-async function listar(req, res) {
-  const drive = getPacientesDriveClient();
+// Lista cruda de fichas (id + nombre de archivo) desde Drive — base tanto de `listar`
+// (para la UI) como del chequeo de DNI duplicado al crear una ficha nueva.
+async function listarArchivosPacientes(drive) {
   const { data } = await drive.files.list({
     q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
     fields: 'files(id, name)',
     pageSize: 1000,
-    orderBy: 'name',
   });
+  return (data.files || []).filter((f) => f.id !== FICHA_TEMPLATE_ID && !/^⭐/.test(f.name));
+}
 
-  const pacientes = (data.files || [])
-    .filter((f) => f.id !== FICHA_TEMPLATE_ID && !/^⭐/.test(f.name))
+async function listar(req, res) {
+  const drive = getPacientesDriveClient();
+  const archivos = await listarArchivosPacientes(drive);
+
+  const pacientes = archivos
     .map((f) => {
       const { nombre, apellido, dni } = parsearNombreArchivo(f.name);
       return { id: f.id, nombre, apellido, dni };
@@ -116,6 +123,30 @@ async function listar(req, res) {
     .sort((a, b) => `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es'));
 
   res.status(200).json(pacientes);
+}
+
+// Detección de duplicados por DNI (único criterio — ver decisions.md): recorre todas las
+// fichas de la carpeta buscando el mismo DNI normalizado (solo dígitos). Se usa al crear
+// una ficha nueva, para ofrecer "Abrir ficha" en vez de dejar crear una segunda.
+async function buscarPacientePorDni(drive, dniNormalizado, excluirId) {
+  if (!dniNormalizado) return null;
+  const archivos = await listarArchivosPacientes(drive);
+  for (const f of archivos) {
+    if (excluirId && f.id === excluirId) continue;
+    const { nombre, apellido, dni } = parsearNombreArchivo(f.name);
+    if (normalizarDni(dni) === dniNormalizado) return { id: f.id, nombre, apellido };
+  }
+  return null;
+}
+
+// Algunas fichas viejas tienen la validación de casilla del checkbox "Autorizado"
+// aplicada por error a una columna de texto (Tratamiento o Código) en vez de solo a la
+// suya — Sheets devuelve 'FALSE'/'TRUE' (string) para esas celdas sin completar, que no
+// son datos reales cargados por nadie. Se descartan acá para que no aparezcan como filas
+// falsas en la tabla de prestaciones (ver tasks.md).
+function celdaTextoLimpia(valor) {
+  if (valor === true || valor === false || valor === 'TRUE' || valor === 'FALSE') return '';
+  return valor || '';
 }
 
 async function obtenerFicha(req, res) {
@@ -165,8 +196,8 @@ async function obtenerFicha(req, res) {
     .map((row, i) => ({
       fila: 18 + i,
       fecha: row[0] || '',
-      tratamiento: row[1] || '',
-      codigo: row[2] || '',
+      tratamiento: celdaTextoLimpia(row[1]),
+      codigo: celdaTextoLimpia(row[2]),
       autorizado: row[3] === true || row[3] === 'TRUE',
     }))
     .filter((p) => p.fecha || p.tratamiento || p.codigo);
@@ -230,7 +261,28 @@ async function crearPaciente(req, res) {
   const drive = getPacientesDriveClient();
   const sheets = getPacientesSheetsClient();
 
-  const nombreFinal = nombreArchivo({ nombre, apellido, dni: campos.dni });
+  // Detección de duplicados por DNI (ver decisions.md): nunca se crea una segunda ficha
+  // con el mismo DNI — se ofrece abrir la existente en su lugar. Red de seguridad
+  // server-side además del chequeo que ya hace el cliente contra la lista en memoria.
+  const dniNormalizado = normalizarDni(campos.dni);
+  if (dniNormalizado) {
+    const existente = await buscarPacientePorDni(drive, dniNormalizado);
+    if (existente) {
+      return res.status(200).json({
+        success: false,
+        duplicado: true,
+        id: existente.id,
+        nombre: existente.nombre,
+        apellido: existente.apellido,
+        message: 'Ya existe una ficha con este DNI.',
+      });
+    }
+  }
+
+  // El nombre de archivo usa la misma versión en mayúsculas que va a quedar en las
+  // celdas C5/C6 — si no, la lista de /pacientes (que parsea el nombre del archivo)
+  // mostraría algo distinto de lo que muestra la ficha abierta (celdas del Sheet).
+  const nombreFinal = nombreArchivo({ nombre: aMayusculas(nombre), apellido: aMayusculas(apellido), dni: campos.dni });
   const copia = await drive.files.copy({
     fileId: FICHA_TEMPLATE_ID,
     requestBody: { name: nombreFinal, parents: [PACIENTES_FOLDER_ID] },
@@ -238,7 +290,10 @@ async function crearPaciente(req, res) {
   const id = copia.data.id;
 
   const datos = { ...campos, nombre, apellido };
-  const campoACelda = (campo) => ({ range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`, values: [[datos[campo]]] });
+  const campoACelda = (campo) => ({
+    range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`,
+    values: [[CAMPOS_MAYUSCULAS.has(campo) ? aMayusculas(datos[campo]) : datos[campo]]],
+  });
   const tieneValor = (campo) => datos[campo] != null && String(datos[campo]).trim() !== '';
   // RAW para teléfono/nº de afiliado (ver escribirCampoEnSheet, mismo motivo: no perder
   // un 0 inicial), USER_ENTERED para el resto (fechas y DNI necesitan parseo real).
@@ -285,11 +340,12 @@ const CAMPOS_TEXTO_CRUDO = new Set(['telefono', 'nAfiliado']);
 
 async function escribirCampoEnSheet(id, campo, valor) {
   const sheets = getPacientesSheetsClient();
+  const valorFinal = CAMPOS_MAYUSCULAS.has(campo) ? aMayusculas(valor) : valor;
   await sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`,
     valueInputOption: CAMPOS_TEXTO_CRUDO.has(campo) ? 'RAW' : 'USER_ENTERED',
-    requestBody: { values: [[valor ?? '']] },
+    requestBody: { values: [[valorFinal ?? '']] },
   });
 
   if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
@@ -300,37 +356,73 @@ async function escribirCampoEnSheet(id, campo, valor) {
   }
 }
 
+// ---------- Fusión manual de fichas duplicadas (por DNI, ver decisions.md) ----------
+// El sistema NUNCA decide solo cuál ficha mantener ni cómo resolver un dato
+// contradictorio entre las dos — todo eso ya viene resuelto por la secretaria desde el
+// frontend (comparación campo a campo, "cuál ficha mantener", conflictos resueltos a
+// mano). Esta función solo ejecuta la consolidación ya decidida: escribe los campos
+// finales en la ficha que se mantiene, migra TODOS los movimientos y prestaciones de la
+// ficha que se va a la que queda, y manda la ficha vieja a la papelera de Drive (no se
+// borra para siempre — se puede recuperar a mano desde Drive si hace falta).
+async function fusionarPacientes(req, res) {
+  const { idMantener, idEliminar, campos } = req.body;
+  if (!idMantener || !idEliminar || idMantener === idEliminar) {
+    return res.status(400).json({ success: false, message: 'Fichas inválidas para fusionar.' });
+  }
+
+  const sheets = getPacientesSheetsClient();
+  const drive = getPacientesDriveClient();
+
+  // 1. Campos finales (ya resueltos a mano) en la ficha que se mantiene.
+  if (campos) {
+    for (const campo of CAMPOS_ORDENADOS) {
+      if (campos[campo] != null) {
+        await escribirCampoEnSheet(idMantener, campo, campos[campo]);
+      }
+    }
+  }
+
+  // 2. Migrar movimientos de la ficha que se va, al final de los que ya tiene la que queda.
+  const { data: movData } = await sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoMovimientos() });
+  const movimientos = (movData.values || []).filter((row) => row[0] || row[1] || row[2] || row[3]);
+  if (movimientos.length) {
+    const { data: destinoMov } = await sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoMovimientos() });
+    let fila = primeraFilaLibre(destinoMov.values || []);
+    for (const row of movimientos) {
+      const [fecha, tratamiento, debe, haber, , , formaPago] = row;
+      await escribirMovimientoEnFila(idMantener, fila, { fecha, tratamiento, debe, haber, formaPago });
+      fila += 1;
+    }
+  }
+
+  // 3. Migrar prestaciones de obra social, mismo criterio.
+  const { data: presData } = await sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoPrestacionesObraSocial() });
+  const prestaciones = (presData.values || []).filter((row) => row[0] || row[1] || row[2]);
+  if (prestaciones.length) {
+    const { data: destinoPres } = await sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoPrestacionesObraSocial() });
+    let filaP = primeraFilaLibre(destinoPres.values || []);
+    for (const row of prestaciones) {
+      const [fecha, tratamiento, codigo, autorizado] = row;
+      await escribirPrestacionEnFila(idMantener, filaP, { fecha, tratamiento, codigo, autorizado: autorizado === true || autorizado === 'TRUE' });
+      filaP += 1;
+    }
+  }
+
+  // 4. La ficha duplicada va a la papelera (reversible desde Drive), nunca borrado permanente.
+  await drive.files.update({ fileId: idEliminar, requestBody: { trashed: true } });
+
+  res.status(200).json({ success: true, id: idMantener });
+}
+
 async function movimientoAgregar(req, res) {
   const { id, fecha, tratamiento, debe, haber, formaPago } = req.body;
   if (!id || !fecha) return res.status(400).json({ success: false, message: 'Falta fecha.' });
 
   try {
     const sheets = getPacientesSheetsClient();
-    await asegurarColumnaFormaPago(id);
-
     const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() });
     const fila = primeraFilaLibre(data.values || []);
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: id,
-      range: `${SHEET_NAME}!B${fila}:D${fila}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[fecha, tratamiento || '', debe || 0]] },
-    });
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: id,
-      range: `${SHEET_NAME}!E${fila}:E${fila}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[haber || 0]] },
-    });
-    if (formaPago) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: id,
-        range: `${SHEET_NAME}!H${fila}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[formaPago]] },
-      });
-    }
+    await escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago });
 
     res.status(200).json({ success: true, fila });
   } catch (err) {
@@ -361,13 +453,13 @@ async function escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, ha
     spreadsheetId: id,
     range: `${SHEET_NAME}!B${fila}:E${fila}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[fecha, tratamiento || '', debe || 0, haber || 0]] },
+    requestBody: { values: [[fecha, aMayusculas(tratamiento) || '', debe || 0, haber || 0]] },
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!H${fila}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[formaPago || '']] },
+    requestBody: { values: [[aMayusculas(formaPago) || '']] },
   });
 }
 
@@ -460,7 +552,7 @@ async function escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, 
     spreadsheetId: id,
     range: `${SHEET_NAME}!J${fila}:M${fila}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[fecha || '', tratamiento || '', codigo || '', !!autorizado]] },
+    requestBody: { values: [[fecha || '', aMayusculas(tratamiento) || '', aMayusculas(codigo) || '', !!autorizado]] },
   });
 }
 
