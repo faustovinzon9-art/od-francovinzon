@@ -12,7 +12,7 @@ import {
 } from '../../lib/googleOAuthPacientes.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, normalizarTexto, extraerTelefono,
-  isValidGestionKey,
+  isValidGestionKey, getHorariosLibresDia, formatArgDay,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -21,6 +21,10 @@ import {
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
+// Reintentos puntuales, call site por call site — NUNCA envolver el cliente entero
+// (getPacientesSheetsClient()/getPacientesDriveClient()) en un Proxy, ver el incidente
+// documentado en lib/googleCalendar.js y decisions.md.
+import { conReintentos } from '../../lib/retry.js';
 
 export default async function handler(req, res) {
   try {
@@ -37,12 +41,23 @@ export default async function handler(req, res) {
       return res.redirect(302, buildAuthUrl(req.query.key));
     }
 
+    // Cron de salud diario (ver vercel.json) — sin GESTION_KEY porque no es un fetch del
+    // panel: lo llama Vercel Cron solo, autenticado con CRON_SECRET (header Authorization
+    // que Vercel agrega automáticamente a cada invocación de cron cuando esa variable de
+    // entorno está seteada). Vive acá adentro (en vez de un archivo nuevo en api/) para no
+    // pasar el límite de 12 funciones serverless del plan Hobby — mismo motivo que el resto
+    // de este archivo, ver el comentario del encabezado.
+    if (req.method === 'GET' && req.query.modo === 'healthcheck') {
+      return await healthcheck(req, res);
+    }
+
     if (req.method === 'GET') {
       if (!isValidGestionKey(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.query.modo === 'listar') return await listar(req, res);
       if (req.query.modo === 'ficha') return await obtenerFicha(req, res);
       if (req.query.modo === 'modified') return await obtenerModified(req, res);
       if (req.query.modo === 'telefono-turnos') return await telefonoDesdeTurnos(req, res);
+      if (req.query.modo === 'telefono') return await obtenerTelefonoFicha(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
@@ -71,6 +86,47 @@ export default async function handler(req, res) {
     });
     res.status(500).json({ error: 'Error inesperado.' });
   }
+}
+
+// ---------- Chequeo de salud diario (cron de Vercel, ver vercel.json) ----------
+// Prueba que las piezas clave (Calendar y Sheets/Drive) respondan, SIN crear ni
+// modificar ningún dato real — solo lecturas ya usadas en producción (disponibilidad de
+// hoy, listado de fichas), las mismas que ya tienen reintentos. Si algo falla incluso
+// después de reintentar, dispara el mismo email de alerta que el resto del sitio.
+async function healthcheck(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const resultados = {};
+
+  try {
+    // getHorariosLibresDia() ya reintenta internamente su propia llamada a Calendar
+    // (ver lib/googleCalendar.js) — no hace falta envolverla de nuevo acá.
+    const calendar = getCalendarClient();
+    await getHorariosLibresDia(calendar, formatArgDay(new Date()));
+    resultados.calendar = 'ok';
+  } catch (err) {
+    resultados.calendar = 'error';
+    console.error('[healthcheck] calendar:', err);
+    await avisarFallo({ endpoint: 'healthcheck', detalle: 'Calendar (disponibilidad de hoy)', error: err });
+  }
+
+  try {
+    // listarArchivosPacientes() también reintenta internamente, mismo motivo.
+    const drive = getPacientesDriveClient();
+    await listarArchivosPacientes(drive);
+    resultados.pacientes = 'ok';
+  } catch (err) {
+    resultados.pacientes = 'error';
+    console.error('[healthcheck] pacientes:', err);
+    await avisarFallo({ endpoint: 'healthcheck', detalle: 'Pacientes (Sheets/Drive)', error: err });
+  }
+
+  const huboFallo = Object.values(resultados).some((v) => v === 'error');
+  res.status(huboFallo ? 500 : 200).json({ ok: !huboFallo, ...resultados, hora: new Date().toISOString() });
 }
 
 // ---------- OAuth (setup único, ver gestion/conectar-drive.html) ----------
@@ -110,11 +166,11 @@ async function oauthCallback(req, res) {
 // Lista cruda de fichas (id + nombre de archivo) desde Drive — base tanto de `listar`
 // (para la UI) como del chequeo de DNI duplicado al crear una ficha nueva.
 async function listarArchivosPacientes(drive) {
-  const { data } = await drive.files.list({
+  const { data } = await conReintentos(() => drive.files.list({
     q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
     fields: 'files(id, name)',
     pageSize: 1000,
-  });
+  }));
   return (data.files || []).filter((f) => f.id !== FICHA_TEMPLATE_ID && !/^⭐/.test(f.name));
 }
 
@@ -166,13 +222,13 @@ async function obtenerFicha(req, res) {
   await intentarRecuperarRespaldos(sheets, drive, id);
 
   const [campos, financiero, movRaw, presRaw, meta] = await Promise.all([
-    sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C15` }),
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C15` })),
     // Columna E también: "AL DÍA"/"DEBE $X" vive en una celda combinada E9:F10 — el
     // valor solo está en la celda ancla E9, F9 devuelve vacío (ver decisions.md).
-    sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!E6:F11` }),
-    sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }),
-    sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() }),
-    drive.files.get({ fileId: id, fields: 'modifiedTime, name' }),
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!E6:F11` })),
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() })),
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() })),
+    conReintentos(() => drive.files.get({ fileId: id, fields: 'modifiedTime, name' })),
   ]);
 
   const c = (campos.data.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
@@ -219,11 +275,24 @@ async function obtenerFicha(req, res) {
   });
 }
 
+// Fetch liviano de un solo campo (una sola celda, C14 = teléfono dentro del rango
+// C5:C15 que usa obtenerFicha) — usado por el cruce de fichas de nivel 3 en
+// pacientes/index.html (mismo teléfono + nombre parecido), que solo necesita comparar
+// un teléfono para un puñado de candidatos por turno, no la ficha completa.
+async function obtenerTelefonoFicha(req, res) {
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ error: 'Falta id.' });
+  const sheets = getPacientesSheetsClient();
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C14` }));
+  const telefono = data.values?.[0]?.[0] || '';
+  res.status(200).json({ telefono: String(telefono) });
+}
+
 async function obtenerModified(req, res) {
   const id = req.query.id;
   if (!id) return res.status(400).json({ error: 'Falta id.' });
   const drive = getPacientesDriveClient();
-  const { data } = await drive.files.get({ fileId: id, fields: 'modifiedTime' });
+  const { data } = await conReintentos(() => drive.files.get({ fileId: id, fields: 'modifiedTime' }));
   res.status(200).json({ modifiedTime: data.modifiedTime });
 }
 
@@ -239,8 +308,8 @@ async function telefonoDesdeTurnos(req, res) {
   const q = `${nombre} ${apellido}`;
 
   const [principal, sobreturnos] = await Promise.all([
-    calendar.events.list({ calendarId: CALENDAR_ID, q, maxResults: 2500, singleEvents: true }),
-    calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, q, maxResults: 2500, singleEvents: true }),
+    conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, q, maxResults: 2500, singleEvents: true })),
+    conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, q, maxResults: 2500, singleEvents: true })),
   ]);
 
   const objetivo = normalizarTexto(q);
@@ -272,13 +341,13 @@ async function completarTelefonoTurno(req, res) {
   }
   try {
     const calendar = getCalendarClient();
-    const { data: ev } = await calendar.events.get({ calendarId, eventId });
+    const { data: ev } = await conReintentos(() => calendar.events.get({ calendarId, eventId }));
     if (extraerTelefono(ev.description)) {
       return res.status(200).json({ success: true, sinCambios: true }); // ya tiene, no se pisa
     }
     const limpia = (ev.description || '').replace(/\s+$/, '');
     const nuevaDescripcion = limpia ? `${limpia}\nTeléfono: ${telefono}` : `Teléfono: ${telefono}`;
-    await calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } });
+    await conReintentos(() => calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } }));
     res.status(200).json({ success: true, telefono });
   } catch (err) {
     console.error(err);
@@ -320,11 +389,25 @@ async function crearPaciente(req, res) {
   // celdas C5/C6 — si no, la lista de /pacientes (que parsea el nombre del archivo)
   // mostraría algo distinto de lo que muestra la ficha abierta (celdas del Sheet).
   const nombreFinal = nombreArchivo({ nombre: aMayusculas(nombre), apellido: aMayusculas(apellido), dni: campos.dni });
-  const copia = await drive.files.copy({
+  const copia = await conReintentos(() => drive.files.copy({
     fileId: FICHA_TEMPLATE_ID,
     requestBody: { name: nombreFinal, parents: [PACIENTES_FOLDER_ID] },
-  });
-  const id = copia.data.id;
+  }));
+  let id = copia.data.id;
+
+  // Idempotencia ante reintentos (mismo criterio que crearTurno en lib/googleCalendar.js):
+  // si drive.files.copy() tira un error transitorio pero en realidad SÍ llegó a copiar el
+  // archivo del lado del servidor, conReintentos() reintenta y termina copiando DOS veces.
+  // Se detecta acá (buscando de nuevo por DNI, excluyendo la copia recién creada) y se
+  // descarta la duplicada, quedándose con la primera que haya quedado registrada.
+  if (dniNormalizado) {
+    const otraExistente = await buscarPacientePorDni(drive, dniNormalizado, id);
+    if (otraExistente) {
+      await conReintentos(() => drive.files.update({ fileId: id, requestBody: { trashed: true } }));
+      id = otraExistente.id;
+      return res.status(200).json({ success: true, id, nombre: otraExistente.nombre, apellido: otraExistente.apellido });
+    }
+  }
 
   const datos = { ...campos, nombre, apellido };
   const campoACelda = (campo) => ({
@@ -338,16 +421,16 @@ async function crearPaciente(req, res) {
   const filasParseadas = CAMPOS_ORDENADOS.filter((c) => !CAMPOS_TEXTO_CRUDO.has(c) && tieneValor(c)).map(campoACelda);
 
   if (filasCrudas.length) {
-    await sheets.spreadsheets.values.batchUpdate({
+    await conReintentos(() => sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: id,
       requestBody: { valueInputOption: 'RAW', data: filasCrudas },
-    });
+    }));
   }
   if (filasParseadas.length) {
-    await sheets.spreadsheets.values.batchUpdate({
+    await conReintentos(() => sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: id,
       requestBody: { valueInputOption: 'USER_ENTERED', data: filasParseadas },
-    });
+    }));
   }
 
   res.status(200).json({ success: true, id, nombre, apellido });
@@ -379,18 +462,18 @@ const CAMPOS_TEXTO_CRUDO = new Set(['telefono', 'nAfiliado']);
 async function escribirCampoEnSheet(id, campo, valor) {
   const sheets = getPacientesSheetsClient();
   const valorFinal = CAMPOS_MAYUSCULAS.has(campo) ? aMayusculas(valor) : valor;
-  await sheets.spreadsheets.values.update({
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`,
     valueInputOption: CAMPOS_TEXTO_CRUDO.has(campo) ? 'RAW' : 'USER_ENTERED',
     requestBody: { values: [[valorFinal ?? '']] },
-  });
+  }));
 
   if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
-    const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C7` });
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C7` }));
     const [nombre = '', apellido = '', dni = ''] = (data.values || []).map((r) => r[0] || '');
     const drive = getPacientesDriveClient();
-    await drive.files.update({ fileId: id, requestBody: { name: nombreArchivo({ nombre, apellido, dni }) } });
+    await conReintentos(() => drive.files.update({ fileId: id, requestBody: { name: nombreArchivo({ nombre, apellido, dni }) } }));
   }
 }
 
@@ -421,10 +504,10 @@ async function fusionarPacientes(req, res) {
   }
 
   // 2. Migrar movimientos de la ficha que se va, al final de los que ya tiene la que queda.
-  const { data: movData } = await sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoMovimientos() });
+  const { data: movData } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoMovimientos() }));
   const movimientos = (movData.values || []).filter((row) => row[0] || row[1] || row[2] || row[3]);
   if (movimientos.length) {
-    const { data: destinoMov } = await sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoMovimientos() });
+    const { data: destinoMov } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoMovimientos() }));
     let fila = primeraFilaLibre(destinoMov.values || []);
     for (const row of movimientos) {
       const [fecha, tratamiento, debe, haber, , , formaPago] = row;
@@ -434,10 +517,10 @@ async function fusionarPacientes(req, res) {
   }
 
   // 3. Migrar prestaciones de obra social, mismo criterio.
-  const { data: presData } = await sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoPrestacionesObraSocial() });
+  const { data: presData } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: idEliminar, range: rangoPrestacionesObraSocial() }));
   const prestaciones = (presData.values || []).filter((row) => row[0] || row[1] || row[2]);
   if (prestaciones.length) {
-    const { data: destinoPres } = await sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoPrestacionesObraSocial() });
+    const { data: destinoPres } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: idMantener, range: rangoPrestacionesObraSocial() }));
     let filaP = primeraFilaLibre(destinoPres.values || []);
     for (const row of prestaciones) {
       const [fecha, tratamiento, codigo, autorizado] = row;
@@ -447,7 +530,7 @@ async function fusionarPacientes(req, res) {
   }
 
   // 4. La ficha duplicada va a la papelera (reversible desde Drive), nunca borrado permanente.
-  await drive.files.update({ fileId: idEliminar, requestBody: { trashed: true } });
+  await conReintentos(() => drive.files.update({ fileId: idEliminar, requestBody: { trashed: true } }));
 
   res.status(200).json({ success: true, id: idMantener });
 }
@@ -458,7 +541,7 @@ async function movimientoAgregar(req, res) {
 
   try {
     const sheets = getPacientesSheetsClient();
-    const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() });
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }));
     const fila = primeraFilaLibre(data.values || []);
     await escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago });
 
@@ -489,18 +572,18 @@ async function movimientoEditar(req, res) {
 async function escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago }) {
   const sheets = getPacientesSheetsClient();
   await asegurarColumnaFormaPago(id);
-  await sheets.spreadsheets.values.update({
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!B${fila}:E${fila}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, aMayusculas(tratamiento) || '', debe || 0, haber || 0]] },
-  });
-  await sheets.spreadsheets.values.update({
+  }));
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!H${fila}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[aMayusculas(formaPago) || '']] },
-  });
+  }));
 }
 
 // Nunca se borra un movimiento físicamente: se marca "[ANULADO]" en el texto (con los
@@ -512,20 +595,20 @@ async function movimientoAnular(req, res) {
 
   try {
     const sheets = getPacientesSheetsClient();
-    const { data } = await sheets.spreadsheets.values.get({
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({
       spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}`,
-    });
+    }));
     const [fecha = '', tratamiento = '', debe = 0, haber = 0] = (data.values && data.values[0]) || [];
     if (/^\[ANULADO\]/.test(tratamiento)) {
       return res.status(200).json({ success: true }); // ya estaba anulado, no hace nada
     }
     const nuevoTexto = `[ANULADO] ${tratamiento} (era: Debe $${debe || 0} / Haber $${haber || 0})`;
-    await sheets.spreadsheets.values.update({
+    await conReintentos(() => sheets.spreadsheets.values.update({
       spreadsheetId: id,
       range: `${SHEET_NAME}!B${fila}:E${fila}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
-    });
+    }));
     res.status(200).json({ success: true });
   } catch (err) {
     console.error(err);
@@ -548,7 +631,7 @@ async function prestacionAgregar(req, res) {
 
   try {
     const sheets = getPacientesSheetsClient();
-    const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() });
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() }));
     const fila = primeraFilaLibre(data.values || []);
     await escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado });
     res.status(200).json({ success: true, fila });
@@ -592,23 +675,23 @@ async function prestacionEliminar(req, res) {
 
 async function escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado }) {
   const sheets = getPacientesSheetsClient();
-  await sheets.spreadsheets.values.update({
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!J${fila}:M${fila}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha || '', aMayusculas(tratamiento) || '', aMayusculas(codigo) || '', !!autorizado]] },
-  });
+  }));
 }
 
 async function asegurarColumnaFormaPago(id) {
   const sheets = getPacientesSheetsClient();
-  const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!H17` });
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!H17` }));
   if ((data.values || [[]])[0]?.[0] === 'Forma de pago') return;
 
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: id, fields: 'sheets.properties' });
+  const meta = await conReintentos(() => sheets.spreadsheets.get({ spreadsheetId: id, fields: 'sheets.properties' }));
   const sheetId = meta.data.sheets[0].properties.sheetId;
 
-  await sheets.spreadsheets.batchUpdate({
+  await conReintentos(() => sheets.spreadsheets.batchUpdate({
     spreadsheetId: id,
     requestBody: {
       requests: [
@@ -621,13 +704,13 @@ async function asegurarColumnaFormaPago(id) {
         },
       ],
     },
-  });
-  await sheets.spreadsheets.values.update({
+  }));
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!H17`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [['Forma de pago']] },
-  });
+  }));
 }
 
 // ---------- Backup de emergencia (Sheets caído) ----------
@@ -637,15 +720,15 @@ async function asegurarColumnaFormaPago(id) {
 // este proyecto (sitio estático + serverless, ver CLAUDE.md) — el reintento "oportunista"
 // en el próximo acceso es la forma de lograr esto sin sumar infraestructura nueva.
 async function getOrCreateBackupFolderId(drive) {
-  const { data } = await drive.files.list({
+  const { data } = await conReintentos(() => drive.files.list({
     q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${BACKUP_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id)',
-  });
+  }));
   if (data.files && data.files.length) return data.files[0].id;
-  const creada = await drive.files.create({
+  const creada = await conReintentos(() => drive.files.create({
     requestBody: { name: BACKUP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', parents: [PACIENTES_FOLDER_ID] },
     fields: 'id',
-  });
+  }));
   return creada.data.id;
 }
 
@@ -654,10 +737,10 @@ async function respaldarCambioFallido(pacienteId, accion, payload) {
     const drive = getPacientesDriveClient();
     const folderId = await getOrCreateBackupFolderId(drive);
     const nombre = `${pacienteId}__${Date.now()}.json`;
-    await drive.files.create({
+    await conReintentos(() => drive.files.create({
       requestBody: { name: nombre, parents: [folderId] },
       media: { mimeType: 'application/json', body: JSON.stringify({ pacienteId, accion, payload, creado: new Date().toISOString() }) },
-    });
+    }));
   } catch (err) {
     // Si hasta el respaldo falla (Drive también caído), no hay más nada que hacer del
     // lado del servidor — el error ya se logueó en el catch de quien llamó a esta función.
@@ -668,31 +751,31 @@ async function respaldarCambioFallido(pacienteId, accion, payload) {
 async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
   let folderId;
   try {
-    const { data } = await drive.files.list({
+    const { data } = await conReintentos(() => drive.files.list({
       q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${BACKUP_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
       fields: 'files(id)',
-    });
+    }));
     if (!data.files || !data.files.length) return; // no hay carpeta de respaldo todavía, nada pendiente
     folderId = data.files[0].id;
   } catch {
     return;
   }
 
-  const { data: pendientes } = await drive.files.list({
+  const { data: pendientes } = await conReintentos(() => drive.files.list({
     q: `'${folderId}' in parents and name contains '${pacienteId}__' and trashed = false`,
     fields: 'files(id, name)',
     orderBy: 'name',
-  });
+  }));
   if (!pendientes.files || !pendientes.files.length) return;
 
   for (const archivo of pendientes.files) {
     try {
-      const contenido = await drive.files.get({ fileId: archivo.id, alt: 'media' });
+      const contenido = await conReintentos(() => drive.files.get({ fileId: archivo.id, alt: 'media' }));
       const { accion, payload } = contenido.data;
       if (accion === 'actualizar-campo') {
         await escribirCampoEnSheet(pacienteId, payload.campo, payload.valor);
       } else if (accion === 'movimiento-agregar') {
-        const { data: mov } = await sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoMovimientos() });
+        const { data: mov } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoMovimientos() }));
         const fila = primeraFilaLibre(mov.values || []);
         await escribirMovimientoEnFila(pacienteId, fila, payload);
       } else if (accion === 'movimiento-editar') {
@@ -700,7 +783,7 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
       } else if (accion === 'movimiento-anular') {
         await movimientoAnularInterno(pacienteId, payload.fila);
       } else if (accion === 'prestacion-agregar') {
-        const { data: pres } = await sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoPrestacionesObraSocial() });
+        const { data: pres } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoPrestacionesObraSocial() }));
         const fila = primeraFilaLibre(pres.values || []);
         await escribirPrestacionEnFila(pacienteId, fila, payload);
       } else if (accion === 'prestacion-editar') {
@@ -708,7 +791,7 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
       } else if (accion === 'prestacion-eliminar') {
         await escribirPrestacionEnFila(pacienteId, payload.fila, { fecha: '', tratamiento: '', codigo: '', autorizado: false });
       }
-      await drive.files.delete({ fileId: archivo.id });
+      await conReintentos(() => drive.files.delete({ fileId: archivo.id }));
     } catch (err) {
       console.error('No se pudo recuperar un respaldo pendiente, se reintenta en el próximo acceso', err);
     }
@@ -717,14 +800,14 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
 
 async function movimientoAnularInterno(id, fila) {
   const sheets = getPacientesSheetsClient();
-  const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}` });
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}` }));
   const [fecha = '', tratamiento = '', debe = 0, haber = 0] = (data.values || [[]])[0];
   if (/^\[ANULADO\]/.test(tratamiento)) return;
   const nuevoTexto = `[ANULADO] ${tratamiento} (era: Debe $${debe || 0} / Haber $${haber || 0})`;
-  await sheets.spreadsheets.values.update({
+  await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!B${fila}:E${fila}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
-  });
+  }));
 }

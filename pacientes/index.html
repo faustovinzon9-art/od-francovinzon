@@ -108,7 +108,7 @@
   .ficha-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
   .ficha-header h1 { font-size: 22px; }
   .ficha-header .dni { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .btn-obra-social { background: var(--white); color: var(--navy); border: 1.5px solid var(--line); padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 12.5px; white-space: nowrap; margin-bottom: 16px; }
+  .btn-obra-social { background: var(--white); color: var(--navy); border: 1.5px solid var(--line); padding: 12px 20px; border-radius: 12px; font-weight: 700; font-size: 15px; white-space: nowrap; margin-bottom: 16px; }
   .btn-obra-social:hover { border-color: var(--gold); }
   .autosave-status { font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; padding-top: 4px; }
   .autosave-status.saving { color: var(--gold); }
@@ -151,7 +151,7 @@
 
   /* Botón "Volver" — prominente y siempre arriba de cada vista, mismo estilo pill que
      .copy-link-btn de /gestion (antes era un link de texto chico subrayado). */
-  .btn-volver { display: inline-flex; align-items: center; gap: 5px; background: var(--cream); color: var(--navy-soft); border: 1.5px solid var(--line); padding: 9px 16px; border-radius: 100px; font-weight: 700; font-size: 13px; margin-bottom: 14px; }
+  .btn-volver { display: inline-flex; align-items: center; gap: 6px; background: var(--cream); color: var(--navy-soft); border: 1.5px solid var(--line); padding: 13px 22px; border-radius: 100px; font-weight: 700; font-size: 15px; margin-bottom: 14px; }
   .btn-volver:hover { border-color: var(--gold); color: var(--navy); background: var(--white); }
 
   /* "Pacientes de hoy": carrusel horizontal de acceso directo, arriba de todo en la
@@ -169,6 +169,11 @@
   .hoy-chip-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; font-family: 'Fraunces', Georgia, serif; flex-shrink: 0; }
   .hoy-chip-nombre { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hoy-chip-hora { font-size: 11px; color: var(--gold); font-weight: 700; }
+  .hoy-chip-sugerencia { border-style: dashed; border-color: var(--gold); }
+  .hoy-chip-sugerencia .hoy-chip-avatar { background: var(--gold); }
+  .hoy-chip-turno { font-size: 10.5px; color: var(--muted); text-align: center; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hoy-chip-confirmar { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--navy); background: var(--cream); border: none; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .hoy-chip-confirmar:hover { background: var(--gold); color: var(--white); }
 
   .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
 
@@ -279,6 +284,11 @@
     <div class="hoy-section hidden" id="hoy-section">
       <h2>Pacientes de hoy</h2>
       <div class="hoy-carril" id="hoy-carril"></div>
+    </div>
+
+    <div class="hoy-section hidden" id="sugerencias-section">
+      <h2>¿Es este paciente?</h2>
+      <div class="hoy-carril" id="sugerencias-carril"></div>
     </div>
 
     <div class="dup-banner hidden" id="dup-banner">
@@ -398,8 +408,11 @@
     <div class="panel">
       <h2>Estado financiero</h2>
       <div class="financiero-card">
-        <div class="financiero-item"><div class="label">Total</div><div class="valor" id="fin-total">—</div></div>
-        <div class="financiero-item"><div class="label">Pagado</div><div class="valor" id="fin-pagado">—</div></div>
+        <!-- Total y Pagado se siguen trayendo y calculando (ver renderFicha()), solo se
+             sacaron de la vista a pedido explícito — quedan ocultos, no borrados, por si
+             hace falta mostrarlos de nuevo más adelante. -->
+        <div class="financiero-item hidden"><div class="label">Total</div><div class="valor" id="fin-total">—</div></div>
+        <div class="financiero-item hidden"><div class="label">Pagado</div><div class="valor" id="fin-pagado">—</div></div>
         <div class="financiero-item"><div class="label">Saldo</div><div class="valor" id="fin-saldo">—</div></div>
         <div class="financiero-item"><span class="estado-pill" id="fin-estado">—</span></div>
       </div>
@@ -678,7 +691,7 @@
       <div class="patient-row" data-id="${p.id}">
         <div>
           <div class="patient-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</div>
-          <div class="patient-dni">${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'Sin DNI cargado'}</div>
+          <div class="patient-dni">${p.dni ? 'DNI ' + escapeHtml(formatearDni(p.dni)) : 'Sin DNI cargado'}</div>
         </div>
         <div class="chev">›</div>
       </div>
@@ -710,14 +723,67 @@
   // ---------- "Pacientes de hoy" + resumen del sidebar + autocompletado cruzado de
   // teléfono ----------
   // Un solo fetch de turnos-dia.js (misma GESTION_KEY que el resto del panel — no hizo
-  // falta ninguna ruta nueva) alimenta tres cosas: el carrusel de acceso directo, el
-  // contador "turnos hoy" del sidebar, y el autocompletado cruzado ficha→turno. El match
-  // turno↔ficha usa el mismo criterio best-effort que el autocompletado de teléfono al
-  // crear paciente: coincidencia EXACTA de nombre+apellido normalizado, sin crear ningún
-  // vínculo permanente. Un turno de hoy sin ficha coincidente simplemente no aparece.
+  // falta ninguna ruta nueva) alimenta el cruce turno↔ficha, en 4 niveles de confianza
+  // (de más a menos confiable), ninguno de los cuales autocompleta ni fusiona datos:
+  //   1. DNI exacto (si el turno lo tiene, ver turnos/index.html) -> match directo.
+  //   2. Nombre y apellido exactos (normalizados) -> match directo.
+  //   3. Mismo teléfono + nombre parecido pero no exacto -> sugerencia "¿Es este
+  //      paciente?", se abre solo si Ayelen confirma con un toque.
+  //   4. Nombre parecido sin teléfono ni DNI que lo respalde -> no se adivina, queda
+  //      sin match para buscarlo a mano.
   const hoySection = document.getElementById('hoy-section');
   const hoyCarril = document.getElementById('hoy-carril');
+  const sugerenciasSection = document.getElementById('sugerencias-section');
+  const sugerenciasCarril = document.getElementById('sugerencias-carril');
   let pacientesDeHoy = [];
+  let sugerenciasDeHoy = [];
+
+  // Umbral de similitud (0 a 1) para considerar un nombre "parecido" a otro — cubre
+  // diminutivos/variantes ("Pepe" vs "José") siempre y cuando el resto del nombre
+  // (típicamente el apellido) coincida en buena parte. Nunca decide solo: siempre va
+  // acompañado del chequeo de mismo teléfono antes de mostrarse como sugerencia.
+  const UMBRAL_SIMILITUD_NOMBRE = 0.45;
+
+  function distanciaLevenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    const fila = new Array(n + 1);
+    for (let j = 0; j <= n; j++) fila[j] = j;
+    for (let i = 1; i <= m; i++) {
+      let anterior = fila[0];
+      fila[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const temp = fila[j];
+        fila[j] = a[i - 1] === b[j - 1]
+          ? anterior
+          : 1 + Math.min(anterior, fila[j], fila[j - 1]);
+        anterior = temp;
+      }
+    }
+    return fila[n];
+  }
+  function similitudNombre(a, b) {
+    const maxLen = Math.max(a.length, b.length);
+    if (!maxLen) return 1;
+    return 1 - distanciaLevenshtein(a, b) / maxLen;
+  }
+  // Compara teléfonos por los últimos 10 dígitos, para no depender de si uno trae
+  // código de país (54911...) y el otro no — mismo criterio "solo dígitos" que
+  // normalizarDni usa para DNI.
+  function normalizarTelefonoComparacion(tel) {
+    return (tel || '').replace(/\D/g, '').slice(-10);
+  }
+  // Fetch puntual y liviano (una sola celda del Sheet, no la ficha completa) — solo se
+  // llama para los pocos candidatos de nivel 3 de cada turno, nunca en bulk.
+  async function obtenerTelefonoFicha(id) {
+    try {
+      const r = await apiGet({ modo: 'telefono', id });
+      return r && r.telefono ? r.telefono : '';
+    } catch (e) {
+      return '';
+    }
+  }
 
   function todayStr() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
@@ -745,7 +811,7 @@
     } catch (e) { turnosReales = []; }
 
     document.getElementById('sum-turnos').textContent = turnosReales.length;
-    procesarPacientesDeHoy(turnosReales);
+    await procesarPacientesDeHoy(turnosReales);
 
     // Huecos libres hoy: mismo endpoint público que ya usa /gestion para su resumen
     // (api/disponibilidad.js, sin GESTION_KEY — devuelve un array de horarios "HH:mm").
@@ -758,26 +824,68 @@
     }
   }
 
-  function procesarPacientesDeHoy(turnosReales) {
+  async function procesarPacientesDeHoy(turnosReales) {
     const vistos = new Set();
-    const matches = [];
-    turnosReales
-      .slice()
-      .sort((a, b) => new Date(a.start) - new Date(b.start))
-      .forEach((it) => {
-        const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
-        if (!nombreTurno) return;
-        const ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
-        if (!ficha || vistos.has(ficha.id)) return;
+    const directos = [];
+    const sugerencias = [];
+
+    const ordenados = turnosReales.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    for (const it of ordenados) {
+      const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
+      if (!nombreTurno) continue;
+
+      // Nivel 1: DNI exacto.
+      const dniTurno = normalizarDni(it.dni || '');
+      let ficha = dniTurno ? pacientes.find((p) => normalizarDni(p.dni) === dniTurno) : null;
+
+      // Nivel 2: nombre y apellido exactos.
+      if (!ficha) {
+        ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
+      }
+
+      if (ficha) {
+        if (vistos.has(ficha.id)) continue;
         vistos.add(ficha.id);
-        matches.push({
+        directos.push({
           id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatHoraArg(it.start),
           turnoId: it.id, turnoCalendarId: it.calendarId, turnoTelefono: it.telefono,
         });
-      });
-    pacientesDeHoy = matches;
+        continue;
+      }
+
+      // Nivel 3: mismo teléfono + nombre parecido (no exacto) -> sugerencia a confirmar.
+      // Sin teléfono en el turno no hay con qué respaldar un nombre parecido -> nivel 4,
+      // queda sin match (no se adivina).
+      if (!it.telefono) continue;
+      const telTurno = normalizarTelefonoComparacion(it.telefono);
+      if (!telTurno) continue;
+
+      const candidatos = pacientes
+        .filter((p) => !vistos.has(p.id))
+        .map((p) => ({ p, sim: similitudNombre(nombreTurno, normalizarNombreCompleto(p.nombre, p.apellido)) }))
+        .filter((c) => c.sim >= UMBRAL_SIMILITUD_NOMBRE && c.sim < 1)
+        .sort((a, b) => b.sim - a.sim)
+        .slice(0, 2); // como mucho 2 candidatos por turno, para no disparar de más fetches
+
+      for (const { p } of candidatos) {
+        const telFicha = normalizarTelefonoComparacion(await obtenerTelefonoFicha(p.id));
+        if (telFicha && telFicha === telTurno) {
+          vistos.add(p.id);
+          sugerencias.push({
+            id: p.id, nombre: p.nombre, apellido: p.apellido, hora: formatHoraArg(it.start),
+            turnoNombre: it.title || '',
+          });
+          break; // un solo candidato por turno alcanza
+        }
+      }
+    }
+
+    pacientesDeHoy = directos;
+    sugerenciasDeHoy = sugerencias;
     renderPacientesDeHoy();
-    completarTelefonosCruzados(matches); // no se espera: best-effort en segundo plano
+    renderSugerenciasHoy();
+    completarTelefonosCruzados(directos); // no se espera: best-effort en segundo plano
   }
 
   function renderPacientesDeHoy() {
@@ -794,6 +902,26 @@
     `).join('');
     hoyCarril.querySelectorAll('.hoy-chip').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
     hoySection.classList.remove('hidden');
+  }
+
+  // Nivel 3: se muestra aparte de "Pacientes de hoy", con el nombre tal como está en el
+  // turno junto al de la ficha candidata, y nunca abre directo — hace falta el toque en
+  // "¿Es este paciente?" para confirmar antes de ir a la ficha.
+  function renderSugerenciasHoy() {
+    if (!sugerenciasDeHoy.length) {
+      sugerenciasSection.classList.add('hidden');
+      return;
+    }
+    sugerenciasCarril.innerHTML = sugerenciasDeHoy.map((p) => `
+      <div class="hoy-chip hoy-chip-sugerencia" data-id="${p.id}">
+        <span class="hoy-chip-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
+        <span class="hoy-chip-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
+        <span class="hoy-chip-turno">Turno: ${escapeHtml(p.turnoNombre)} · ${escapeHtml(p.hora)}</span>
+        <button type="button" class="hoy-chip-confirmar" data-id="${p.id}">¿Es este paciente?</button>
+      </div>
+    `).join('');
+    sugerenciasCarril.querySelectorAll('.hoy-chip-confirmar').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
+    sugerenciasSection.classList.remove('hidden');
   }
 
   // ---------- Autocompletado cruzado de teléfono (ver decisions.md): solo cuando el
@@ -834,6 +962,14 @@
   }
   function normalizarDni(dni) {
     return (dni || '').replace(/\D/g, '');
+  }
+  // Solo para mostrar (ej. "46.861.050") — nunca se usa para comparar/guardar, eso sigue
+  // siendo normalizarDni() (solo dígitos). Si el DNI tiene algo no numérico cargado a
+  // mano, se muestra tal cual está, sin forzar el formato.
+  function formatearDni(dni) {
+    const limpio = normalizarDni(dni);
+    if (!limpio || limpio.length !== (dni || '').replace(/\s/g, '').length) return dni || '';
+    return limpio.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
   // ---------- Nuevo paciente ----------
@@ -1002,8 +1138,8 @@
     const c = fichaActual.campos;
     const nombreCompleto = `${c.nombre} ${c.apellido}`.trim() || 'Sin nombre';
     document.getElementById('f-titulo').textContent = nombreCompleto;
-    document.getElementById('f-dni-header').textContent = c.dni ? `DNI ${c.dni}` : '';
-    document.getElementById('os-paciente-nombre').textContent = c.dni ? `${nombreCompleto} · DNI ${c.dni}` : nombreCompleto;
+    document.getElementById('f-dni-header').textContent = c.dni ? `DNI ${formatearDni(c.dni)}` : '';
+    document.getElementById('os-paciente-nombre').textContent = c.dni ? `${nombreCompleto} · DNI ${formatearDni(c.dni)}` : nombreCompleto;
 
     // Obra social/Nº de afiliado/Plan viven duplicados (ficha principal + vista aparte,
     // mismos data-campo) — este selector cubre las dos vistas a propósito.
@@ -1086,7 +1222,7 @@
           autosaveStatus.className = 'autosave-status ' + (r.pendiente ? 'saving' : 'ok');
           if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
             document.getElementById('f-titulo').textContent = `${fichaActual.campos.nombre} ${fichaActual.campos.apellido}`.trim();
-            document.getElementById('f-dni-header').textContent = fichaActual.campos.dni ? `DNI ${fichaActual.campos.dni}` : '';
+            document.getElementById('f-dni-header').textContent = fichaActual.campos.dni ? `DNI ${formatearDni(fichaActual.campos.dni)}` : '';
           }
         } else {
           throw new Error();
@@ -1526,7 +1662,7 @@
     dupGruposEl.innerHTML = grupos.map((grupo, gi) => `
       <div class="panel">
         <div class="dup-group-header">
-          <h2>${escapeHtml(grupo[0].nombre)} ${escapeHtml(grupo[0].apellido)} — DNI ${escapeHtml(grupo[0].dni)}</h2>
+          <h2>${escapeHtml(grupo[0].nombre)} ${escapeHtml(grupo[0].apellido)} — DNI ${escapeHtml(formatearDni(grupo[0].dni))}</h2>
           <span class="dup-group-count">${grupo.length} fichas</span>
         </div>
         ${grupo.map((p, pi) => `
