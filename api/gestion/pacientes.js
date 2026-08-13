@@ -722,7 +722,7 @@ async function escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, ha
     spreadsheetId: id,
     range: `${SHEET_NAME}!B${fila}:E${fila}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[fecha, aMayusculas(tratamiento) || '', debe || 0, haber || 0]] },
+    requestBody: { values: [[fecha, aTituloCase(tratamiento) || '', debe || 0, haber || 0]] },
   }));
   await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,

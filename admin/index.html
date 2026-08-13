@@ -101,6 +101,13 @@
   .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin: 14px 0; }
   .bar { flex: 1; background: var(--navy); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
   .bar:hover { background: var(--gold); }
+  .bar::after {
+    content: attr(data-tooltip); position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); background: var(--navy); color: var(--white); font-size: 11px;
+    font-weight: 600; padding: 6px 10px; border-radius: 8px; white-space: nowrap; opacity: 0;
+    pointer-events: none; transition: opacity .15s ease; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  .bar:hover::after { opacity: 1; }
 
   .activity-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
   .activity-item:last-child { border-bottom: none; }
@@ -475,9 +482,10 @@
         ['% pacientes con deuda', m.porcentajeConDeuda == null ? 'N/D' : `${m.porcentajeConDeuda}%`],
       ].map(([label, num]) => `<div class="stat-tile"><div class="num">${num}</div><div class="label">${label}</div></div>`).join('');
 
+      const fmtFechaBarra = (f) => new Date(`${f}T00:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
       const max = Math.max(1, ...m.volumenPorDia.map((d) => d.cantidad));
       document.getElementById('dash-bars').innerHTML = m.volumenPorDia.map((d) =>
-        `<div class="bar" style="height:${Math.max(2, Math.round((d.cantidad / max) * 116))}px" title="${d.fecha}: ${d.cantidad}"></div>`
+        `<div class="bar" style="height:${Math.max(2, Math.round((d.cantidad / max) * 116))}px" data-tooltip="${d.cantidad} turno${d.cantidad === 1 ? '' : 's'} — ${fmtFechaBarra(d.fecha)}"></div>`
       ).join('') || '<p class="hint">Sin turnos en este rango.</p>';
 
       document.querySelector('#dash-deudores-monto tbody').innerHTML = m.topDeudoresMonto.map((d) =>
