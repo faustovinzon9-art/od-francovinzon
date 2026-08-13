@@ -19,6 +19,7 @@ import {
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
   rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas, aTituloCase,
+  MAPEO_TELEFONO_FICHA_NAME, normalizarTelefonoMapeo,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
 // Reintentos puntuales, call site por call site — NUNCA envolver el cliente entero
@@ -58,6 +59,7 @@ export default async function handler(req, res) {
       if (req.query.modo === 'modified') return await obtenerModified(req, res);
       if (req.query.modo === 'telefono-turnos') return await telefonoDesdeTurnos(req, res);
       if (req.query.modo === 'telefono') return await obtenerTelefonoFicha(req, res);
+      if (req.query.modo === 'mapeos') return await obtenerMapeos(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
@@ -67,6 +69,7 @@ export default async function handler(req, res) {
       if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
       if (req.body.accion === 'fusionar') return await fusionarPacientes(req, res);
       if (req.body.accion === 'completar-telefono-turno') return await completarTelefonoTurno(req, res);
+      if (req.body.accion === 'confirmar-match') return await confirmarMatch(req, res);
       if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
       if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
       if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
@@ -353,6 +356,141 @@ async function completarTelefonoTurno(req, res) {
     console.error(err);
     await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'completar-telefono-turno', error: err });
     res.status(500).json({ success: false, message: 'No se pudo completar el teléfono del turno.' });
+  }
+}
+
+// ---------- Mapeo teléfono↔ficha ("¿Es este paciente?", ver decisions.md) ----------
+// Hoja chica y propia (no una ficha), se crea sola la primera vez que hace falta —
+// mismo patrón que getOrCreateBackupFolderId más abajo. Nunca se toca a mano.
+async function getOrCreateMapeoSheetId(sheets, drive) {
+  const { data } = await conReintentos(() => drive.files.list({
+    q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${MAPEO_TELEFONO_FICHA_NAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+    fields: 'files(id)',
+  }));
+  if (data.files && data.files.length) return data.files[0].id;
+
+  const creada = await conReintentos(() => sheets.spreadsheets.create({
+    requestBody: { properties: { title: MAPEO_TELEFONO_FICHA_NAME } },
+    fields: 'spreadsheetId',
+  }));
+  const id = creada.data.spreadsheetId;
+  await conReintentos(() => sheets.spreadsheets.values.update({
+    spreadsheetId: id,
+    range: 'A1:D1',
+    valueInputOption: 'RAW',
+    requestBody: { values: [['telefono', 'dni', 'decision', 'fecha']] },
+  }));
+  // Recién creada, la hoja vive en "Mi unidad" — se mueve a la carpeta de Pacientes para
+  // que quede junto a todo lo demás (mismo criterio que getOrCreateBackupFolderId).
+  await conReintentos(() => drive.files.update({ fileId: id, addParents: PACIENTES_FOLDER_ID, fields: 'id' }));
+  return id;
+}
+
+async function leerMapeos(sheets, mapeoId) {
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: mapeoId, range: 'A2:D' }));
+  return (data.values || [])
+    .filter((r) => r[0])
+    .map((r) => ({ telefono: r[0] || '', dni: r[1] || '', decision: r[2] || '', fecha: r[3] || '' }));
+}
+
+// Upsert por (teléfono, dni): si ya hay una fila para ese par, actualiza decisión/fecha
+// en vez de duplicar (por si Ayelen cambia de opinión sobre el mismo par más adelante).
+async function guardarMapeo(sheets, mapeoId, { telefono, dni, decision }) {
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: mapeoId, range: 'A2:D' }));
+  const filas = data.values || [];
+  const idx = filas.findIndex((r) => r[0] === telefono && r[1] === dni);
+  const fecha = new Date().toISOString();
+  if (idx === -1) {
+    await conReintentos(() => sheets.spreadsheets.values.append({
+      spreadsheetId: mapeoId,
+      range: 'A:D',
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[telefono, dni, decision, fecha]] },
+    }));
+  } else {
+    const filaSheet = idx + 2; // +1 por el encabezado, +1 porque Sheets es 1-index
+    await conReintentos(() => sheets.spreadsheets.values.update({
+      spreadsheetId: mapeoId,
+      range: `C${filaSheet}:D${filaSheet}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[decision, fecha]] },
+    }));
+  }
+}
+
+async function obtenerMapeos(req, res) {
+  const sheets = getPacientesSheetsClient();
+  const drive = getPacientesDriveClient();
+  const mapeoId = await getOrCreateMapeoSheetId(sheets, drive);
+  const mapeos = await leerMapeos(sheets, mapeoId);
+  res.status(200).json(mapeos);
+}
+
+// "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
+// más sofisticada que esa, a propósito (ver el pedido).
+function completitudNombre(nombreCompleto) {
+  const palabras = (nombreCompleto || '').trim().split(/\s+/).filter(Boolean);
+  return { palabras: palabras.length, longitud: (nombreCompleto || '').trim().length };
+}
+function esMasCompleto(a, b) {
+  const ca = completitudNombre(a);
+  const cb = completitudNombre(b);
+  if (ca.palabras !== cb.palabras) return ca.palabras > cb.palabras;
+  return ca.longitud > cb.longitud;
+}
+
+// Acción de "¿Es este paciente?" — Sí/No. Guarda la decisión de forma permanente (por
+// teléfono+DNI, así no se vuelve a preguntar lo mismo) y, si es "Sí", corrige el nombre
+// del lado que esté incompleto (ficha o turno) con el más completo de los dos. Se llama
+// tanto al tocar el botón como, en silencio, cada vez que el mapeo ya guardado resuelve
+// un match automático (ver pacientes/index.html) — es idempotente, no rompe nada
+// repetirla con los mismos datos.
+async function confirmarMatch(req, res) {
+  const { eventId, calendarId, telefono, fichaId, dni, decision, turnoTitulo } = req.body;
+  if (!fichaId || (decision !== 'si' && decision !== 'no')) {
+    return res.status(400).json({ success: false, message: 'Datos incompletos.' });
+  }
+
+  try {
+    const telNorm = normalizarTelefonoMapeo(telefono);
+    const dniNorm = normalizarDni(dni);
+
+    let mapeoGuardado = false;
+    if (telNorm && dniNorm) {
+      const sheetsMapeo = getPacientesSheetsClient();
+      const driveMapeo = getPacientesDriveClient();
+      const mapeoId = await getOrCreateMapeoSheetId(sheetsMapeo, driveMapeo);
+      await guardarMapeo(sheetsMapeo, mapeoId, { telefono: telNorm, dni: dniNorm, decision });
+      mapeoGuardado = true;
+    }
+
+    if (decision === 'si' && turnoTitulo) {
+      const sheets = getPacientesSheetsClient();
+      const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: fichaId, range: `${SHEET_NAME}!C5:C6` }));
+      const [nombreFicha = '', apellidoFicha = ''] = (data.values || []).map((r) => r[0] || '');
+      const nombreCompletoFicha = `${nombreFicha} ${apellidoFicha}`.trim();
+      const turno = (turnoTitulo || '').trim();
+
+      if (turno && esMasCompleto(turno, nombreCompletoFicha)) {
+        const partes = turno.split(/\s+/);
+        const nuevoNombre = partes.shift() || '';
+        const nuevoApellido = partes.join(' ');
+        await escribirCampoEnSheet(fichaId, 'nombre', nuevoNombre);
+        await escribirCampoEnSheet(fichaId, 'apellido', nuevoApellido);
+      } else if (nombreCompletoFicha && esMasCompleto(nombreCompletoFicha, turno) && eventId && calendarId) {
+        const calendar = getCalendarClient();
+        await conReintentos(() => calendar.events.patch({
+          calendarId, eventId, requestBody: { summary: nombreCompletoFicha },
+        }));
+      }
+    }
+
+    res.status(200).json({ success: true, mapeoGuardado });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'confirmar-match', error: err });
+    res.status(500).json({ success: false, message: 'No se pudo guardar la confirmación.' });
   }
 }
 
