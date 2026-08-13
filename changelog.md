@@ -2,6 +2,17 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-13 (duodécima vuelta) — DNI obligatorio, auto-refresh de /pacientes, loading states, copy de /turnos
+
+Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `fix/dni-refresh-loading-copy`, probada offline y mergeada directo).
+
+- DNI pasa a ser obligatorio (misma validación que teléfono) en `/turnos` y en "Nuevo turno" de `/gestion` — este último no tenía el campo, se agregó de cero (formulario + `api/gestion/crear-turno.js`).
+- `/pacientes` se auto-refresca cada 60s (lista, duplicados, "Pacientes de hoy"/"¿Es este paciente?"), con diff antes de repintar para no parpadear ni perder el scroll, y se pausa por completo con una ficha abierta o un campo con foco.
+- Todas las acciones de `/pacientes` (crear/guardar/eliminar/fusionar, Sí/No de match) muestran spinner + texto y deshabilitan el botón mientras están en curso.
+- `/turnos`: texto de "turnos programados/urgencia" más chico con salto de línea controlado; cartel de "ningún horario te queda cómodo" rediseñado con borde dorado, letra grande y mejor redactado.
+- El texto de compartir turno ahora incluye fecha/hora antes del link, no solo la URL pelada.
+- Probado: formato del texto de compartir con un test aislado (4/4 casos); layout de `/turnos` y campo DNI nuevo confirmados con capturas reales; spinner de carga confirmado visualmente. Sin backend/credenciales de Google en este entorno, no se pudo probar en vivo el bloqueo real de "Confirmar" sin DNI ni el auto-refresh contra datos reales.
+
 ## 2026-08-13 (undécima vuelta) — Legibilidad y match de paciente en /pacientes: nombres completos, letra más grande, Sí/No permanente
 
 Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `fix/pacientes-legibilidad-match`, probada offline y mergeada directo).
