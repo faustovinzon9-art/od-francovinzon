@@ -160,7 +160,10 @@ async function migrarTituloCase(req, res) {
   const drive = getPacientesDriveClient();
   const sheets = getPacientesSheetsClient();
 
-  const archivos = await listarArchivosPacientes(drive);
+  // listarArchivosPacientes() no garantiza orden estable entre llamadas (Drive files.list
+  // sin orderBy) — para que offset/limit realmente cubran TODAS las fichas a lo largo de
+  // varias llamadas paginadas, se ordena acá por id (estable, único).
+  const archivos = (await listarArchivosPacientes(drive)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const lote = archivos.slice(offset, offset + limit);
 
   const resultados = [];
