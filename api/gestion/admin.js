@@ -544,22 +544,35 @@ async function calcularCancelacionesYReprogramaciones(desde, hasta) {
   return { cancelados, reprogramados };
 }
 
+const TURNOS_VACIO = { eventos: [], porDia: {}, online: 0, cargadoAyelen: 0, confirmados: 0, nuevos: 0, recurrentes: 0, total: 1 };
+
 async function getMetricas(req, res) {
   const dias = Math.min(Number(req.query.dias) || 30, 90);
   const desde = new Date(Date.now() - dias * 24 * 60 * 60000);
   const hasta = new Date(Date.now() + DIAS_FUTURO_FIJO * 24 * 60 * 60000);
 
+  // Ninguno de los tres cálculos puede tumbar el dashboard entero — cada uno
+  // degrada a "sin datos" por su cuenta y el error real queda visible en
+  // `errores` para poder diagnosticar sin depender de los logs de Vercel
+  // (encontrado en producción, 2026-08-13: un error acá se mostraba como
+  // "No se pudieron cargar las métricas" sin ninguna pista de la causa real).
+  const errores = [];
   const [
     { eventos, porDia, online, cargadoAyelen, confirmados, nuevos, recurrentes, total },
     { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad },
     { cancelados, reprogramados },
   ] = await Promise.all([
-    calcularTurnos(desde, hasta),
+    calcularTurnos(desde, hasta).catch((err) => {
+      console.error('[admin.js] calcularTurnos falló:', err);
+      errores.push(`turnos: ${err?.message || err}`);
+      return TURNOS_VACIO;
+    }),
     calcularDeuda(),
     calcularCancelacionesYReprogramaciones(desde, hasta),
   ]);
 
   res.status(200).json({
+    ...(errores.length ? { errores } : {}),
     rangoDias: dias,
     volumenPorDia: Object.entries(porDia).sort(([a], [b]) => a.localeCompare(b)).map(([fecha, cantidad]) => ({ fecha, cantidad })),
     porcentajeOnline: Math.round((online / total) * 100),

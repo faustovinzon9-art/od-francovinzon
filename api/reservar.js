@@ -182,7 +182,12 @@ async function confirmarPropio(req, res) {
     }
     const nuevaDescripcion = escribirConfirmado(ev.description || '', true);
     await conReintentos(() => calendar.events.patch({ calendarId: calId, eventId, requestBody: { description: nuevaDescripcion } }));
-    await logActividad({ tipo: 'turno_confirmado', detalle: eventId, actor: 'paciente (/turno)' });
+    const { start: fechaConfirmado } = eventBounds(ev);
+    await logActividad({
+      tipo: 'turno_confirmado',
+      detalle: `${ev.summary || 'paciente'} — ${formatArgDay(fechaConfirmado)} ${formatArgTime(fechaConfirmado)}hs`,
+      actor: 'paciente (/turno)',
+    });
     res.status(200).json({ success: true, message: '¡Turno confirmado! Gracias por avisarnos.' });
   } catch (err) {
     console.error(err);
@@ -198,8 +203,16 @@ async function cancelarPropio(req, res) {
       return res.status(200).json({ success: false, message: 'Falta el turno a cancelar.' });
     }
     const calendar = getCalendarClient();
-    await conReintentos(() => calendar.events.delete({ calendarId: resolverCalendarId(calendarId), eventId }));
-    await logActividad({ tipo: 'turno_cancelado', detalle: eventId, actor: 'paciente (/turno)' });
+    const calId = resolverCalendarId(calendarId);
+    let detalleLegible = eventId;
+    try {
+      const { data: ev } = await conReintentos(() => calendar.events.get({ calendarId: calId, eventId }));
+      const { start } = eventBounds(ev);
+      detalleLegible = `${ev.summary || 'paciente'} — ${formatArgDay(start)} ${formatArgTime(start)}hs`;
+    } catch { /* eventId pelado como último recurso, no bloquea la cancelación */ }
+
+    await conReintentos(() => calendar.events.delete({ calendarId: calId, eventId }));
+    await logActividad({ tipo: 'turno_cancelado', detalle: detalleLegible, actor: 'paciente (/turno)' });
     res.status(200).json({ success: true, message: 'Turno cancelado.' });
   } catch (err) {
     console.error(err);
@@ -269,7 +282,11 @@ async function moverPropio(req, res) {
       if (!resultado.success) return res.status(200).json(resultado);
 
       await conReintentos(() => calendar.events.delete({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId }));
-      await logActividad({ tipo: 'turno_reprogramado', detalle: `${eventId} → ${date} ${time}`, actor: 'paciente (/turno)' });
+      await logActividad({
+        tipo: 'turno_reprogramado',
+        detalle: `${original.summary || 'paciente'} — pasó a ${date} ${time}hs`,
+        actor: 'paciente (/turno)',
+      });
 
       return res.status(200).json({
         success: true,
@@ -295,7 +312,11 @@ async function moverPropio(req, res) {
       },
     }));
 
-    await logActividad({ tipo: 'turno_reprogramado', detalle: `${eventId} → ${date} ${time}`, actor: 'paciente (/turno)' });
+    await logActividad({
+      tipo: 'turno_reprogramado',
+      detalle: `${original.summary || 'paciente'} — pasó a ${date} ${time}hs`,
+      actor: 'paciente (/turno)',
+    });
 
     res.status(200).json({
       success: true,

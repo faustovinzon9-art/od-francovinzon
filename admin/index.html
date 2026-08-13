@@ -505,7 +505,10 @@
         `<tr><td>${d.nombre}</td><td>${d.dias} días</td></tr>`
       ).join('') || '<tr><td colspan="2">Sin datos.</td></tr>';
 
-      setMsg('dash-msg', '', '');
+      // Algunas partes pueden fallar sin tumbar el resto (ver getMetricas en
+      // api/gestion/admin.js) — si pasó, se muestra acá el motivo real en vez de
+      // dejarlo invisible en los logs de Vercel.
+      setMsg('dash-msg', (m.errores || []).join(' · '), m.errores?.length ? 'error' : '');
     } catch (e) {
       if (e.message !== 'unauthorized') setMsg('dash-msg', 'No se pudieron cargar las métricas.', 'error');
     }
@@ -772,13 +775,27 @@
   });
 
   // ---------- Actividad ----------
+  // Etiquetas legibles para el `tipo` interno de cada evento (ver logActividad() en
+  // lib/adminConfig.js y los call sites en api/reservar.js, api/gestion/evento.js,
+  // api/gestion/crear-turno.js) — a pedido explícito, 2026-08-13: antes se mostraba
+  // el `tipo` técnico tal cual ("turno_creado") en vez de una frase legible.
+  const ETIQUETA_ACTIVIDAD = {
+    turno_creado: 'Nuevo turno', sobreturno_creado: 'Nuevo sobreturno',
+    turno_cancelado: 'Turno cancelado', turno_confirmado: 'Turno confirmado',
+    turno_desconfirmado: 'Turno marcado sin confirmar', turno_reprogramado: 'Turno reprogramado',
+    login: 'Ingreso al panel', config_horarios: 'Horarios actualizados',
+    config_textos: 'Textos actualizados', config_listas: 'Listas actualizadas',
+    config_radios: 'Radios actualizadas', dia_bloqueado: 'Día bloqueado',
+    horario_bloqueado: 'Horario bloqueado', bloqueo_eliminado: 'Bloqueo eliminado',
+    clave_gestion_rotada: 'Clave de gestión cambiada',
+  };
   async function cargarActividad() {
     try {
       const { eventos } = await apiGet('actividad');
       document.getElementById('act-lista').innerHTML = eventos.map((ev) => `
         <div class="activity-item">
           <span class="fecha">${new Date(ev.fecha).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}</span>
-          <span><span class="tipo">${ev.tipo}</span> — ${ev.detalle} <span style="color:var(--muted);">(${ev.actor})</span></span>
+          <span><span class="tipo">${ETIQUETA_ACTIVIDAD[ev.tipo] || ev.tipo}</span> — ${ev.detalle} <span style="color:var(--muted);">(${ev.actor})</span></span>
         </div>
       `).join('') || '<p class="hint">Sin actividad registrada todavía.</p>';
     } catch (e) {
