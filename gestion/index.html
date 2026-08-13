@@ -126,11 +126,11 @@
      se deja hacer wrap a dos líneas en vez de truncar con "…" y perder la fecha. */
   .task-item.urgent .task-item-nombre { color: var(--bloqueo); white-space: normal; overflow: visible; text-overflow: clip; }
 
-  /* Botones "copiar link" debajo del saludo, mismos en desktop (sidebar) y
-     mobile (mobile-summary) — ver architecture.md. */
-  .copy-links-row { display: flex; gap: 7px; margin-bottom: 14px; }
+  /* .copy-link-btn: nombre heredado de cuando también había botones para copiar
+     links (sacados, ver decisions.md) — se mantiene el estilo porque "Acceder a
+     fichas" lo sigue usando tal cual. */
   .copy-link-btn {
-    flex: 1; min-width: 0; padding: 7px 9px; border-radius: 100px; border: 1.5px solid var(--line);
+    display: block; text-align: center; padding: 7px 9px; border-radius: 100px; border: 1.5px solid var(--line);
     background: var(--cream); color: var(--navy-soft); font-size: 11px; font-weight: 600;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -197,6 +197,7 @@
   .row .hora { font-weight: 700; color: var(--navy); width: 46px; flex-shrink: 0; font-size: 13px; }
   .row .info { flex: 1; min-width: 0; }
   .row .nombre { font-weight: 600; font-size: 13.5px; }
+  .cumple-badge { display: inline-block; font-size: 10.5px; font-weight: 700; color: #8a6d1a; background: rgba(212,162,76,.18); border-radius: 100px; padding: 1.5px 7px; margin-left: 5px; white-space: nowrap; }
   .row .detalle { color: var(--muted); font-size: 13px; font-weight: 500; }
   .row .detalle-telefono { color: var(--navy); font-size: 16px; font-weight: 700; margin-top: 2px; letter-spacing: .2px; }
   .badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 3px 8px; border-radius: 100px; flex-shrink: 0; color: var(--white); }
@@ -358,70 +359,6 @@
   .tasks-modal-list { overflow-y: auto; }
   .tasks-modal-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 0; }
 
-  /* Asistente IA flotante (Gemini) — botón abajo a la derecha, visible en desktop y
-     mobile. Oculto hasta que hay sesión (mismo criterio que el resto del panel). */
-  #asistente-widget { position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 900; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
-  .asistente-fab { width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(30,58,95,.35); flex-shrink: 0; }
-  .asistente-fab svg { width: 23px; height: 23px; }
-  .asistente-fab .icon-chat { font-size: 25px; line-height: 1; }
-  .asistente-fab .icon-close { display: none; }
-  .asistente-fab.is-open .icon-chat { display: none; }
-  .asistente-fab.is-open .icon-close { display: block; }
-  .asistente-fab:hover { filter: brightness(1.1); }
-
-  .asistente-panel { width: min(340px, calc(100vw - 32px)); height: min(480px, calc(100vh - 120px)); background: var(--white); border-radius: 20px; box-shadow: 0 20px 50px rgba(30,58,95,.25); display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: scale(0.94) translateY(8px); transform-origin: bottom right; transition: opacity .18s ease, transform .18s ease; }
-  .asistente-panel.show { opacity: 1; transform: scale(1) translateY(0); }
-
-  .asistente-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; background: var(--navy); flex-shrink: 0; }
-  .asistente-header-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .asistente-header-icon { font-size: 17px; flex-shrink: 0; }
-  .asistente-header h3 { color: var(--white); font-size: 14.5px; margin: 0; }
-  .asistente-header p { color: rgba(255,255,255,.72); font-size: 11px; margin: 2px 0 0; font-family: 'Inter', sans-serif; }
-  .asistente-header-close { width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(255,255,255,.14); color: var(--white); font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .asistente-header-close:hover { background: rgba(255,255,255,.26); }
-
-  .asistente-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 9px; background: var(--cream); }
-  /* Entrada estilo iMessage: la burbuja aparece con un rebote/deslizamiento sutil,
-     creciendo desde su propia esquina (abajo-izquierda para el bot, abajo-derecha
-     para el usuario) en vez de aparecer instantánea. Mismo overshoot suave
-     (cubic-bezier tipo easeOutBack) que ya usamos en "¡Bienvenido/a!" de /turnos. */
-  @keyframes asistenteBurbujaEntrada {
-    0% { opacity: 0; transform: translateY(8px) scale(0.82); }
-    60% { opacity: 1; transform: translateY(-1px) scale(1.02); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  .asistente-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; animation: asistenteBurbujaEntrada .32s cubic-bezier(0.34, 1.56, 0.64, 1); }
-  .asistente-msg-bot { align-self: flex-start; background: var(--white); color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(30,58,95,.08); transform-origin: bottom left; }
-  .asistente-msg-user { align-self: flex-end; background: var(--navy); color: var(--white); border-bottom-right-radius: 4px; transform-origin: bottom right; }
-
-  /* Fallback honesto cuando el asistente no puede responder: mensaje claro + botón
-     directo a WhatsApp, en vez de inventar o fallar en silencio. */
-  .asistente-fallback { max-width: 88%; align-self: flex-start; background: var(--white); border-radius: 14px; border-bottom-left-radius: 4px; padding: 10px 12px; box-shadow: 0 1px 4px rgba(30,58,95,.08); }
-  .asistente-fallback-text { font-size: 13px; color: var(--text); line-height: 1.45; margin-bottom: 9px; }
-  .asistente-fallback-btn { display: inline-flex; align-items: center; gap: 6px; background: #25D366; color: #fff; padding: 8px 14px; border-radius: 100px; font-size: 12.5px; font-weight: 700; text-decoration: none; }
-  .asistente-fallback-btn:hover { filter: brightness(1.05); }
-  .asistente-fallback-btn svg { flex-shrink: 0; }
-
-  /* Vive DENTRO de #asistente-messages (último hijo), no como hermano del
-     contenedor scrolleable — ver comentario más largo en turnos/index.html. */
-  .asistente-typing { display: flex; gap: 4px; padding: 2px 0; flex-shrink: 0; }
-  .asistente-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--navy-soft); opacity: .5; animation: asistenteTypingBounce 1.1s infinite ease-in-out; }
-  .asistente-typing span:nth-child(2) { animation-delay: .15s; }
-  .asistente-typing span:nth-child(3) { animation-delay: .3s; }
-  @keyframes asistenteTypingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
-
-  .asistente-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--white); flex-shrink: 0; }
-  .asistente-input-row input { flex: 1; border: 1.5px solid var(--line); border-radius: 100px; padding: 9px 14px; background: var(--cream); font-size: 13px; }
-  .asistente-input-row input:focus { outline: none; border-color: var(--gold); background: var(--white); }
-  .asistente-send-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--gold); color: var(--white); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .asistente-send-btn svg { width: 15px; height: 15px; }
-  .asistente-send-btn:disabled { opacity: .5; pointer-events: none; }
-  .asistente-send-btn:hover:not(:disabled) { filter: brightness(1.05); }
-
-  @media (max-width: 420px) {
-    #asistente-widget { right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
-  }
-
   /* ---------- Radio en vivo (tarjeta, no ícono flotante) ----------
      Tarjeta bien visible, mismo ancho que el bloque de saludo/resumen — en
      desktop vive dentro del sidebar (después de las tareas), en mobile debajo
@@ -506,11 +443,6 @@
     <h1 id="sidebar-greeting">Hola, Ayelen</h1>
     <p id="sidebar-date"></p>
 
-    <div class="copy-links-row">
-      <button type="button" class="copy-link-btn" id="copy-link-turnos">🔗 Copiar link de turnos</button>
-      <button type="button" class="copy-link-btn" id="copy-link-web">🔗 Copiar link de la web</button>
-    </div>
-
     <a href="/pacientes" class="copy-link-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom: 14px;">📋 Acceder a fichas</a>
 
     <div class="sidebar-search">
@@ -570,10 +502,6 @@
         <div class="mobile-summary-date" id="mobile-summary-date"></div>
       </div>
       <button class="mobile-tasks-btn hidden" id="mobile-tasks-btn">Tareas pendientes</button>
-    </div>
-    <div class="copy-links-row">
-      <button type="button" class="copy-link-btn" id="copy-link-turnos-m">🔗 Copiar link de turnos</button>
-      <button type="button" class="copy-link-btn" id="copy-link-web-m">🔗 Copiar link de la web</button>
     </div>
     <a href="/pacientes" class="copy-link-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom: 14px;">📋 Acceder a fichas</a>
     <div class="mobile-summary-stats" id="mobile-summary-stats">
@@ -716,7 +644,7 @@
   </div>
 
   <div id="panel-mover" class="panel hidden">
-    <h2>Mover</h2>
+    <h2>Editar turno</h2>
     <div class="field-row">
       <div class="field"><label>Nombre</label><input type="text" id="m-nombre"></div>
       <div class="field"><label>Apellido</label><input type="text" id="m-apellido"></div>
@@ -727,7 +655,7 @@
     </div>
     <div class="field"><label>Motivo</label><input type="text" id="m-motivo"></div>
     <div class="panel-actions">
-      <button class="btn-confirm" id="m-confirm">Mover</button>
+      <button class="btn-confirm" id="m-confirm">Guardar</button>
       <button class="btn-cancel" id="m-cancel">Cancelar</button>
     </div>
     <div class="panel-msg hidden" id="m-msg"></div>
@@ -822,35 +750,6 @@
   </div>
 </div>
 
-<div id="asistente-widget" class="hidden">
-  <div class="asistente-panel hidden" id="asistente-panel">
-    <div class="asistente-header">
-      <div class="asistente-header-title">
-        <span class="asistente-header-icon">🤖</span>
-        <div>
-          <h3>Asistente del panel</h3>
-          <p>Preguntame cómo usar el sistema</p>
-        </div>
-      </div>
-      <button class="asistente-header-close" id="asistente-close" aria-label="Cerrar asistente">✕</button>
-    </div>
-    <div class="asistente-messages" id="asistente-messages">
-      <div class="asistente-msg asistente-msg-bot">¡Hola! Preguntame lo que necesites sobre cómo usar el panel: turnos, sobreturnos, bloqueos, teléfonos, tareas pendientes...</div>
-      <div class="asistente-typing hidden" id="asistente-typing"><span></span><span></span><span></span></div>
-    </div>
-    <form class="asistente-input-row" id="asistente-form">
-      <input type="text" id="asistente-input" placeholder="Escribí tu pregunta..." autocomplete="off">
-      <button type="submit" class="asistente-send-btn" id="asistente-send" aria-label="Enviar pregunta">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-      </button>
-    </form>
-  </div>
-  <button class="asistente-fab" id="asistente-fab" aria-label="Abrir asistente" title="Ayuda del panel">
-    <span class="icon-chat" aria-hidden="true">🤖</span>
-    <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-  </button>
-</div>
-
 <audio id="radio-audio" preload="none"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
@@ -930,6 +829,22 @@
   let gestionKey = sessionStorage.getItem('gestionKey') || '';
   let currentDate = todayStr();
   let agendaItems = [];
+  // DNIs (solo dígitos) con cumpleaños hoy — mismo endpoint cacheado que /pacientes
+  // (api/gestion/pacientes.js, modo=cumpleanos-hoy). Se carga una vez al arrancar; solo
+  // se usa cuando se está viendo el día de hoy (ver renderRow).
+  let cumpleanerosDniHoy = new Set();
+  async function cargarCumpleanosHoy() {
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=cumpleanos-hoy&key=${encodeURIComponent(gestionKey)}`);
+      if (!r.ok) return;
+      const lista = await r.json();
+      if (!Array.isArray(lista)) return;
+      cumpleanerosDniHoy = new Set(lista.map((p) => (p.dni || '').replace(/\D/g, '')).filter(Boolean));
+      renderAgenda();
+    } catch {
+      // sin dato de cumpleaños no rompe nada: simplemente no se muestra el ícono
+    }
+  }
   let moverContext = null; // { eventId, calendarId }
   let currentView = 'dia'; // 'dia' | 'semana' | 'busqueda'
   let searchResults = [];
@@ -996,7 +911,6 @@
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     keyInput.value = '';
-    ocultarAsistente();
     ocultarRadio();
   }
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -1008,7 +922,6 @@
     appEl.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     loginError.textContent = 'Clave incorrecta.';
-    ocultarAsistente();
     ocultarRadio();
   }
 
@@ -1024,9 +937,9 @@
     document.getElementById('mobile-summary-date').textContent = fechaHoyLarga;
     cargarAgenda();
     cargarResumenSidebar();
-    asistenteWidget.classList.remove('hidden');
     cargarRadiosConfig();
     cargarTextosConfig();
+    cargarCumpleanosHoy();
     fetch('/api/gestion/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1418,7 +1331,7 @@
     const acciones = it.tipo === 'bloqueo'
       ? ''
       : `<div class="row-actions">
-           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>
+           <button class="icon-btn" data-action="mover" data-idx="${idx}" title="Editar turno">✏️</button>
            <button class="icon-btn" data-action="imprimir" data-idx="${idx}" title="Imprimir ticket">${PRINTER_ICON}</button>
            <button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>
          </div>`;
@@ -1504,6 +1417,32 @@
     const tipoTexto = it.tipo === 'sobreturno' ? 'sobreturno' : 'turno';
     const cuandoCap = cuando.charAt(0).toUpperCase() + cuando.slice(1);
     const link = await armarLinkCortoTurno(it);
+
+    // Días de diferencia contra hoy (negativo = turno ya pasó) — mismo criterio de
+    // fecha-sin-hora que "cuando" arriba, para no confundir "ayer a las 23hs" con
+    // "hoy" por husos horarios.
+    const [fiy, fim, fid] = fechaItem.split('-').map(Number);
+    const diasDesdeHoy = Math.round((Date.UTC(fiy, fim - 1, fid) - Date.UTC(hy, hm - 1, hd)) / 86400000);
+
+    // Turno pasado Y confirmado -> no vino. Mensaje de inasistencia en vez del de
+    // confirmación (que ya no tiene sentido) — pedido explícito, 2026-08-13. Un
+    // turno pasado que NUNCA se confirmó no cambia: sigue con el mensaje de abajo.
+    if (diasDesdeHoy < 0 && it.confirmado) {
+      return `¡Hola, ${saludoActual()}!!! Te había quedado un ${tipoTexto} ${cuando} a las ${fmtHora(it.start)}hs, ` +
+        `pero no llegaste a venir. Si en algún momento no podés venir a un turno, avisanos con tiempo así lo ` +
+        `reorganizamos — cualquier cosa contanos y coordinamos uno nuevo cuando quieras. ¡Te esperamos!`;
+    }
+
+    // 4 o más días de anticipación: no tiene sentido pedir que confirme todavía, así
+    // que se manda el detalle + el link permanente sin la línea de "confirmalo".
+    if (diasDesdeHoy >= 4) {
+      return `¡Hola, ${saludoActual()}!!! Te paso los datos del ${tipoTexto} que tenés agendado:\n\n` +
+        `${nombre}\n` +
+        `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
+        `Cualquier cosa que necesites cambiar o consultar, entrá acá:\n${link}\n\n` +
+        `¡Nos vemos pronto!`;
+    }
+
     // Plantilla (2026-08-12, novena vuelta): el saludo, el nombre, la fecha/hora y el
     // cierre son la voz auténtica de Ayelen, sin tocar. Lo único que cambió acá es la
     // línea del link — antes sonaba acartonada ("Es importante que entres a este link
@@ -1560,13 +1499,15 @@
       botones.push(`<button class="add-tel-btn" data-action="agregar-tel" data-idx="${idx}">+ Agregar teléfono</button>`);
     }
     if (it.tipo !== 'bloqueo') {
-      botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Mover">🔄</button>`);
+      botones.push(`<button class="icon-btn" data-action="mover" data-idx="${idx}" title="Editar turno">✏️</button>`);
       botones.push(`<button class="icon-btn" data-action="imprimir" data-idx="${idx}" title="Imprimir ticket">${PRINTER_ICON}</button>`);
       botones.push(`<button class="icon-btn trash" data-action="cancelar" data-idx="${idx}" title="Cancelar">${TRASH_ICON}</button>`);
     }
     const acciones = botones.length ? `<div class="row-actions">${botones.join('')}</div>` : '';
 
     const nuevoBadge = esNuevo ? '<span class="badge-nuevo">✨ Nuevo paciente</span>' : '';
+    const esCumple = it.tipo !== 'bloqueo' && currentDate === todayStr() && it.dni && cumpleanerosDniHoy.has(it.dni.replace(/\D/g, ''));
+    const cumpleBadge = esCumple ? '<span class="cumple-badge">🎂 Cumpleaños</span>' : '';
     const telefonoLine = esNuevo && it.telefono ? `<div class="detalle-telefono">${escapeHtml(it.telefono)}</div>` : '';
     // Teléfono cargado que NO pasa la validación real de formato (mismo chequeo que
     // arma el link de WhatsApp, waLinkBase de arriba) — un número con formato válido
@@ -1588,7 +1529,7 @@
       <div class="row${esNuevo ? ' row-nuevo' : ''}" data-row-idx="${idx}">
         <div class="hora">${hora}</div>
         <div class="info">
-          <div class="nombre">${escapeHtml(it.title || '(sin título)')}</div>
+          <div class="nombre">${escapeHtml(it.title || '(sin título)')}${cumpleBadge}</div>
           <div class="detalle">${escapeHtml(desc)}</div>
           ${telefonoLine}
         </div>
@@ -1790,41 +1731,6 @@
     }, 2600);
   }
 
-  // ---------- Copiar link de turnos / de la web (sidebar desktop + resumen mobile) ----------
-  // Fallback con execCommand('copy') para navegadores/contextos donde la Clipboard API
-  // no está disponible o el permiso de escritura queda denegado.
-  function copiarLinkFallback(url) {
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = url;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      toast(ok ? '✅ Link copiado' : 'No se pudo copiar el link.');
-    } catch (e) {
-      toast('No se pudo copiar el link.');
-    }
-  }
-  function copiarLink(url) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(() => toast('✅ Link copiado')).catch(() => copiarLinkFallback(url));
-    } else {
-      copiarLinkFallback(url);
-    }
-  }
-  const linkTurnos = `${location.origin}/turnos`;
-  const linkWeb = `${location.origin}/`;
-  ['copy-link-turnos', 'copy-link-turnos-m'].forEach((id) =>
-    document.getElementById(id).addEventListener('click', () => copiarLink(linkTurnos))
-  );
-  ['copy-link-web', 'copy-link-web-m'].forEach((id) =>
-    document.getElementById(id).addEventListener('click', () => copiarLink(linkWeb))
-  );
-
   // ---------- Diálogo de confirmación propio (reemplaza confirm() nativo) ----------
   const confirmOverlay = document.getElementById('confirm-overlay');
   function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' }) {
@@ -1965,8 +1871,8 @@
     document.getElementById('mc-nombre').value = partesNombreMover.shift() || '';
     document.getElementById('mc-apellido').value = partesNombreMover.join(' ');
     document.getElementById('mc-motivo').value = extraerMotivo(item.description, item.tipo);
-    document.getElementById('mc-title').textContent = 'Mover turno';
-    document.getElementById('mc-confirm').textContent = 'Mover';
+    document.getElementById('mc-title').textContent = 'Editar turno';
+    document.getElementById('mc-confirm').textContent = 'Guardar';
     setMsg('mc-msg', '', '');
     showOnly(panelTurnoCalendario);
     cargarMesMC();
@@ -2704,157 +2610,6 @@
     refrescarAgendaSilencioso();
     cargarResumenSidebar();
   }, 60000);
-
-  // ---------- Asistente IA (Gemini): ventana de chat flotante con ayuda del panel ----------
-  const asistenteWidget = document.getElementById('asistente-widget');
-  const asistenteFab = document.getElementById('asistente-fab');
-  const asistentePanel = document.getElementById('asistente-panel');
-  const asistenteMessages = document.getElementById('asistente-messages');
-  const asistenteForm = document.getElementById('asistente-form');
-  const asistenteInput = document.getElementById('asistente-input');
-  const asistenteSendBtn = document.getElementById('asistente-send');
-  const asistenteTyping = document.getElementById('asistente-typing');
-  // El mensaje de bienvenida es el único hijo estático de #asistente-messages
-  // aparte del indicador de "escribiendo" (que ahora vive adentro, como último
-  // hijo — ver HTML). Se guarda la referencia al nodo real en vez de un
-  // snapshot de innerHTML para poder resetear la conversación sin recrear
-  // #asistente-typing de cero (eso dejaría la constante asistenteTyping
-  // apuntando a un nodo ya fuera del DOM).
-  const asistenteBienvenidaEl = asistenteMessages.querySelector('.asistente-msg-bot');
-
-  let asistenteHistorial = []; // [{ rol: 'usuario'|'asistente', texto }], solo en memoria de esta carga de página
-  let asistenteEnviando = false;
-
-  function abrirAsistente() {
-    asistentePanel.classList.remove('hidden');
-    requestAnimationFrame(() => asistentePanel.classList.add('show'));
-    asistenteFab.classList.add('is-open');
-    asistenteFab.setAttribute('aria-label', 'Cerrar asistente');
-    setTimeout(() => asistenteInput.focus(), 200);
-  }
-
-  function cerrarAsistente() {
-    asistentePanel.classList.remove('show');
-    asistenteFab.classList.remove('is-open');
-    asistenteFab.setAttribute('aria-label', 'Abrir asistente');
-    setTimeout(() => asistentePanel.classList.add('hidden'), 180);
-  }
-
-  // Al salir del panel (logout o clave rechazada): oculta el widget entero y reinicia
-  // la conversación, para que un próximo login no arrastre un historial de otra sesión.
-  function ocultarAsistente() {
-    cerrarAsistente();
-    asistenteWidget.classList.add('hidden');
-    asistenteHistorial = [];
-    Array.from(asistenteMessages.children).forEach((child) => {
-      if (child !== asistenteBienvenidaEl && child !== asistenteTyping) child.remove();
-    });
-    asistenteTyping.classList.add('hidden');
-  }
-
-  asistenteFab.addEventListener('click', () => {
-    if (asistentePanel.classList.contains('show')) cerrarAsistente(); else abrirAsistente();
-  });
-  document.getElementById('asistente-close').addEventListener('click', cerrarAsistente);
-
-  // El backend ya recibe instrucción de responder en texto plano (ver
-  // SYSTEM_PROMPT en api/gestion/asistente.js), pero como respaldo por si
-  // igual llega sintaxis markdown, se escapa el texto primero (nunca se
-  // inyecta HTML del modelo tal cual) y recién ahí se reemplazan **negrita**
-  // por <strong> real y los guiones de lista por una viñeta.
-  function escaparHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function formatearMensajeAsistente(texto) {
-    const escapado = escaparHtml(texto);
-    const conNegrita = escapado.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    return conNegrita.replace(/^[ \t]*[-*][ \t]+/gm, '• ');
-  }
-
-  // Inserta siempre ANTES del indicador de "escribiendo" (último hijo de
-  // #asistente-messages) y hace scroll suave al fondo — ver turnos/index.html.
-  function scrollMensajesAlFondo() {
-    asistenteMessages.scrollTo({ top: asistenteMessages.scrollHeight, behavior: 'smooth' });
-  }
-
-  function agregarMensajeAsistente(texto, rol) {
-    const el = document.createElement('div');
-    el.className = `asistente-msg asistente-msg-${rol === 'usuario' ? 'user' : 'bot'}`;
-    if (rol === 'usuario') el.textContent = texto; else el.innerHTML = formatearMensajeAsistente(texto);
-    asistenteMessages.insertBefore(el, asistenteTyping);
-    scrollMensajesAlFondo();
-  }
-
-  // Fallback honesto: si el asistente no puede responder (red caída, error de
-  // Gemini, lo que sea), nunca se inventa una respuesta ni se falla en silencio —
-  // mensaje claro + botón directo al WhatsApp real del consultorio (mismo
-  // WHATSAPP_CONSULTORIO que usa el ticket térmico, ver arriba en este archivo).
-  function agregarFallbackAsistente() {
-    const el = document.createElement('div');
-    el.className = 'asistente-msg asistente-fallback';
-    el.innerHTML =
-      '<div class="asistente-fallback-text">No puedo resolver tu consulta en este momento. Lo mejor es que te comuniques por WhatsApp.</div>' +
-      `<a class="asistente-fallback-btn" href="https://wa.me/${WHATSAPP_CONSULTORIO}" target="_blank" rel="noopener noreferrer">` +
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>' +
-      'Escribinos por WhatsApp</a>';
-    asistenteMessages.insertBefore(el, asistenteTyping);
-    scrollMensajesAlFondo();
-  }
-
-  asistenteForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    enviarPreguntaAsistente();
-  });
-  // Explícito además del submit del <form>: mismo patrón que keyInput/searchInput
-  // en el resto del panel (no depender del envío implícito del navegador al tocar Enter).
-  // isComposing: en teclados con predicción/IME, confirmar una sugerencia también
-  // dispara un keydown con key "Enter" — sin este chequeo eso enviaba la
-  // pregunta a mitad de escribir.
-  asistenteInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); enviarPreguntaAsistente(); }
-  });
-
-  function enviarPreguntaAsistente() {
-    const texto = asistenteInput.value.trim();
-    if (!texto || asistenteEnviando) return;
-
-    agregarMensajeAsistente(texto, 'usuario');
-    const historialPrevio = asistenteHistorial.slice();
-    asistenteHistorial.push({ rol: 'usuario', texto });
-    asistenteInput.value = '';
-    asistenteEnviando = true;
-    asistenteSendBtn.disabled = true;
-    asistenteTyping.classList.remove('hidden');
-    scrollMensajesAlFondo();
-
-    fetch('/api/gestion/asistente', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, pregunta: texto, historial: historialPrevio }),
-    })
-      .then((r) => {
-        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
-        return r.json();
-      })
-      .then((res) => {
-        if (res.success) {
-          agregarMensajeAsistente(res.respuesta, 'asistente');
-          asistenteHistorial.push({ rol: 'asistente', texto: res.respuesta });
-        } else {
-          agregarFallbackAsistente();
-        }
-      })
-      .catch((err) => {
-        if (err.message !== 'unauthorized') {
-          agregarFallbackAsistente();
-        }
-      })
-      .finally(() => {
-        asistenteEnviando = false;
-        asistenteSendBtn.disabled = false;
-        asistenteTyping.classList.add('hidden');
-      });
-  }
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();

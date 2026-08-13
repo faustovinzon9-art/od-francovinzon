@@ -37,6 +37,17 @@
   .topbar img { width: 190px; max-width: 50vw; height: auto; }
   #volver-gestion { margin-left: auto; margin-bottom: 0; }
 
+  /* Barra sticky: siempre visible arriba de todo sin importar el scroll, ADEMÁS del
+     buscador/botón que ya existen más abajo (no los reemplaza, ver el pedido). Mismo
+     estilo que .search-row de siempre para que no se sienta como algo distinto. */
+  .sticky-bar {
+    position: sticky; top: 0; z-index: 60; display: flex; gap: 10px; align-items: center;
+    background: var(--cream); padding: 10px 0 12px; margin: -20px 0 16px;
+  }
+  .sticky-bar .search-box { padding: 3px 3px 3px 12px; }
+  .sticky-bar .search-box input { padding: 8px 6px; }
+  .sticky-bar .btn-nuevo { padding: 0 16px; font-size: 13.5px; }
+
   /* Desktop ancho (≥1000px, mismo breakpoint que /gestion): sidebar de resumen a la
      izquierda + contenido a la derecha, en vez de todo apilado y centrado en una columna
      angosta como en mobile. Mobile queda intacto — el sidebar no existe ahí. */
@@ -191,7 +202,14 @@
      vistazo, y a veces también Franco. */
   .hoy-section { margin-bottom: 16px; }
   .hoy-section h2 { font-size: 15.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 9px; }
-  .hoy-carril { display: flex; flex-direction: column; gap: 7px; }
+  /* 2 columnas, ADEMÁS del orden cronológico fila por fila (izquierda a derecha) —
+     el turno más temprano queda arriba-izquierda, el segundo arriba-derecha, el
+     tercero abajo-izquierda, etc. CSS grid con grid-auto-flow: row (default) ya
+     rellena en ese orden con el HTML tal cual sale del map() (ya viene ordenado por
+     hora, ver cargarDatosDeHoy), sin tener que reordenar nada del lado del JS. Se
+     achica a 1 columna en mobile angosto para no apretar demasiado las filas. */
+  .hoy-carril { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; }
+  @media (max-width: 560px) { .hoy-carril { grid-template-columns: 1fr; } }
   .hoy-row {
     display: flex; align-items: center; gap: 12px; width: 100%; background: var(--white);
     border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 13px;
@@ -200,6 +218,7 @@
   .hoy-row:hover { border-color: var(--gold); }
   .hoy-row-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; font-family: 'Fraunces', Georgia, serif; flex-shrink: 0; }
   .hoy-row-nombre { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.3; }
+  .cumple-badge { display: inline-block; font-size: 12px; font-weight: 700; color: var(--gold); background: rgba(197, 160, 89, 0.15); border-radius: 20px; padding: 2px 8px; margin-left: 4px; white-space: nowrap; }
   .hoy-row-hora { font-size: 13.5px; color: var(--gold); font-weight: 700; margin-left: auto; flex-shrink: 0; white-space: nowrap; }
   .hoy-row-sugerencia { flex-wrap: wrap; border-style: dashed; border-color: var(--gold); cursor: default; }
   .hoy-row-sugerencia .hoy-row-avatar { background: var(--gold); }
@@ -236,6 +255,17 @@
   .confirm-actions .btn-cancel { background: var(--cream); color: var(--navy); }
   .confirm-actions .btn-danger { background: var(--bloqueo); color: var(--white); }
   .confirm-actions .btn-gold { background: var(--gold); color: var(--white); }
+
+  /* Modal de fotos del paciente (subidas desde /mobilephotouploaderodfrancovinzon) —
+     mismo overlay que confirm-overlay, caja más ancha para una grilla de 2 columnas. */
+  .fotos-box { background: var(--white); border-radius: 20px; padding: 22px; max-width: 480px; width: 100%; max-height: 82vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(30,58,95,.25); transform: scale(0.94); transition: transform .18s ease; }
+  .confirm-overlay.show .fotos-box { transform: scale(1); }
+  .fotos-box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .fotos-box-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--cream); color: var(--navy); font-size: 14px; }
+  .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .foto-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+  .foto-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .foto-item .fecha { font-size: 10.5px; color: var(--muted); }
 
   button, .icon-btn, input, select, textarea, .patient-row {
     transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
@@ -322,6 +352,11 @@
   <div class="topbar">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <button type="button" class="btn-volver hidden" id="volver-gestion">← Gestión</button>
+  </div>
+
+  <div class="sticky-bar">
+    <div class="search-box"><input type="text" id="search-input-sticky" placeholder="Buscar por nombre o DNI..."></div>
+    <button class="btn-nuevo" id="btn-nuevo-paciente-sticky">+ Nuevo paciente</button>
   </div>
 
   <div id="vista-lista" class="vista">
@@ -417,6 +452,7 @@
       <div class="autosave-status" id="autosave-status"></div>
     </div>
     <button class="btn-obra-social" id="btn-obra-social">🏥 Estado de prestación obra social</button>
+    <button class="btn-obra-social" id="btn-fotos" style="margin-left:10px;">📷 Fotos</button>
 
     <div class="ficha-columns">
     <div class="ficha-col-left">
@@ -570,6 +606,16 @@
 </div>
 
 <div id="toast-container"></div>
+<div class="confirm-overlay hidden" id="fotos-overlay">
+  <div class="fotos-box">
+    <div class="fotos-box-header">
+      <h3>Fotos del paciente</h3>
+      <button type="button" class="fotos-box-close" id="fotos-cerrar">✕</button>
+    </div>
+    <div class="fotos-grid" id="fotos-grid"></div>
+    <p class="hint hidden" id="fotos-vacio" style="text-align:center; padding: 20px 0;">Todavía no hay fotos subidas. Se suben desde el celular en /mobilephotouploaderodfrancovinzon.</p>
+  </div>
+</div>
 <div class="confirm-overlay hidden" id="confirm-overlay">
   <div class="confirm-box">
     <h3 id="confirm-title"></h3>
@@ -653,6 +699,11 @@
     cargarLista();
     iniciarEscaneoDuplicados();
     cargarListasDesplegables();
+    cargarCumpleanosHoy();
+    // Deep link desde /admin ("Abrir ficha" en Pacientes totales, ver el pedido) —
+    // ?id=<fichaId> abre esa ficha directo en vez de la lista.
+    const idDesdeUrl = new URLSearchParams(window.location.search).get('id');
+    if (idDesdeUrl) abrirFicha(idDesdeUrl);
   }
 
   // Obras sociales / planes / tipos de tratamiento configurables desde /admin (ver
@@ -810,6 +861,13 @@
     }
   }
   searchInput.addEventListener('input', renderLista);
+  // Buscador sticky de arriba de todo: espeja el valor en el buscador de siempre y
+  // dispara el mismo renderLista() — un solo filtro, dos puntos de entrada.
+  const searchInputSticky = document.getElementById('search-input-sticky');
+  searchInputSticky.addEventListener('input', () => {
+    searchInput.value = searchInputSticky.value;
+    renderLista();
+  });
 
   function normalizar(str) {
     return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -844,6 +902,20 @@
   // mano en "¿Es este paciente?" — ver cargarDatosDeHoy() (modo=mapeos).
   let mapeosPositivos = new Map();
   let mapeosNegativos = new Map();
+  // IDs de ficha con cumpleaños hoy (día/mes de fechaNacimiento === hoy) — se carga una
+  // sola vez al arrancar (api/gestion/pacientes.js, modo=cumpleanos-hoy, ya cacheado 10
+  // minutos del lado del servidor) y se cruza contra "Pacientes de hoy" al pintar.
+  let cumpleanerosHoy = new Set();
+  async function cargarCumpleanosHoy() {
+    try {
+      const lista = await apiGet({ modo: 'cumpleanos-hoy' });
+      if (!Array.isArray(lista)) return;
+      cumpleanerosHoy = new Set(lista.map((p) => p.id));
+      renderPacientesDeHoy();
+    } catch {
+      // sin dato de cumpleaños no rompe nada: simplemente no se muestra el ícono
+    }
+  }
 
   // Umbral de similitud (0 a 1) para considerar un nombre "parecido" a otro — cubre
   // diminutivos/variantes ("Pepe" vs "José") siempre y cuando el resto del nombre
@@ -1050,7 +1122,7 @@
     hoyCarril.innerHTML = pacientesDeHoy.map((p) => `
       <button type="button" class="hoy-row" data-id="${p.id}">
         <span class="hoy-row-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
-        <span class="hoy-row-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
+        <span class="hoy-row-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}${cumpleanerosHoy.has(p.id) ? ' <span class="cumple-badge">🎂 Cumpleaños</span>' : ''}</span>
         <span class="hoy-row-hora">${escapeHtml(p.hora)}</span>
       </button>
     `).join('');
@@ -1175,14 +1247,19 @@
   const npDupWarning = document.getElementById('np-dup-warning');
   const npDupNombre = document.getElementById('np-dup-nombre');
 
-  document.getElementById('btn-nuevo-paciente').addEventListener('click', () => {
+  function abrirNuevoPaciente() {
     npNombre.value = ''; npApellido.value = ''; npDni.value = ''; npTelefono.value = '';
     npMsg.classList.add('hidden');
     npDupWarning.classList.add('hidden');
     npDuplicadoActual = null;
     mostrarAnimado(panelNuevo);
     npNombre.focus();
-  });
+  }
+  // Barra sticky de arriba de todo (ADEMÁS del botón/buscador de siempre más abajo,
+  // no los reemplaza, ver el pedido) — mismas acciones, solo un segundo punto de
+  // entrada para no tener que scrollear.
+  document.getElementById('btn-nuevo-paciente').addEventListener('click', abrirNuevoPaciente);
+  document.getElementById('btn-nuevo-paciente-sticky').addEventListener('click', abrirNuevoPaciente);
   document.getElementById('np-cancelar').addEventListener('click', () => ocultarAnimado(panelNuevo));
 
   // Detección de duplicados por DNI (único criterio, ver decisions.md): se chequea "de
@@ -1639,6 +1716,42 @@
   document.getElementById('volver-ficha-desde-obra-social').addEventListener('click', () => {
     cambiarVista(vistaFicha, vistaObraSocial);
   });
+
+  // ---------- Fotos del paciente (subidas desde /mobilephotouploaderodfrancovinzon) ----------
+  // Mismos modo=fotos/foto-imagen sin clave que usa esa página — acá igual, aunque
+  // /pacientes sí pide clave para entrar, no hace falta duplicar la lógica de auth
+  // para algo de tan baja sensibilidad (mismo criterio que decidió el usuario para
+  // esa página entera, ver decisions.md).
+  const fotosOverlay = document.getElementById('fotos-overlay');
+  document.getElementById('btn-fotos').addEventListener('click', async () => {
+    if (!fichaActual) return;
+    fotosOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => fotosOverlay.classList.add('show'));
+    const grid = document.getElementById('fotos-grid');
+    const vacio = document.getElementById('fotos-vacio');
+    grid.innerHTML = '<p class="hint">Cargando...</p>';
+    vacio.classList.add('hidden');
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=fotos&id=${fichaActual.id}`);
+      const fotos = await r.json();
+      vacio.classList.toggle('hidden', fotos.length > 0);
+      grid.innerHTML = fotos.map((f) => `
+        <div class="foto-item">
+          <img src="/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}" alt="" loading="lazy">
+          ${f.descripcion ? `<div class="desc">${escapeHtml(f.descripcion)}</div>` : ''}
+          <div class="fecha">${new Date(f.fecha).toLocaleDateString('es-AR')}</div>
+        </div>
+      `).join('');
+    } catch {
+      grid.innerHTML = '<p class="hint">No se pudieron cargar las fotos.</p>';
+    }
+  });
+  function cerrarFotos() {
+    fotosOverlay.classList.remove('show');
+    setTimeout(() => fotosOverlay.classList.add('hidden'), 180);
+  }
+  document.getElementById('fotos-cerrar').addEventListener('click', cerrarFotos);
+  fotosOverlay.addEventListener('click', (e) => { if (e.target === fotosOverlay) cerrarFotos(); });
 
   function renderPrestaciones() {
     const tbody = document.getElementById('pres-tbody');

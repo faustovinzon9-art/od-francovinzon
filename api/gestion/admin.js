@@ -6,13 +6,14 @@
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { isValidGestionKey } from '../../lib/googleCalendar.js';
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, TIME_ZONE,
-  pad2, toArgDate, eventBounds, formatArgDay, formatArgTime, extraerTelefono, extraerConfirmado,
-  extraerEsNuevoPaciente, getHorariosLibresDia,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, TIME_ZONE, WEEKLY_SCHEDULE,
+  SLOT_MINUTES, pad2, toArgDate, eventBounds, formatArgDay, formatArgTime, extraerTelefono, extraerConfirmado,
+  extraerEsNuevoPaciente, extraerDni, getHorariosLibresDia,
 } from '../../lib/googleCalendar.js';
 import { getPacientesDriveClient, getPacientesSheetsClient } from '../../lib/googleOAuthPacientes.js';
 import {
-  PACIENTES_FOLDER_ID, SHEET_NAME, parsearNombreArchivo,
+  PACIENTES_FOLDER_ID, SHEET_NAME, parsearNombreArchivo, rangoMovimientos,
+  normalizarDni, normalizarTelefonoMapeo,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
       if (recurso === 'actividad') return await getActividad(req, res);
       if (recurso === 'monitoreo') return await getMonitoreo(req, res);
       if (recurso === 'metricas') return await getMetricas(req, res);
+      if (recurso === 'metricas-avanzadas') return await getMetricasAvanzadas(req, res);
       // Los export-* devuelven un archivo (PDF/CSV), no JSON — si algo dentro tira,
       // el catch de más abajo los mandaría igual por el camino genérico de
       // "Error inesperado." sin ninguna pista. Acá sí se envuelve cada uno para
@@ -630,6 +632,401 @@ async function getMetricas(req, res) {
     topDeudoresAntiguedad: topDeudoresAntiguedad.slice(0, 10),
     totalPacientesConSaldo,
     fichasFallidas,
+  });
+}
+
+// ---------- 9b. Métricas avanzadas (ocupación, inasistencia, ingresos, pacientes, ticket) ----------
+// Aparte de getMetricas() (recurso=metricas) a propósito: acá adentro está el escaneo
+// más pesado de todo el panel (movimientos de CADA ficha, no solo un par de celdas como
+// calcularDeuda), así que separarlo en su propio recurso deja que el dashboard "rápido"
+// cargue y se pinte sin esperar esto, y que este pedazo tenga su propio spinner/caché.
+
+// ---- (a) Ocupación mensual ----
+// Capacidad nominal = slots de slotMinutes según el horario configurado (WEEKLY_SCHEDULE
+// o lo guardado en /admin), menos los minutos bloqueados ese mes (día completo o
+// parcial). Los sobreturnos NO restan de la capacidad nominal (son turnos extra fuera de
+// la grilla habitual) — por eso la ocupación puede superar el 100%, a propósito.
+async function calcularOcupacionMes(calendar, year, month, schedule, slotMinutes) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthStart = toArgDate(`${year}-${pad2(month)}-01`, '00:00');
+  const lastDayStr = `${year}-${pad2(month)}-${pad2(daysInMonth)}`;
+  const monthEnd = new Date(toArgDate(lastDayStr, '00:00').getTime() + 24 * 60 * 60000);
+
+  const [principal, sobreturnos] = await Promise.all([
+    conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: monthStart.toISOString(), timeMax: monthEnd.toISOString(), singleEvents: true, maxResults: 2500 })),
+    conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: monthStart.toISOString(), timeMax: monthEnd.toISOString(), singleEvents: true, maxResults: 2500 })),
+  ]);
+
+  const eventosPrincipal = principal.data.items || [];
+  const bloqueos = eventosPrincipal.filter((ev) => (ev.description || '').includes(BLOCK_MARKER));
+  const turnosReservados = eventosPrincipal.length - bloqueos.length;
+  const sobreturnosReservados = (sobreturnos.data.items || []).length;
+
+  let capacidad = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayOfWeek = new Date(year, month - 1, d).getDay();
+    const ranges = schedule[dayOfWeek] || [];
+    ranges.forEach(([ini, fin]) => {
+      const dateStr = `${year}-${pad2(month)}-${pad2(d)}`;
+      const mins = (toArgDate(dateStr, fin) - toArgDate(dateStr, ini)) / 60000;
+      capacidad += Math.floor(mins / slotMinutes);
+    });
+  }
+  const minutosBloqueados = bloqueos.reduce((acc, ev) => {
+    const { start, end } = eventBounds(ev);
+    return acc + (end - start) / 60000;
+  }, 0);
+  capacidad = Math.max(0, capacidad - Math.round(minutosBloqueados / slotMinutes));
+
+  return {
+    anio: year,
+    mes: month,
+    turnosReservados,
+    sobreturnosReservados,
+    capacidad,
+    porcentaje: capacidad > 0 ? Math.round((turnosReservados / capacidad) * 100) : null,
+  };
+}
+
+// ---- (b) % de inasistencia mensual ----
+// Solo se cuenta desde INASISTENCIA_DESDE en adelante (pedido explícito): antes de esa
+// fecha el estado "confirmado" no era un dato confiable para todos los turnos viejos.
+// "Inasistencia" acá = turno YA PASADO sin confirmar — no distingue si el paciente avisó
+// o no, mismo criterio simple que el resto de las métricas de este dashboard.
+const INASISTENCIA_DESDE = '2026-08-13';
+async function calcularInasistenciaMensual(calendar) {
+  const desde = toArgDate(INASISTENCIA_DESDE, '00:00');
+  const ahora = new Date();
+  if (ahora <= desde) return [];
+
+  let eventos = [];
+  let pageToken;
+  do {
+    const { data } = await conReintentos(() => calendar.events.list({
+      calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
+      singleEvents: true, maxResults: 2500, pageToken,
+    }));
+    eventos = eventos.concat(data.items || []);
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  const porMes = {};
+  eventos.forEach((ev) => {
+    if ((ev.description || '').includes(BLOCK_MARKER)) return;
+    const { start } = eventBounds(ev);
+    if (start > ahora) return;
+    const key = formatArgDay(start).slice(0, 7);
+    (porMes[key] ||= { mes: key, total: 0, inasistencias: 0 });
+    porMes[key].total++;
+    if (!extraerConfirmado(ev.description)) porMes[key].inasistencias++;
+  });
+
+  return Object.values(porMes)
+    .sort((a, b) => a.mes.localeCompare(b.mes))
+    .map((m) => ({ ...m, porcentaje: m.total ? Math.round((m.inasistencias / m.total) * 100) : 0 }));
+}
+
+// ---- Cotización histórica del dólar blue (ArgentinaDatos, sin auth) ----
+// Se trae el HISTÓRICO COMPLETO de una sola vez (un solo fetch, ~5700 filas, liviano)
+// en vez de una llamada por cada pago cobrado — con cientos de movimientos guardados,
+// eso hubiera sido cientos de fetches a una API externa solo para armar el ticket
+// promedio en USD. Cacheado 6hs en memoria del proceso (la cotización de un día que ya
+// pasó no cambia más).
+let cacheDolarBlue = null; // { porFecha: Map, fechasOrdenadas: string[], ts }
+const TTL_DOLAR_MS = 6 * 60 * 60 * 1000;
+async function obtenerHistoricoDolarBlue() {
+  if (cacheDolarBlue && Date.now() - cacheDolarBlue.ts < TTL_DOLAR_MS) return cacheDolarBlue;
+  const r = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/blue');
+  if (!r.ok) throw new Error(`ArgentinaDatos respondió ${r.status}`);
+  const data = await r.json();
+  const porFecha = new Map();
+  (data || []).forEach((d) => { if (d.fecha && d.venta) porFecha.set(d.fecha, d.venta); });
+  const fechasOrdenadas = [...porFecha.keys()].sort();
+  cacheDolarBlue = { porFecha, fechasOrdenadas, ts: Date.now() };
+  return cacheDolarBlue;
+}
+
+// Si el día exacto no tiene cotización (fin de semana/feriado, ver el pedido), se usa la
+// fecha disponible más cercana ANTERIOR — búsqueda binaria porque `fechasOrdenadas` puede
+// tener miles de entradas y esto se llama una vez por cada pago cobrado.
+function dolarBlueEnFecha(cache, fechaISO) {
+  if (cache.porFecha.has(fechaISO)) return cache.porFecha.get(fechaISO);
+  const { fechasOrdenadas } = cache;
+  let lo = 0, hi = fechasOrdenadas.length - 1, resultado = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (fechasOrdenadas[mid] <= fechaISO) { resultado = fechasOrdenadas[mid]; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return resultado ? cache.porFecha.get(resultado) : null;
+}
+
+// "D/M/AAAA" (ver fechaInputASheet en pacientes/index.html) -> "YYYY-MM-DD". Devuelve
+// null si no matchea el formato esperado (fila vieja/mal cargada a mano) en vez de
+// reventar todo el cálculo por una sola fila rara.
+function fechaSheetAIso(fechaStr) {
+  const m = String(fechaStr || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+// ---- (c)+(d)+(e) Escaneo combinado de fichas: ingresos, ticket promedio y pacientes ----
+// Un solo recorrido de todas las fichas (batchGet de 2 rangos por archivo: identidad +
+// movimientos) en vez de tres escaneos separados — ya es la operación más cara del
+// panel con uno solo. Mismo patrón de lotes de 25 en paralelo que calcularDeuda(), con
+// paginado completo de Drive (ver el bug real de "no se están tomando valores más altos"
+// del 2026-08-13 — cortar en la primera página deja fichas afuera en silencio).
+let cacheFinanzas = null; // { valor, ts }
+const TTL_FINANZAS_MS = 300000;
+async function calcularFinanzasPacientes(forzar) {
+  if (!forzar && cacheFinanzas && Date.now() - cacheFinanzas.ts < TTL_FINANZAS_MS) return cacheFinanzas.valor;
+
+  const ingresosPorDia = {};
+  const pagos = []; // { fechaISO, monto }
+  const fichasIdentidad = []; // { id, nombre, apellido, dni, telefono }
+  let fallidos = 0;
+
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+
+    let archivos = [];
+    let pageToken;
+    do {
+      const { data } = await conReintentos(() => drive.files.list({
+        q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+        fields: 'files(id, name), nextPageToken',
+        pageSize: 250,
+        pageToken,
+      }));
+      archivos = archivos.concat(data.files || []);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    archivos = archivos.filter((f) => !/^⭐/.test(f.name));
+
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+            spreadsheetId: f.id,
+            ranges: [`${SHEET_NAME}!C5:C15`, rangoMovimientos()],
+          }));
+          const [identidadRaw, movRaw] = data.valueRanges || [];
+          const c = (identidadRaw?.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
+          while (c.length < 11) c.push('');
+          const [nombre, apellido, dni, , , , , , , telefono] = c;
+
+          const movimientos = (movRaw?.values || [])
+            .map((row) => ({ fecha: row[0] || '', tratamiento: row[1] || '', haber: row[3] || '' }))
+            .filter((m) => m.fecha && m.haber && !/^\[ANULADO\]/.test(m.tratamiento));
+
+          return { id: f.id, nombre, apellido, dni, telefono, movimientos };
+        } catch (err) {
+          console.warn(`[admin.js] no se pudo leer la ficha ${f.name} para finanzas:`, err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => {
+        if (!r) { fallidos++; return; }
+        fichasIdentidad.push({ id: r.id, nombre: r.nombre, apellido: r.apellido, dni: r.dni, telefono: r.telefono });
+        r.movimientos.forEach((m) => {
+          const fechaISO = fechaSheetAIso(m.fecha);
+          if (!fechaISO) return;
+          const monto = parsearMontoArgentino(m.haber);
+          if (monto <= 0) return;
+          ingresosPorDia[fechaISO] = (ingresosPorDia[fechaISO] || 0) + monto;
+          pagos.push({ fechaISO, monto });
+        });
+      });
+    }
+  } catch (err) {
+    console.warn('[admin.js] no se pudo calcular finanzas de pacientes:', err?.message || err);
+  }
+
+  // (e) Ticket promedio en $ y USD, agrupado por mes y por año — cada pago se convierte
+  // con la cotización blue REAL del día que se cobró (pedido explícito), no la de hoy.
+  let dolarCache = null;
+  let dolarError = null;
+  try {
+    dolarCache = await obtenerHistoricoDolarBlue();
+  } catch (err) {
+    console.warn('[admin.js] no se pudo obtener el histórico del dólar blue:', err?.message || err);
+    dolarError = err?.message || String(err);
+  }
+
+  const acumPorMes = {};
+  const acumPorAnio = {};
+  pagos.forEach((p) => {
+    const mesKey = p.fechaISO.slice(0, 7);
+    const anioKey = p.fechaISO.slice(0, 4);
+    const cotizacion = dolarCache ? dolarBlueEnFecha(dolarCache, p.fechaISO) : null;
+    const montoUsd = cotizacion ? p.monto / cotizacion : null;
+
+    (acumPorMes[mesKey] ||= { mes: mesKey, cantidad: 0, sumaArs: 0, sumaUsd: 0, pagosConUsd: 0 });
+    acumPorMes[mesKey].cantidad++;
+    acumPorMes[mesKey].sumaArs += p.monto;
+    if (montoUsd != null) { acumPorMes[mesKey].sumaUsd += montoUsd; acumPorMes[mesKey].pagosConUsd++; }
+
+    (acumPorAnio[anioKey] ||= { anio: anioKey, cantidad: 0, sumaArs: 0, sumaUsd: 0, pagosConUsd: 0 });
+    acumPorAnio[anioKey].cantidad++;
+    acumPorAnio[anioKey].sumaArs += p.monto;
+    if (montoUsd != null) { acumPorAnio[anioKey].sumaUsd += montoUsd; acumPorAnio[anioKey].pagosConUsd++; }
+  });
+  const armarPromedio = (acum) => ({
+    ...acum,
+    promedioArs: acum.cantidad ? Math.round(acum.sumaArs / acum.cantidad) : 0,
+    promedioUsd: acum.pagosConUsd ? Math.round((acum.sumaUsd / acum.pagosConUsd) * 100) / 100 : null,
+  });
+  const ticketPorMes = Object.values(acumPorMes).sort((a, b) => a.mes.localeCompare(b.mes)).map(armarPromedio);
+  const ticketPorAnio = Object.values(acumPorAnio).sort((a, b) => a.anio.localeCompare(b.anio)).map(armarPromedio);
+
+  // (c) Ingresos: serie diaria completa (la usa el frontend para armar tanto la vista
+  // diaria del mes actual como los totales mensual/anual, sumando sobre esta misma serie
+  // en vez de mandar tres formatos distintos desde el back).
+  const ingresosDiarios = Object.entries(ingresosPorDia)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, monto]) => ({ fecha, monto: Math.round(monto * 100) / 100 }));
+
+  const valor = {
+    ingresosDiarios,
+    ticketPorMes,
+    ticketPorAnio,
+    dolarError,
+    fichasIdentidad,
+    fichasFallidas: fallidos,
+  };
+  cacheFinanzas = { valor, ts: Date.now() };
+  return valor;
+}
+
+// ---- (d) Pacientes totales: fichas + turnos sin ficha, sin duplicar ----
+// Mismo criterio "ya establecido en el proyecto" que la hoja de mapeo teléfono-ficha:
+// mismo DNI o mismo teléfono (últimos 10 dígitos) = la misma persona. No se hace el
+// matching difuso por similitud de nombre que usa /pacientes para "¿Es este paciente?"
+// (nivel 4/5) — ese existe para resolver turnos de HOY uno por uno; acá hace falta un
+// criterio barato de aplicar sobre años de turnos históricos.
+// Ventana histórica: 3 años atrás hasta hoy — sin acotar quedaría una consulta a
+// Calendar sin límite superior de volumen (riesgo real de timeout/cuota, ver CLAUDE.md),
+// y no hay ninguna fecha de "arranque del sistema" configurada para usar como límite más
+// ajustado. 3 años es un margen generoso para un consultorio de este tamaño sin arriesgar
+// los 300s de maxDuration con años y años de turnos históricos.
+const HISTORIAL_PACIENTES_ANIOS = 3;
+async function calcularPacientesTotales(calendar, fichasIdentidad) {
+  const dnisFicha = new Set();
+  const telefonosFicha = new Set();
+  fichasIdentidad.forEach((f) => {
+    const dni = normalizarDni(f.dni);
+    const tel = normalizarTelefonoMapeo(f.telefono);
+    if (dni) dnisFicha.add(dni);
+    if (tel) telefonosFicha.add(tel);
+  });
+
+  const ahora = new Date();
+  const desde = new Date(Date.UTC(ahora.getUTCFullYear() - HISTORIAL_PACIENTES_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
+
+  let eventos = [];
+  try {
+    const [principal, sobreturnos] = await Promise.all([
+      (async () => {
+        let items = [], pageToken;
+        do {
+          const { data } = await conReintentos(() => calendar.events.list({
+            calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
+            singleEvents: true, maxResults: 2500, pageToken,
+          }));
+          items = items.concat(data.items || []);
+          pageToken = data.nextPageToken;
+        } while (pageToken);
+        return items;
+      })(),
+      (async () => {
+        let items = [], pageToken;
+        do {
+          const { data } = await conReintentos(() => calendar.events.list({
+            calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
+            singleEvents: true, maxResults: 2500, pageToken,
+          }));
+          items = items.concat(data.items || []);
+          pageToken = data.nextPageToken;
+        } while (pageToken);
+        return items;
+      })(),
+    ]);
+    eventos = [...principal, ...sobreturnos];
+  } catch (err) {
+    console.warn('[admin.js] no se pudo leer el historial de turnos para pacientes totales:', err?.message || err);
+    return { total: fichasIdentidad.length, totalFichas: fichasIdentidad.length, totalSoloTurno: 0, fichas: fichasIdentidad, soloTurno: [] };
+  }
+
+  const soloTurnoPorClave = new Map();
+  eventos.forEach((ev) => {
+    if ((ev.description || '').includes(BLOCK_MARKER)) return;
+    const dni = normalizarDni(extraerDni(ev.description));
+    const tel = normalizarTelefonoMapeo(extraerTelefono(ev.description));
+    if ((dni && dnisFicha.has(dni)) || (tel && telefonosFicha.has(tel))) return; // ya tiene ficha
+    const clave = dni || tel;
+    if (!clave) return; // sin dni ni teléfono no hay con qué identificarlo de forma única
+    if (!soloTurnoPorClave.has(clave)) {
+      soloTurnoPorClave.set(clave, { nombre: ev.summary || '(sin nombre)', dni: extraerDni(ev.description), telefono: extraerTelefono(ev.description) });
+    }
+  });
+
+  const soloTurno = [...soloTurnoPorClave.values()];
+  return {
+    total: fichasIdentidad.length + soloTurno.length,
+    totalFichas: fichasIdentidad.length,
+    totalSoloTurno: soloTurno.length,
+    fichas: fichasIdentidad,
+    soloTurno: soloTurno.slice(0, 500),
+  };
+}
+
+async function getMetricasAvanzadas(req, res) {
+  const calendar = getCalendarClient();
+  const config = await obtenerHorariosConfig();
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+  const anioSiguiente = mesActual === 12 ? anioActual + 1 : anioActual;
+  const mesSiguiente = mesActual === 12 ? 1 : mesActual + 1;
+
+  const errores = [];
+  const [ocupacionActual, ocupacionSiguiente, inasistenciaMensual, finanzas] = await Promise.all([
+    calcularOcupacionMes(calendar, anioActual, mesActual, config.schedule, config.slotMinutes).catch((err) => {
+      errores.push(`ocupación: ${err?.message || err}`);
+      return null;
+    }),
+    calcularOcupacionMes(calendar, anioSiguiente, mesSiguiente, config.schedule, config.slotMinutes).catch((err) => {
+      errores.push(`ocupación próximo mes: ${err?.message || err}`);
+      return null;
+    }),
+    calcularInasistenciaMensual(calendar).catch((err) => {
+      errores.push(`inasistencia: ${err?.message || err}`);
+      return [];
+    }),
+    calcularFinanzasPacientes(!!req.query.forzar).catch((err) => {
+      errores.push(`finanzas: ${err?.message || err}`);
+      return { ingresosDiarios: [], ticketPorMes: [], ticketPorAnio: [], fichasIdentidad: [], fichasFallidas: 0 };
+    }),
+  ]);
+
+  const pacientesTotales = await calcularPacientesTotales(calendar, finanzas.fichasIdentidad || []).catch((err) => {
+    errores.push(`pacientes totales: ${err?.message || err}`);
+    return { total: null, totalFichas: null, totalSoloTurno: null, fichas: [], soloTurno: [] };
+  });
+
+  res.status(200).json({
+    ...(errores.length ? { errores } : {}),
+    ocupacion: { actual: ocupacionActual, siguiente: ocupacionSiguiente },
+    inasistenciaMensual,
+    ingresosDiarios: finanzas.ingresosDiarios,
+    ticketPorMes: finanzas.ticketPorMes,
+    ticketPorAnio: finanzas.ticketPorAnio,
+    dolarError: finanzas.dolarError || null,
+    pacientesTotales,
+    fichasFallidas: finanzas.fichasFallidas,
   });
 }
 

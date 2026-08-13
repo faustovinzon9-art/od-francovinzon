@@ -27,6 +27,12 @@ import { avisarFallo } from '../../lib/alertas.js';
 // documentado en lib/googleCalendar.js y decisions.md.
 import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
+import { Readable } from 'node:stream';
+
+// drive.files.create espera un stream legible en media.body, no un Buffer crudo.
+function bufferToStream(buffer) {
+  return Readable.from(buffer);
+}
 
 // /admin (sección "Datos de pacientes", ver el pedido) reusa este mismo motor en vez
 // de reimplementar 950 líneas — ADMIN_KEY vale como alternativa a GESTION_KEY solo
@@ -60,6 +66,22 @@ export default async function handler(req, res) {
       return await healthcheck(req, res);
     }
 
+    // Fotos de pacientes (/mobilephotouploaderodfrancovinzon, ver el pedido) — SIN
+    // clave a propósito (decisión explícita del usuario): la única protección es que
+    // la URL de esa página no es adivinable. Se acota el daño igual: buscar-publico
+    // nunca devuelve más que nombre/apellido/dni (nada financiero ni de contacto), y
+    // fotos/foto-imagen solo sirven lo que ya se subió como foto de paciente — mismo
+    // nivel de exposición que decidió aceptar el usuario para esa página entera.
+    if (req.method === 'GET' && req.query.modo === 'buscar-publico') {
+      return await buscarPublico(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'fotos') {
+      return await listarFotos(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
+      return await servirFotoImagen(req, res);
+    }
+
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.query.modo === 'listar') return await listar(req, res);
@@ -68,7 +90,12 @@ export default async function handler(req, res) {
       if (req.query.modo === 'telefono-turnos') return await telefonoDesdeTurnos(req, res);
       if (req.query.modo === 'telefono') return await obtenerTelefonoFicha(req, res);
       if (req.query.modo === 'mapeos') return await obtenerMapeos(req, res);
+      if (req.query.modo === 'cumpleanos-hoy') return await cumpleanosHoy(req, res);
       return res.status(400).json({ error: 'modo inválido' });
+    }
+
+    if (req.method === 'POST' && req.body.accion === 'subir-foto') {
+      return await subirFoto(req, res);
     }
 
     if (req.method === 'POST') {
@@ -197,6 +224,28 @@ async function listar(req, res) {
     .sort((a, b) => `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es'));
 
   res.status(200).json(pacientes);
+}
+
+// Buscador SIN clave para /mobilephotouploaderodfrancovinzon (ver el pedido) — a
+// propósito devuelve mucho menos que `listar()`: nada de eso se expone salvo que
+// alguien busque activamente por nombre/DNI, y nunca hay más de 15 resultados.
+async function buscarPublico(req, res) {
+  const q = normalizarTexto((req.query.q || '').trim());
+  if (q.length < 2) return res.status(200).json([]);
+
+  const drive = getPacientesDriveClient();
+  const archivos = await listarArchivosPacientes(drive);
+
+  const resultados = archivos
+    .map((f) => {
+      const { nombre, apellido, dni } = parsearNombreArchivo(f.name);
+      return { id: f.id, nombre, apellido, dni };
+    })
+    .filter((p) => normalizarTexto(`${p.nombre} ${p.apellido}`).includes(q) || normalizarDni(p.dni).includes(q.replace(/\D/g, '')))
+    .sort((a, b) => `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es'))
+    .slice(0, 15);
+
+  res.status(200).json(resultados);
 }
 
 // Detección de duplicados por DNI (único criterio — ver decisions.md): recorre todas las
@@ -433,6 +482,61 @@ async function obtenerMapeos(req, res) {
   const mapeoId = await getOrCreateMapeoSheetId(sheets, drive);
   const mapeos = await leerMapeos(sheets, mapeoId);
   res.status(200).json(mapeos);
+}
+
+// ---------- Cumpleaños de hoy (/pacientes y /gestion, ver el pedido) ----------
+// Mismo patrón que calcularDeuda() en admin.js: recorrer TODAS las fichas es la
+// operación más lenta del panel, así que se lee solo C8 (fechaNacimiento, una celda
+// por ficha) en lotes de 25 en paralelo, y se cachea en memoria del proceso 10 minutos
+// (el cumpleaños de alguien no cambia en el medio de una sesión de trabajo).
+// fechaNacimiento se guarda como texto "D/M/AAAA" (ver pacientes/index.html,
+// fn-dia/fn-mes/fn-anio) — acá solo importan día y mes.
+let cacheCumple = null; // { valor, ts }
+const TTL_CUMPLE_MS = 600000;
+async function calcularCumpleanosHoy(forzar) {
+  if (!forzar && cacheCumple && Date.now() - cacheCumple.ts < TTL_CUMPLE_MS) return cacheCumple.valor;
+
+  const [, hoyMesStr, hoyDiaStr] = formatArgDay(new Date()).split('-');
+  const hoyMes = parseInt(hoyMesStr, 10);
+  const hoyDia = parseInt(hoyDiaStr, 10);
+
+  const resultado = [];
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }));
+          const fechaNac = String(data.values?.[0]?.[0] || '');
+          const [diaStr, mesStr] = fechaNac.split('/');
+          const dia = parseInt(diaStr, 10);
+          const mes = parseInt(mesStr, 10);
+          if (dia !== hoyDia || mes !== hoyMes) return null;
+          const { nombre, apellido, dni } = parsearNombreArchivo(f.name);
+          return { id: f.id, nombre, apellido, dni };
+        } catch (err) {
+          console.warn(`[pacientes.js] no se pudo leer fechaNacimiento de ${f.name}:`, err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => { if (r) resultado.push(r); });
+    }
+  } catch (err) {
+    console.warn('[pacientes.js] no se pudo calcular cumpleaños de hoy:', err?.message || err);
+  }
+
+  cacheCumple = { valor: resultado, ts: Date.now() };
+  return resultado;
+}
+
+async function cumpleanosHoy(req, res) {
+  const lista = await calcularCumpleanosHoy(!!req.query.forzar);
+  res.status(200).json(lista);
 }
 
 // "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
@@ -857,6 +961,103 @@ async function asegurarColumnaFormaPago(id) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [['Forma de pago']] },
   }));
+}
+
+// ---------- Fotos de pacientes (/mobilephotouploaderodfrancovinzon) ----------
+// Carpeta propia (no la del paciente — las fichas son un Sheet, no un lugar donde
+// meter binarios) con un archivo por foto: nombre "{pacienteId}__{timestamp}.jpg",
+// la descripción de la foto va en el campo `description` nativo de Drive (no hace
+// falta una hoja de metadata aparte). Se auto-crea la primera vez, mismo patrón que
+// getOrCreateBackupFolderId de acá abajo.
+const FOTOS_FOLDER_NAME = 'Fotos de pacientes (no tocar)';
+const FOTO_MAX_BYTES = 4 * 1024 * 1024; // margen bajo el límite real de Vercel (4.5MB), ver decisions.md
+
+async function getOrCreateFotosFolderId(drive) {
+  const { data } = await conReintentos(() => drive.files.list({
+    q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${FOTOS_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id)',
+  }));
+  if (data.files && data.files.length) return data.files[0].id;
+  const creada = await conReintentos(() => drive.files.create({
+    requestBody: { name: FOTOS_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', parents: [PACIENTES_FOLDER_ID] },
+    fields: 'id',
+  }));
+  return creada.data.id;
+}
+
+async function listarFotos(req, res) {
+  const pacienteId = req.query.id;
+  if (!pacienteId) return res.status(400).json({ error: 'Falta id.' });
+  try {
+    const drive = getPacientesDriveClient();
+    const folderId = await getOrCreateFotosFolderId(drive);
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${folderId}' in parents and name contains '${pacienteId}__' and trashed = false`,
+      fields: 'files(id, name, description, createdTime)',
+      orderBy: 'createdTime desc',
+    }));
+    const fotos = (data.files || [])
+      .filter((f) => f.name.startsWith(`${pacienteId}__`)) // "contains" de Drive es difuso, confirmar el prefijo exacto
+      .map((f) => ({ id: f.id, descripcion: f.description || '', fecha: f.createdTime }));
+    res.status(200).json(fotos);
+  } catch (err) {
+    console.error(err);
+    res.status(200).json([]); // nunca romper la vista de fotos por un error de Drive
+  }
+}
+
+async function servirFotoImagen(req, res) {
+  const fotoId = req.query.fotoId;
+  if (!fotoId) return res.status(400).send('Falta fotoId.');
+  try {
+    const drive = getPacientesDriveClient();
+    const { data } = await conReintentos(() => drive.files.get(
+      { fileId: fotoId, alt: 'media' },
+      { responseType: 'arraybuffer' }
+    ));
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.status(200).send(Buffer.from(data));
+  } catch (err) {
+    console.error(err);
+    res.status(404).send('No se pudo cargar la foto.');
+  }
+}
+
+// `fotoBase64` es un data URL completo ("data:image/jpeg;base64,...") armado del lado
+// del cliente después de comprimir la imagen en un <canvas> — nunca se sube el
+// archivo original de la cámara tal cual (varios MB, pasaría el límite de 4.5MB de
+// Vercel para el body de una función serverless, ver CLAUDE.md/decisions.md).
+async function subirFoto(req, res) {
+  const { pacienteId, fotoBase64, descripcion } = req.body;
+  if (!pacienteId || !fotoBase64) {
+    return res.status(400).json({ success: false, message: 'Faltan datos.' });
+  }
+  try {
+    const base64Data = String(fotoBase64).replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    if (buffer.length > FOTO_MAX_BYTES) {
+      return res.status(200).json({ success: false, message: 'La foto es demasiado pesada. Probá de nuevo (se comprime sola, puede ser un problema puntual).' });
+    }
+
+    const drive = getPacientesDriveClient();
+    const folderId = await getOrCreateFotosFolderId(drive);
+    const nombre = `${pacienteId}__${Date.now()}.jpg`;
+    const creada = await conReintentos(() => drive.files.create({
+      requestBody: {
+        name: nombre,
+        parents: [folderId],
+        description: (descripcion || '').slice(0, 500),
+      },
+      media: { mimeType: 'image/jpeg', body: bufferToStream(buffer) },
+      fields: 'id',
+    }));
+    res.status(200).json({ success: true, id: creada.data.id });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'subir-foto', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo subir la foto. Probá de nuevo.' });
+  }
 }
 
 // ---------- Backup de emergencia (Sheets caído) ----------

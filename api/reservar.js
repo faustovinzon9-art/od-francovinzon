@@ -2,7 +2,7 @@ import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
   toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
   extraerTelefono, extraerMotivo, extraerEsNuevoPaciente, extraerConfirmado, escribirConfirmado,
-  extraerCodigoCorto, asegurarCodigoCorto,
+  extraerCodigoCorto, asegurarCodigoCorto, extraerDni, extraerEmail,
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
 import { conReintentos } from '../lib/retry.js';
@@ -39,13 +39,14 @@ export default async function handler(req, res) {
   if (accion === 'mover') return moverPropio(req, res);
   if (accion === 'obtener') return obtenerPropio(req, res);
   if (accion === 'confirmar') return confirmarPropio(req, res);
+  if (accion === 'buscar-email') return buscarEmailGuardado(req, res);
 
   try {
-    const { date, time, nombre, apellido, telefono, dni, motivo, esNuevo } = req.body;
+    const { date, time, nombre, apellido, telefono, dni, email, motivo, esNuevo } = req.body;
     const calendar = getCalendarClient();
     const { slotMinutes } = await obtenerHorariosConfig();
     // Misma lógica que usa el chatbot para la reserva conversacional — ver lib/googleCalendar.js.
-    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, motivo, esNuevo, slotMinutes });
+    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, email, motivo, esNuevo, slotMinutes });
     if (resultado.success) {
       await logActividad({ tipo: 'turno_creado', detalle: `${nombre} ${apellido} — ${date} ${time}`, actor: 'paciente (/turnos)' });
     }
@@ -55,6 +56,44 @@ export default async function handler(req, res) {
     await avisarFallo({ endpoint: 'api/reservar.js', detalle: 'crear turno', error: err });
     res.status(500).json({ success: false, message: 'Hubo un error al confirmar el turno. Probá de nuevo.' });
   }
+}
+
+// Email condicional (ver el pedido): si ya hay un email guardado de un turno
+// anterior con el mismo DNI+teléfono, /turnos no vuelve a pedirlo. Búsqueda por
+// texto (`q`) del DNI en los dos calendarios, sin límite de fecha (mismo criterio
+// que resolverCodigoCorto), confirmando DNI Y teléfono exactos antes de devolver
+// nada — `q` es difusa, podría traer falsos positivos.
+async function buscarEmailGuardado(req, res) {
+  try {
+    const { dni, telefono } = req.body;
+    const dniNorm = String(dni || '').replace(/\D/g, '');
+    if (!dniNorm || !telefono) return res.status(200).json({ email: null });
+
+    const calendar = getCalendarClient();
+    const [principal, sobreturnos] = await Promise.all([
+      conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, q: dniNorm, maxResults: 50, singleEvents: true })),
+      conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, q: dniNorm, maxResults: 50, singleEvents: true })),
+    ]);
+    const candidatos = [...(principal.data.items || []), ...(sobreturnos.data.items || [])];
+
+    for (const ev of candidatos) {
+      const desc = ev.description || '';
+      if (extraerDni(desc).replace(/\D/g, '') !== dniNorm) continue;
+      if (extraerTelefono(desc) !== telefono && normalizarComparacionTelefono(extraerTelefono(desc)) !== normalizarComparacionTelefono(telefono)) continue;
+      const email = extraerEmail(desc);
+      if (email) return res.status(200).json({ email });
+    }
+    res.status(200).json({ email: null });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ email: null }); // nunca bloquear el formulario de /turnos por esto
+  }
+}
+
+// Últimos 10 dígitos, para que un teléfono guardado con o sin código de país siga
+// matcheando (mismo criterio que normalizarTelefonoMapeo en lib/pacientesSheet.js).
+function normalizarComparacionTelefono(tel) {
+  return (tel || '').replace(/\D/g, '').slice(-10);
 }
 
 // Punto de entrada del QR del ticket térmico (ver gestion/index.html): dado un

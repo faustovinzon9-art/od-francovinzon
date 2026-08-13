@@ -187,6 +187,52 @@
           <h2>Top deudores por antigüedad de la deuda</h2>
           <div class="table-wrap"><table id="dash-deudores-antiguedad"><thead><tr><th>Paciente</th><th>Días sin pago</th></tr></thead><tbody></tbody></table></div>
         </div>
+
+        <div class="card">
+          <h2>Métricas avanzadas</h2>
+          <p class="hint">Ocupación, inasistencia, ingresos, pacientes totales y ticket promedio — cálculo más pesado (recorre todas las fichas y el histórico del dólar blue), carga aparte del resto. <button class="btn btn-outline" id="dash2-refrescar" style="padding:5px 12px;font-size:11.5px;">Actualizar</button></p>
+          <div class="msg" id="dash2-msg"></div>
+        </div>
+
+        <div class="card">
+          <h2>Ocupación mensual</h2>
+          <div class="stat-grid" id="dash-ocupacion"></div>
+        </div>
+
+        <div class="card">
+          <h2>% de inasistencia por mes</h2>
+          <p class="hint">Turnos pasados sin confirmar, desde el 13/8/2026 en adelante.</p>
+          <div class="bars" id="dash-inasistencia-bars"></div>
+        </div>
+
+        <div class="card">
+          <h2>Ingresos</h2>
+          <div class="stat-grid" id="dash-ingresos-stats"></div>
+          <h3 style="font-size:14px;margin-bottom:6px;">Ingresos por día — mes actual</h3>
+          <div class="bars" id="dash-ingresos-bars"></div>
+          <h3 style="font-size:14px;margin:16px 0 6px;">Por mes (últimos 12)</h3>
+          <div class="table-wrap"><table id="dash-ingresos-mensual"><thead><tr><th>Mes</th><th>Ingresos</th></tr></thead><tbody></tbody></table></div>
+          <h3 style="font-size:14px;margin:16px 0 6px;">Por año</h3>
+          <div class="table-wrap"><table id="dash-ingresos-anual"><thead><tr><th>Año</th><th>Ingresos</th></tr></thead><tbody></tbody></table></div>
+        </div>
+
+        <div class="card">
+          <h2>Ticket promedio</h2>
+          <p class="hint">Cada pago convertido a USD con la cotización blue real del día que se cobró (ArgentinaDatos).</p>
+          <h3 style="font-size:14px;margin-bottom:6px;">Por mes (últimos 12)</h3>
+          <div class="table-wrap"><table id="dash-ticket-mensual"><thead><tr><th>Mes</th><th>Cant. pagos</th><th>Promedio $</th><th>Promedio USD</th></tr></thead><tbody></tbody></table></div>
+          <h3 style="font-size:14px;margin:16px 0 6px;">Por año</h3>
+          <div class="table-wrap"><table id="dash-ticket-anual"><thead><tr><th>Año</th><th>Cant. pagos</th><th>Promedio $</th><th>Promedio USD</th></tr></thead><tbody></tbody></table></div>
+        </div>
+
+        <div class="card">
+          <h2>Pacientes totales</h2>
+          <div class="stat-grid" id="dash-pacientes-stats"></div>
+          <button class="btn btn-outline" id="dash-pacientes-toggle" style="margin-top:4px;">Ver listado completo</button>
+          <div class="table-wrap hidden" id="dash-pacientes-wrap" style="margin-top:12px;">
+            <table id="dash-pacientes-tabla"><thead><tr><th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Origen</th><th></th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
       </div>
 
       <!-- ---------- Horarios y agenda ---------- -->
@@ -453,7 +499,8 @@
     if (SECCIONES_CARGADAS.has(sec)) return;
     SECCIONES_CARGADAS.add(sec);
     const loaders = {
-      dashboard: cargarDashboard, horarios: cargarHorarios, textos: cargarTextos,
+      dashboard: () => { cargarDashboard(); cargarDashboardAvanzado(); },
+      horarios: cargarHorarios, textos: cargarTextos,
       listas: cargarListas, radios: cargarRadios, pacientes: () => {},
       accesos: () => {}, actividad: cargarActividad, monitoreo: cargarMonitoreo,
     };
@@ -525,6 +572,140 @@
     }
   }
   document.getElementById('dash-refrescar').addEventListener('click', () => cargarDashboard(true));
+
+  // ---------- Dashboard: métricas avanzadas (ocupación, inasistencia, ingresos, pacientes, ticket) ----------
+  const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fmtMesCorto(mesKey) {
+    // "2026-08" -> "ago 2026"
+    const [a, m] = mesKey.split('-');
+    return `${MESES_CORTOS[Number(m) - 1]} ${a}`;
+  }
+  function fmtArs(n) {
+    return `$${Math.round(n).toLocaleString('es-AR')}`;
+  }
+  function fmtUsd(n) {
+    return n == null ? 'N/D' : `US$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  let pacientesTotalesCache = null;
+  async function cargarDashboardAvanzado(forzar) {
+    document.getElementById('dash-ocupacion').innerHTML = '<p class="hint">Cargando…</p>';
+    document.getElementById('dash-inasistencia-bars').innerHTML = '';
+    document.getElementById('dash-ingresos-stats').innerHTML = '<p class="hint">Cargando…</p>';
+    document.getElementById('dash-ingresos-bars').innerHTML = '';
+    document.getElementById('dash-pacientes-stats').innerHTML = '<p class="hint">Cargando…</p>';
+    setMsg('dash2-msg', '', '');
+    try {
+      const m = await apiGet('metricas-avanzadas', forzar ? { forzar: 1 } : {});
+
+      // (a) Ocupación
+      const nombreMes = (o) => o ? new Date(o.anio, o.mes - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : '';
+      document.getElementById('dash-ocupacion').innerHTML = [m.ocupacion.actual, m.ocupacion.siguiente].map((o) => o ? `
+        <div class="stat-tile">
+          <div class="num">${o.porcentaje == null ? 'N/D' : `${o.porcentaje}%`}</div>
+          <div class="label">${nombreMes(o)} — ${o.turnosReservados} turno${o.turnosReservados === 1 ? '' : 's'} de ${o.capacidad} lugares${o.sobreturnosReservados ? ` (+${o.sobreturnosReservados} sobreturno${o.sobreturnosReservados === 1 ? '' : 's'})` : ''}</div>
+        </div>` : '<div class="stat-tile"><div class="num">N/D</div><div class="label">No se pudo calcular</div></div>'
+      ).join('');
+
+      // (b) Inasistencia mensual (evolución, con tooltip al pasar el mouse)
+      const inas = m.inasistenciaMensual || [];
+      const maxInas = Math.max(1, ...inas.map((d) => d.porcentaje));
+      document.getElementById('dash-inasistencia-bars').innerHTML = inas.map((d) =>
+        `<div class="bar" style="height:${Math.max(2, Math.round((d.porcentaje / maxInas) * 116))}px" data-tooltip="${d.porcentaje}% sin confirmar (${d.inasistencias} de ${d.total}) — ${fmtMesCorto(d.mes)}"></div>`
+      ).join('') || '<p class="hint">Sin turnos pasados en el período.</p>';
+
+      // (c) Ingresos: stats (mes actual / año actual) + serie diaria del mes actual + tablas mensual/anual
+      const hoy = new Date();
+      const mesActualKey = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+      const anioActualKey = String(hoy.getFullYear());
+      const ingresos = m.ingresosDiarios || [];
+      const ingresosMesActual = ingresos.filter((d) => d.fecha.startsWith(mesActualKey));
+      const totalMesActual = ingresosMesActual.reduce((acc, d) => acc + d.monto, 0);
+      const totalAnioActual = ingresos.filter((d) => d.fecha.startsWith(anioActualKey)).reduce((acc, d) => acc + d.monto, 0);
+      document.getElementById('dash-ingresos-stats').innerHTML = [
+        ['Ingresos este mes', fmtArs(totalMesActual)],
+        ['Ingresos este año', fmtArs(totalAnioActual)],
+      ].map(([label, num]) => `<div class="stat-tile"><div class="num">${num}</div><div class="label">${label}</div></div>`).join('');
+
+      const maxIngreso = Math.max(1, ...ingresosMesActual.map((d) => d.monto));
+      document.getElementById('dash-ingresos-bars').innerHTML = ingresosMesActual.map((d) =>
+        `<div class="bar" style="height:${Math.max(2, Math.round((d.monto / maxIngreso) * 116))}px" data-tooltip="${fmtArs(d.monto)} — ${new Date(`${d.fecha}T00:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}"></div>`
+      ).join('') || '<p class="hint">Sin ingresos cargados este mes.</p>';
+
+      const porMesIngresos = {};
+      ingresos.forEach((d) => { const k = d.fecha.slice(0, 7); porMesIngresos[k] = (porMesIngresos[k] || 0) + d.monto; });
+      const ultimos12Meses = Object.entries(porMesIngresos).sort(([a], [b]) => b.localeCompare(a)).slice(0, 12);
+      document.querySelector('#dash-ingresos-mensual tbody').innerHTML = ultimos12Meses.map(([mes, monto]) =>
+        `<tr><td>${fmtMesCorto(mes)}</td><td>${fmtArs(monto)}</td></tr>`
+      ).join('') || '<tr><td colspan="2">Sin datos.</td></tr>';
+
+      const porAnioIngresos = {};
+      ingresos.forEach((d) => { const k = d.fecha.slice(0, 4); porAnioIngresos[k] = (porAnioIngresos[k] || 0) + d.monto; });
+      document.querySelector('#dash-ingresos-anual tbody').innerHTML = Object.entries(porAnioIngresos).sort(([a], [b]) => b.localeCompare(a)).map(([anio, monto]) =>
+        `<tr><td>${anio}</td><td>${fmtArs(monto)}</td></tr>`
+      ).join('') || '<tr><td colspan="2">Sin datos.</td></tr>';
+
+      // (e) Ticket promedio
+      document.querySelector('#dash-ticket-mensual tbody').innerHTML = (m.ticketPorMes || []).slice(-12).reverse().map((t) =>
+        `<tr><td>${fmtMesCorto(t.mes)}</td><td>${t.cantidad}</td><td>${fmtArs(t.promedioArs)}</td><td>${fmtUsd(t.promedioUsd)}</td></tr>`
+      ).join('') || '<tr><td colspan="4">Sin pagos registrados.</td></tr>';
+      document.querySelector('#dash-ticket-anual tbody').innerHTML = (m.ticketPorAnio || []).slice().reverse().map((t) =>
+        `<tr><td>${t.anio}</td><td>${t.cantidad}</td><td>${fmtArs(t.promedioArs)}</td><td>${fmtUsd(t.promedioUsd)}</td></tr>`
+      ).join('') || '<tr><td colspan="4">Sin pagos registrados.</td></tr>';
+
+      // (d) Pacientes totales
+      pacientesTotalesCache = m.pacientesTotales;
+      const pt = m.pacientesTotales || {};
+      document.getElementById('dash-pacientes-stats').innerHTML = [
+        ['Pacientes totales', pt.total ?? 'N/D'],
+        ['Con ficha', pt.totalFichas ?? 'N/D'],
+        ['Solo turnos (sin ficha)', pt.totalSoloTurno ?? 'N/D'],
+      ].map(([label, num]) => `<div class="stat-tile"><div class="num">${num}</div><div class="label">${label}</div></div>`).join('');
+      renderPacientesTotalesTabla();
+
+      const mensajes = [];
+      if (m.errores?.length) mensajes.push(...m.errores);
+      if (m.dolarError) mensajes.push(`dólar blue (ticket USD): ${m.dolarError}`);
+      if (m.fichasFallidas) mensajes.push(`${m.fichasFallidas} ficha(s) no se pudieron leer para este cálculo.`);
+      setMsg('dash2-msg', mensajes.join(' · '), mensajes.length ? 'error' : '');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('dash2-msg', 'No se pudieron cargar las métricas avanzadas.', 'error');
+    }
+  }
+  document.getElementById('dash2-refrescar').addEventListener('click', () => cargarDashboardAvanzado(true));
+
+  // El listado completo arranca oculto (puede ser largo) — se pinta ya cargado desde
+  // pacientesTotalesCache, sin volver a pedir nada al servidor.
+  function renderPacientesTotalesTabla() {
+    const pt = pacientesTotalesCache;
+    const tbody = document.querySelector('#dash-pacientes-tabla tbody');
+    if (!pt) { tbody.innerHTML = ''; return; }
+    const filasFicha = (pt.fichas || []).map((f) => `
+      <tr>
+        <td>${escapeHtmlAdmin(`${f.nombre || ''} ${f.apellido || ''}`.trim())}</td>
+        <td>${escapeHtmlAdmin(f.dni || '')}</td>
+        <td>${escapeHtmlAdmin(f.telefono || '')}</td>
+        <td>Con ficha</td>
+        <td><a href="/pacientes?id=${encodeURIComponent(f.id)}" target="_blank" rel="noopener">Abrir ficha</a></td>
+      </tr>`).join('');
+    const filasSoloTurno = (pt.soloTurno || []).map((p) => `
+      <tr>
+        <td>${escapeHtmlAdmin(p.nombre || '')}</td>
+        <td>${escapeHtmlAdmin(p.dni || '')}</td>
+        <td>${escapeHtmlAdmin(p.telefono || '')}</td>
+        <td>Solo turnos</td>
+        <td></td>
+      </tr>`).join('');
+    tbody.innerHTML = filasFicha + filasSoloTurno || '<tr><td colspan="5">Sin datos.</td></tr>';
+  }
+  function escapeHtmlAdmin(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+  document.getElementById('dash-pacientes-toggle').addEventListener('click', () => {
+    document.getElementById('dash-pacientes-wrap').classList.toggle('hidden');
+  });
 
   // ---------- Horarios y agenda ----------
   const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];

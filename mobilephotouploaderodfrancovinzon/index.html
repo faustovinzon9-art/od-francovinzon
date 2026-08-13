@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fotos de pacientes | Franco Vinzón Odontólogo</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../assets/isologo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1E3A5F; --gold: #D4A24C; --cream: #FAF9F6; --line: #E9E4D8;
+    --white: #FFFFFF; --text: #2A2A2A; --muted: #8A8578; --bad: #C1443A; --ok: #4F9A3C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
+  .hidden { display: none !important; }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea { font-family: inherit; font-size: 16px; }
+
+  #app { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
+  .brand { text-align: center; margin-bottom: 18px; }
+  .brand img { width: 220px; max-width: 70vw; height: auto; }
+  .brand h1 { font-size: 18px; margin-top: 8px; }
+
+  .card { background: var(--white); border-radius: 16px; padding: 18px; box-shadow: 0 1px 8px rgba(30,58,95,.06); margin-bottom: 16px; }
+  .search-box { display: flex; gap: 8px; margin-bottom: 4px; }
+  .search-box input { flex: 1; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--cream); }
+  .search-box input:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .resultado-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  .resultado-row:last-child { border-bottom: none; }
+  .resultado-row .nombre { font-weight: 600; }
+  .resultado-row .dni { color: var(--muted); font-size: 12px; }
+  .resultado-row button { background: var(--navy); color: var(--white); border: none; padding: 7px 14px; border-radius: 100px; font-size: 12.5px; font-weight: 600; }
+
+  .paciente-actual { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .paciente-actual .nombre { font-size: 17px; font-weight: 700; color: var(--navy); }
+  .btn-cambiar { background: none; border: none; color: var(--muted); font-size: 12.5px; text-decoration: underline; }
+
+  .foto-input-label {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    border: 2px dashed var(--line); border-radius: 14px; padding: 28px 16px; text-align: center; color: var(--muted);
+  }
+  .foto-input-label span.icon { font-size: 32px; }
+  .foto-input-label input { display: none; }
+  .preview-wrap { text-align: center; margin-bottom: 12px; }
+  .preview-wrap img { max-width: 100%; max-height: 280px; border-radius: 12px; }
+  .field { margin-top: 12px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .field textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--cream); min-height: 60px; resize: vertical; }
+  .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
+  .btn-subir { width: 100%; margin-top: 14px; background: var(--gold); color: var(--white); border: none; padding: 13px; border-radius: 12px; font-weight: 700; font-size: 15px; }
+  .btn-subir:disabled { opacity: .55; }
+  .msg { font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+  .msg.error { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+
+  .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .foto-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+  .foto-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .foto-item .fecha { font-size: 10.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="brand">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
+    <h1>Fotos de pacientes</h1>
+  </div>
+
+  <div class="card" id="card-buscar">
+    <div class="search-box"><input type="text" id="buscar-input" placeholder="Buscar paciente por nombre o DNI..." autocomplete="off"></div>
+    <div class="hint">Escribí al menos 2 caracteres.</div>
+    <div id="resultados"></div>
+  </div>
+
+  <div class="card hidden" id="card-paciente">
+    <div class="paciente-actual">
+      <div class="nombre" id="paciente-nombre"></div>
+      <button class="btn-cambiar" id="btn-cambiar-paciente">Cambiar paciente</button>
+    </div>
+
+    <div id="preview-wrap" class="preview-wrap hidden"><img id="preview-img" alt=""></div>
+    <label class="foto-input-label" id="foto-input-label">
+      <span class="icon">📷</span>
+      <span>Sacar o subir una foto</span>
+      <input type="file" accept="image/*" capture="environment" id="foto-input">
+    </label>
+
+    <div class="field">
+      <label>Descripción</label>
+      <textarea id="foto-descripcion" placeholder="Ej: Radiografía panorámica, control de ortodoncia..."></textarea>
+    </div>
+    <button class="btn-subir" id="btn-subir" disabled>Subir foto</button>
+    <div class="msg" id="upload-msg"></div>
+
+    <h2 style="font-size:15px; margin-top:24px; margin-bottom:12px;">Fotos ya subidas</h2>
+    <div class="fotos-grid" id="fotos-grid"></div>
+    <div class="hint hidden" id="fotos-vacio">Todavía no hay fotos de este paciente.</div>
+  </div>
+</div>
+
+<script>
+  const cardBuscar = document.getElementById('card-buscar');
+  const cardPaciente = document.getElementById('card-paciente');
+  const buscarInput = document.getElementById('buscar-input');
+  const resultadosEl = document.getElementById('resultados');
+  const pacienteNombreEl = document.getElementById('paciente-nombre');
+  const fotoInput = document.getElementById('foto-input');
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg = document.getElementById('preview-img');
+  const fotoDescripcion = document.getElementById('foto-descripcion');
+  const btnSubir = document.getElementById('btn-subir');
+  const uploadMsg = document.getElementById('upload-msg');
+  const fotosGrid = document.getElementById('fotos-grid');
+  const fotosVacio = document.getElementById('fotos-vacio');
+
+  let pacienteActual = null;
+  let fotoComprimidaBase64 = null;
+
+  function setMsg(texto, tipo) {
+    uploadMsg.textContent = texto;
+    uploadMsg.className = `msg ${tipo || ''}`;
+  }
+
+  // ---------- Buscar paciente ----------
+  let buscarTimer = null;
+  buscarInput.addEventListener('input', () => {
+    clearTimeout(buscarTimer);
+    const q = buscarInput.value.trim();
+    if (q.length < 2) { resultadosEl.innerHTML = ''; return; }
+    buscarTimer = setTimeout(() => buscarPacientes(q), 300);
+  });
+
+  async function buscarPacientes(q) {
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=buscar-publico&q=${encodeURIComponent(q)}`);
+      const resultados = await r.json();
+      resultadosEl.innerHTML = resultados.map((p) => `
+        <div class="resultado-row">
+          <div><div class="nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</div><div class="dni">DNI ${escapeHtml(p.dni || '—')}</div></div>
+          <button type="button" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}">Elegir</button>
+        </div>
+      `).join('') || '<p class="hint">Sin resultados.</p>';
+      resultadosEl.querySelectorAll('button[data-id]').forEach((btn) => {
+        btn.addEventListener('click', () => elegirPaciente(btn.dataset.id, btn.dataset.nombre));
+      });
+    } catch {
+      resultadosEl.innerHTML = '<p class="hint">No se pudo buscar. Revisá tu conexión.</p>';
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function elegirPaciente(id, nombre) {
+    pacienteActual = { id, nombre };
+    pacienteNombreEl.textContent = nombre;
+    cardBuscar.classList.add('hidden');
+    cardPaciente.classList.remove('hidden');
+    resetFormFoto();
+    cargarFotos();
+  }
+  document.getElementById('btn-cambiar-paciente').addEventListener('click', () => {
+    pacienteActual = null;
+    cardPaciente.classList.add('hidden');
+    cardBuscar.classList.remove('hidden');
+    buscarInput.value = '';
+    resultadosEl.innerHTML = '';
+    buscarInput.focus();
+  });
+
+  // ---------- Comprimir y previsualizar foto ----------
+  // Nunca se sube el archivo original de la cámara (varios MB) — se redibuja en un
+  // canvas más chico y se re-codifica JPEG calidad .75, bien por debajo del límite
+  // de 4.5MB del body de una función serverless de Vercel (ver decisions.md).
+  const LADO_MAX = 1600;
+  fotoInput.addEventListener('change', () => {
+    const file = fotoInput.files[0];
+    if (!file) return;
+    setMsg('', '');
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > LADO_MAX || height > LADO_MAX) {
+        const escala = LADO_MAX / Math.max(width, height);
+        width = Math.round(width * escala);
+        height = Math.round(height * escala);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      fotoComprimidaBase64 = canvas.toDataURL('image/jpeg', 0.75);
+      previewImg.src = fotoComprimidaBase64;
+      previewWrap.classList.remove('hidden');
+      btnSubir.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function resetFormFoto() {
+    fotoInput.value = '';
+    fotoComprimidaBase64 = null;
+    fotoDescripcion.value = '';
+    previewWrap.classList.add('hidden');
+    btnSubir.disabled = true;
+    setMsg('', '');
+  }
+
+  btnSubir.addEventListener('click', async () => {
+    if (!pacienteActual || !fotoComprimidaBase64) return;
+    btnSubir.disabled = true;
+    btnSubir.textContent = 'Subiendo...';
+    setMsg('', '');
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'subir-foto',
+          pacienteId: pacienteActual.id,
+          fotoBase64: fotoComprimidaBase64,
+          descripcion: fotoDescripcion.value.trim(),
+        }),
+      });
+      const res = await r.json();
+      if (res.success) {
+        setMsg('✅ Foto subida.', 'ok');
+        resetFormFoto();
+        cargarFotos();
+      } else {
+        setMsg(res.message || 'No se pudo subir la foto.', 'error');
+        btnSubir.disabled = false;
+      }
+    } catch {
+      setMsg('No se pudo subir la foto. Revisá tu conexión.', 'error');
+      btnSubir.disabled = false;
+    } finally {
+      btnSubir.textContent = 'Subir foto';
+    }
+  });
+
+  // ---------- Fotos ya subidas ----------
+  async function cargarFotos() {
+    if (!pacienteActual) return;
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=fotos&id=${pacienteActual.id}`);
+      const fotos = await r.json();
+      fotosVacio.classList.toggle('hidden', fotos.length > 0);
+      fotosGrid.innerHTML = fotos.map((f) => `
+        <div class="foto-item">
+          <img src="/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}" alt="" loading="lazy">
+          ${f.descripcion ? `<div class="desc">${escapeHtml(f.descripcion)}</div>` : ''}
+          <div class="fecha">${new Date(f.fecha).toLocaleDateString('es-AR')}</div>
+        </div>
+      `).join('');
+    } catch {
+      // sin conexión: se queda con lo que ya había, no rompe la pantalla
+    }
+  }
+</script>
+</body>
+</html>
