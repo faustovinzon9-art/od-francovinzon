@@ -1484,7 +1484,10 @@
   const movFormaPago = document.getElementById('mov-forma-pago');
   const movMsg = document.getElementById('mov-msg');
   const movTipoHint = document.getElementById('mov-tipo-hint');
-  [movTratamiento, movFormaPago].forEach(conectarMayusculas);
+  // "Tratamiento" de movimientos pasa a Title Case (como los campos de ficha, ver
+  // decisions.md) a pedido explícito — 2026-08-13, solo se guardaba en mayúscula
+  // completa antes. "Forma de pago" sigue en mayúscula, no se pidió cambiarla.
+  [movFormaPago].forEach(conectarMayusculas);
   let cargaHistorica = false;
 
   function tipoInferido() {

@@ -352,8 +352,13 @@ async function intentarRedeploy(token, projectId) {
 // ---------- 7. Registro de actividad ----------
 
 async function getActividad(req, res) {
-  const eventos = await leerActividadReciente(200);
-  res.status(200).json({ eventos });
+  try {
+    const eventos = await leerActividadReciente(200);
+    res.status(200).json({ eventos });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ eventos: [], error: err?.message || String(err) });
+  }
 }
 
 // ---------- 8. Monitoreo técnico ----------
@@ -384,7 +389,12 @@ async function getMonitoreo(req, res) {
   }
 
   resultados.resendConfigurado = !!process.env.RESEND_API_KEY;
-  resultados.alertasRecientes = await leerAlertasRecientes(15);
+  try {
+    resultados.alertasRecientes = await leerAlertasRecientes(15);
+  } catch (err) {
+    resultados.alertasRecientes = [];
+    resultados.alertasError = err?.message || String(err);
+  }
   resultados.ok = resultados.calendar === 'ok' && resultados.pacientes === 'ok';
 
   res.status(200).json(resultados);
