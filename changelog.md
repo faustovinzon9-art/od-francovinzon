@@ -2,6 +2,15 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-13 (undécima vuelta) — Legibilidad y match de paciente en /pacientes: nombres completos, letra más grande, Sí/No permanente
+
+Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `fix/pacientes-legibilidad-match`, probada offline y mergeada directo).
+
+- "Pacientes de hoy" y "¿Es este paciente?" pasaron de chips angostos a filas de ancho completo: nombre del paciente y título del turno enteros, sin truncar, con letra más grande (17px nombre, 13.5px hora/turno).
+- Botón único ambiguo reemplazado por "Sí"/"No": "Sí" vincula teléfono↔ficha (por DNI) de forma permanente y sube el turno a "Pacientes de hoy" sin abrir la ficha; "No" descarta el turno de ambas listas de forma permanente para ese teléfono, sin tocar la ficha. Se guarda en una hoja nueva y propia (`Mapeo teléfono-ficha (no tocar)`, se crea sola la primera vez que hace falta).
+- Corrección automática y bidireccional del nombre al confirmar un match: el más completo (por cantidad de palabras, luego longitud) corrige al menos completo tanto en la ficha como en el turno de Calendar, y se vuelve a aplicar solo (re-confirmación silenciosa) en cada turno siguiente de la misma persona.
+- Probado: lógica de completitud de nombre y armado de mapeos con un test aislado (5/5 casos correctos); layout nuevo confirmado con capturas reales en desktop y mobile. Sin credenciales de Google en este entorno, no se pudo probar el flujo Sí/No contra un turno real — queda pendiente una prueba manual con un turno de prueba.
+
 ## 2026-08-13 (décima vuelta) — Fichas (Title Case, tamaños), encabezado de /turnos, subtítulo de compartir, botón Confirmar solo cerca de la fecha
 
 Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `feature/fichas-turnos-mejoras`, probada offline y mergeada directo).
