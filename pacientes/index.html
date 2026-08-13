@@ -73,7 +73,10 @@
     .ficha-columns { display: grid; grid-template-columns: 296px 1fr; gap: 20px; align-items: start; }
   }
 
-  .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .search-row {
+    display: flex; gap: 8px; margin-bottom: 16px;
+    position: sticky; top: 0; z-index: 20; background: var(--cream); padding: 10px 0;
+  }
   .search-box { flex: 1; background: var(--white); border-radius: 14px; padding: 4px 4px 4px 14px; display: flex; align-items: center; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .search-box input { flex: 1; border: none; background: transparent; padding: 10px 6px; }
   .search-box input:focus { outline: none; }
@@ -94,7 +97,12 @@
   .field { flex: 1; min-width: 140px; margin-bottom: 12px; }
   .field.full { flex-basis: 100%; }
   .field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: .3px; }
-  .field input, .field textarea { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
+  .field input, .field textarea, .field select { width: 100%; padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--cream); }
+  .fecha-nac-row { display: flex; gap: 6px; }
+  .fecha-nac-row input, .fecha-nac-row select { width: 0; padding-left: 8px; padding-right: 4px; }
+  .fecha-nac-row input#fn-dia { flex: 0.8; }
+  .fecha-nac-row select { flex: 1.7; }
+  .fecha-nac-row input#fn-anio { flex: 1.3; }
   .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
   .field textarea { resize: vertical; min-height: 60px; }
   .panel-actions { display: flex; gap: 8px; margin-top: 4px; }
@@ -420,7 +428,20 @@
       </div>
       <div class="field-row">
         <div class="field"><label>DNI</label><input type="text" data-campo="dni"></div>
-        <div class="field"><label>Fecha de nacimiento</label><input type="text" data-campo="fechaNacimiento" placeholder="dd/mm/aaaa"></div>
+        <div class="field">
+          <label>Fecha de nacimiento</label>
+          <div class="fecha-nac-row">
+            <input type="number" id="fn-dia" min="1" max="31" placeholder="Día">
+            <select id="fn-mes">
+              <option value="">Mes</option>
+              <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+              <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+              <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+              <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+            </select>
+            <input type="number" id="fn-anio" min="1900" max="2100" placeholder="Año">
+          </div>
+        </div>
       </div>
       <div class="field-row">
         <div class="field full"><label>Domicilio</label><input type="text" data-campo="domicilio"></div>
@@ -1295,6 +1316,12 @@
       if (input === campoConFoco) return; // no pisar lo que se está escribiendo ahora mismo
       input.value = c[input.dataset.campo] || '';
     });
+    if (document.activeElement !== fnDia && document.activeElement !== fnMes && document.activeElement !== fnAnio) {
+      const [d, m, a] = (c.fechaNacimiento || '').split('/');
+      fnDia.value = d || '';
+      fnMes.value = m || '';
+      fnAnio.value = a || '';
+    }
 
     const fin = fichaActual.financiero;
     document.getElementById('fin-total').textContent = fin.total;
@@ -1383,6 +1410,43 @@
       setTimeout(() => { if (autosaveStatus.textContent !== 'Guardando…') autosaveStatus.textContent = ''; }, 3000);
     });
   });
+
+  // ---------- Fecha de nacimiento (Día/Mes/Año separados, se combinan a DD/MM/AAAA) ----------
+  const fnDia = document.getElementById('fn-dia');
+  const fnMes = document.getElementById('fn-mes');
+  const fnAnio = document.getElementById('fn-anio');
+  async function guardarFechaNacValor(valor) {
+    if (!fichaActual || fichaActual.campos.fechaNacimiento === valor) return;
+    fichaActual.campos.fechaNacimiento = valor;
+    autosaveStatus.textContent = 'Guardando…';
+    autosaveStatus.className = 'autosave-status saving';
+    try {
+      const r = await apiPost({ accion: 'actualizar-campo', id: fichaActual.id, campo: 'fechaNacimiento', valor });
+      if (!r.success) throw new Error();
+      autosaveStatus.textContent = r.pendiente ? 'Guardado (pendiente de sincronizar)' : 'Guardado';
+      autosaveStatus.className = 'autosave-status ' + (r.pendiente ? 'saving' : 'ok');
+    } catch (e) {
+      autosaveStatus.textContent = 'Error al guardar';
+      autosaveStatus.className = 'autosave-status error';
+    }
+    setTimeout(() => { if (autosaveStatus.textContent !== 'Guardando…') autosaveStatus.textContent = ''; }, 3000);
+  }
+  function guardarFechaNacimiento() {
+    const dia = fnDia.value.trim();
+    const mes = fnMes.value;
+    const anio = fnAnio.value.trim();
+    if (!dia && !mes && !anio) { guardarFechaNacValor(''); return; }
+    if (!dia || !mes || !anio) return; // todavía incompleta, esperar a que se carguen los 3
+    const diaNum = Number(dia);
+    if (!(diaNum >= 1 && diaNum <= 31)) {
+      autosaveStatus.textContent = 'Día inválido';
+      autosaveStatus.className = 'autosave-status error';
+      return;
+    }
+    guardarFechaNacValor(`${String(diaNum).padStart(2, '0')}/${mes}/${anio.padStart(4, '0')}`);
+  }
+  [fnDia, fnMes, fnAnio].forEach((el) => el.addEventListener('blur', guardarFechaNacimiento));
+  fnMes.addEventListener('change', guardarFechaNacimiento);
 
   // ---------- Movimientos ----------
   // El tipo (Tratamiento / Pago / Tratamiento + Pago) ya no se elige a mano: se infiere
