@@ -278,7 +278,7 @@ async function postAccesos(req, res) {
   }
 
   try {
-    const listResp = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env`, {
+    const listResp = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const listData = await listResp.json();
@@ -303,14 +303,49 @@ async function postAccesos(req, res) {
 
     await logActividad({ tipo: 'clave_gestion_rotada', detalle: 'GESTION_KEY cambiada desde /admin', actor: 'admin' });
 
+    const redeploy = await intentarRedeploy(token, projectId);
+
     res.status(200).json({
       success: true,
-      message: 'Clave actualizada en Vercel. Puede tardar unos minutos en aplicarse en producción (Vercel necesita generar un nuevo deploy) — si en 5-10 minutos no se refleja, avisale a Claude Code para forzar un redeploy.',
+      message: redeploy.ok
+        ? 'Clave actualizada. Se disparó un redeploy — en 1-2 minutos ya queda en producción.'
+        : `Clave actualizada en Vercel, pero no se pudo disparar el redeploy automático (${redeploy.error}). Entrá a Vercel → Deployments y tocá "Redeploy" en el último deploy de producción para que tome efecto.`,
     });
   } catch (err) {
     console.error(err);
     await avisarFallo({ endpoint: 'api/gestion/admin.js', detalle: 'rotar-gestion-key', error: err });
     res.status(200).json({ success: false, message: `No se pudo cambiar la clave: ${err.message}` });
+  }
+}
+
+// Un cambio de env var por API no se aplica solo — Vercel necesita un deploy nuevo
+// (mismo criterio que un cambio a mano en el dashboard). Se busca el último
+// deployment READY de producción y se vuelve a desplegar tal cual (mismo código,
+// variables de entorno ya actualizadas). Nunca hace fallar la respuesta principal —
+// la clave YA quedó cambiada en Vercel aunque esto falle, ver postAccesos().
+async function intentarRedeploy(token, projectId) {
+  try {
+    const listResp = await fetch(
+      `https://api.vercel.com/v7/deployments?projectId=${projectId}&target=production&state=READY&limit=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const listData = await listResp.json();
+    if (!listResp.ok) throw new Error(listData?.error?.message || 'No se pudo buscar el último deploy.');
+    const ultimo = (listData.deployments || [])[0];
+    if (!ultimo) throw new Error('No se encontró ningún deploy de producción.');
+
+    const redeployResp = await fetch('https://api.vercel.com/v13/deployments', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: ultimo.name, project: projectId, deploymentId: ultimo.uid, target: 'production' }),
+    });
+    const redeployData = await redeployResp.json();
+    if (!redeployResp.ok) throw new Error(redeployData?.error?.message || 'No se pudo disparar el redeploy.');
+
+    return { ok: true };
+  } catch (err) {
+    console.warn('[admin.js] no se pudo redesplegar automáticamente:', err?.message || err);
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 
