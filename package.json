@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "googleapis": "^174.0.0"
+    "googleapis": "^174.0.0",
+    "pdfkit": "^0.15.0"
   }
 }

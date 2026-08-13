@@ -5,7 +5,7 @@ Ver también: `architecture.md` (qué hace cada archivo), `decisions.md` (decisi
 
 ## Qué es esto
 
-Sitio del consultorio: home pública (`/`), reserva de turnos para pacientes (`/turnos`) y panel de gestión para la secretaria, Ayelen (`/gestion`). 100% gratuito, pensado para durar sin mantenimiento ni costos.
+Sitio del consultorio: home pública (`/`), reserva de turnos para pacientes (`/turnos`), panel de gestión para la secretaria, Ayelen (`/gestion`), panel de fichas de pacientes (`/pacientes`) y panel administrativo solo para Fausto (`/admin`, 2026-08-13 — ver "Panel /admin" en `architecture.md`). 100% gratuito, pensado para durar sin mantenimiento ni costos.
 
 - **Dominio en producción:** `od-francovinzon.vercel.app`
 - **Repo:** GitHub `faustovinzon9-art/od-francovinzon`, rama `main` → deploy automático a Vercel (Hobby, plan gratuito) en cada push.
@@ -54,6 +54,8 @@ Solo nombres, nunca valores en el código ni en estos docs:
 - `GEMINI_API_KEY` — clave de la API de Gemini, usada solo server-side por `api/gestion/asistente.js` (asistente de ayuda del panel). Nunca se expone al frontend.
 - `RESEND_API_KEY` — opcional. Clave de la API de Resend, usada solo por `lib/alertas.js` (`avisarFallo()`) para mandar un email a Fausto cuando algo falla de verdad después de agotar los reintentos automáticos (`lib/retry.js`). Sin esta variable, `avisarFallo()` no hace más que un `console.error` — nunca tira, nunca rompe el endpoint que la llama.
 - `CRON_SECRET` — necesaria para que el chequeo de salud diario (`vercel.json`, `modo=healthcheck` en `api/gestion/pacientes.js`, 4:00 AM hora Argentina) funcione. Vercel manda automáticamente `Authorization: Bearer <valor>` en cada invocación de cron cuando esta variable está seteada — sin ella, el endpoint devuelve 401 y el cron nunca hace nada útil (no rompe nada, solo queda inactivo). Se genera un valor random cualquiera, no depende de ningún servicio externo.
+- `ADMIN_KEY` — nueva (2026-08-13). Clave de acceso al panel `/admin`, separada de `GESTION_KEY` — solo Fausto la tiene, Ayelen no ve `/admin`. Ver `lib/adminAuth.js`. Sin esta variable seteada, `/admin` rechaza cualquier clave (fail-closed, no hay acceso "por accidente").
+- `VERCEL_API_TOKEN` — opcional, nueva (2026-08-13). Solo hace falta para la sección "Accesos" de `/admin` (cambiar `GESTION_KEY` desde el panel sin tocar Vercel a mano — ver `api/gestion/admin.js`, `postAccesos()`). Se genera en Vercel → Account Settings → Tokens. Sin esta variable, esa acción puntual devuelve un mensaje explicando cómo configurarla; el resto de `/admin` funciona igual. `VERCEL_PROJECT_ID` NO hace falta configurarlo a mano — Vercel lo inyecta solo en todo deployment.
 
 ## Límite de 12 Serverless Functions (plan Hobby de Vercel)
 
@@ -61,7 +63,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 
 **Antes de agregar un archivo nuevo bajo `api/`**, contar cuántos hay y cuántos quedan libres. Si hace falta una ruta nueva y no hay margen, **fusionar en un archivo existente usando un campo `accion`/`modo` en el body o query** en vez de crear un archivo — patrón ya usado en `bloqueo-dia.js`, `evento.js` y `buscar.js` (ver `architecture.md`).
 
-Archivos actuales bajo `api/` (**12 de 12 — sin margen, el próximo endpoint nuevo requiere fusionar con uno existente**):
+Archivos actuales bajo `api/` (**12 de 12 — sin margen, el próximo endpoint nuevo requiere fusionar con uno existente**; esta lista se desactualizó en algún momento sin que nadie la corrigiera — la de abajo se verificó contra el `api/` real el 2026-08-13, confiar siempre en el filesystem antes que en este bloque):
 
 ```
 api/chat.js
@@ -69,16 +71,16 @@ api/disponibilidad.js
 api/reservar.js
 api/gestion/turnos-dia.js
 api/gestion/crear-turno.js
-api/gestion/bloqueo-dia.js
-api/gestion/bloquear-horario.js
+api/gestion/bloqueos.js
 api/gestion/evento.js
 api/gestion/buscar.js
-api/gestion/proximo-bloqueo.js
 api/gestion/agregar-telefono.js
 api/gestion/asistente.js
+api/gestion/pacientes.js
+api/gestion/admin.js
 ```
 
-`api/disponibilidad.js` fusiona lo que antes eran `disponibilidad-mes.js` + `horarios-dia.js` (sin `modo` = mes, `?modo=dia` = horarios de un día), liberando el cupo para `api/chat.js` (chatbot público con Gemini, ver `architecture.md`).
+`api/disponibilidad.js` fusiona lo que antes eran `disponibilidad-mes.js` + `horarios-dia.js` (sin `modo` = mes, `?modo=dia` = horarios de un día). `api/gestion/bloqueos.js` fusiona lo que antes eran `bloqueo-dia.js` + `bloquear-horario.js` (2026-08-13, liberó el cupo para `api/gestion/admin.js` — panel `/admin`, ver más abajo y `architecture.md`).
 
 Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el archivo, correrlo, **sacarlo del proyecto y hacer commit de la baja** ni bien confirma el resultado (patrón ya usado dos veces — limpieza de títulos viejos y rescate de teléfonos sueltos).
 

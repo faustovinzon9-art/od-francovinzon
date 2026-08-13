@@ -26,6 +26,14 @@ import { avisarFallo } from '../../lib/alertas.js';
 // (getPacientesSheetsClient()/getPacientesDriveClient()) en un Proxy, ver el incidente
 // documentado en lib/googleCalendar.js y decisions.md.
 import { conReintentos } from '../../lib/retry.js';
+import { isValidAdminKey } from '../../lib/adminAuth.js';
+
+// /admin (sección "Datos de pacientes", ver el pedido) reusa este mismo motor en vez
+// de reimplementar 950 líneas — ADMIN_KEY vale como alternativa a GESTION_KEY solo
+// para las operaciones de datos (no para oauth-iniciar/healthcheck, que no aplican).
+function claveValida(key) {
+  return isValidGestionKey(key) || isValidAdminKey(key);
+}
 
 export default async function handler(req, res) {
   try {
@@ -53,7 +61,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      if (!isValidGestionKey(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
+      if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.query.modo === 'listar') return await listar(req, res);
       if (req.query.modo === 'ficha') return await obtenerFicha(req, res);
       if (req.query.modo === 'modified') return await obtenerModified(req, res);
@@ -64,7 +72,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      if (!isValidGestionKey(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
+      if (!claveValida(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.body.accion === 'crear') return await crearPaciente(req, res);
       if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
       if (req.body.accion === 'fusionar') return await fusionarPacientes(req, res);

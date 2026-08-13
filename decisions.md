@@ -15,6 +15,13 @@ Estas decisiones ya se discutieron y se implementaron a pedido explícito del us
 - **Fusionar rutas de API en vez de sumar archivos**, cuando el límite de 12 funciones del plan Hobby está ajustado. Ya se hizo con `bloqueo-dia.js`, `evento.js` y `buscar.js` (ver `architecture.md`). Preferir esto a crear un archivo nuevo si hay margen ajustado.
 - **Scripts de migración/limpieza de un solo uso se sacan del proyecto después de correrlos**, ni bien se confirma el resultado (no quedan como funciones activas ocupando cupo).
 
+## Panel /admin (2026-08-13)
+
+- **Rotar `GESTION_KEY` vía API de Vercel, no vía la hoja de Config de `/admin`.** Se consideró guardar un valor "override" de `GESTION_KEY` en Sheets (mismo patrón que `obtenerHorariosConfig()`), pero se descartó: `isValidGestionKey()` se llama de forma síncrona, sin `await`, en 9+ archivos bajo `api/gestion/` — convertirla en algo que lea Sheets hubiese significado tocar el chequeo de auth más usado de todo el panel de gestión, justo el tipo de cambio que ya rompió producción una vez (ver el incidente de arriba). Cambiarla vía API REST de Vercel (`api/gestion/admin.js`, `postAccesos()`) deja `lib/googleCalendar.js` completamente intacto, a costa de que el cambio tarda unos minutos en propagar (nuevo deploy) en vez de ser instantáneo — trade-off aceptado a propósito.
+- **Horarios/duración de turno configurables desde `/admin` son aditivos, nunca reemplazan el default.** `WEEKLY_SCHEDULE`/`SLOT_MINUTES`/`SOBRETURNO_MINUTES` de `lib/googleCalendar.js` siguen siendo la fuente de verdad; `getDisponibilidadMes`/`getHorariosLibresDia`/`crearTurno` solo aceptan un override opcional. Si la hoja de Config falla por lo que sea, todo el sitio sigue funcionando con el horario de siempre — no hay forma de que un problema en `/admin` tumbe la disponibilidad de turnos.
+- **Obra social/plan/tipo de tratamiento son `<datalist>` (sugerencias), no `<select>` estricto**, en `pacientes/index.html`. Fichas viejas ya tienen valores libres que pueden no estar en ninguna lista configurada desde `/admin` — un `<select>` las hubiese roto (no se podría mostrar/guardar un valor fuera de la lista). No cambiar a `<select>` sin resolver antes ese caso.
+- **`api/gestion/pacientes.js` acepta `ADMIN_KEY` como alternativa a `GESTION_KEY`** (`claveValida()`) en vez de que `/admin` reimplemente el motor de fichas. Es la única función bajo `api/gestion/` que acepta dos claves distintas — a propósito, documentado ahí mismo.
+
 ## Teléfono
 
 - **Teléfono obligatorio para todos los pacientes**, en `/turnos` y al crear turno/sobreturno desde `/gestion` (front y back). No hay checkbox que lo vuelva opcional — el checkbox "Soy paciente nuevo" en `/turnos` solo marca el dato, no afecta esta validación.

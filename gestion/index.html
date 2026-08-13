@@ -1025,6 +1025,13 @@
     cargarAgenda();
     cargarResumenSidebar();
     asistenteWidget.classList.remove('hidden');
+    cargarRadiosConfig();
+    cargarTextosConfig();
+    fetch('/api/gestion/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, recurso: 'login-log', panel: '/gestion' }),
+    }).catch(() => {});
   }
 
   // ---------- Fecha ----------
@@ -1507,6 +1514,19 @@
     // sin resolverse el bug ya comprobado varias veces (ver decisions.md) de que
     // wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text" antes de
     // llegar al chat — se avisa explícitamente, no es un olvido.
+    //
+    // Editable desde /admin (api/gestion/admin.js, recurso "textos") — si Fausto nunca
+    // configuró nada, whatsappTemplateConfig queda null y el texto de siempre (líneas
+    // de abajo) no cambia un carácter.
+    if (whatsappTemplateConfig) {
+      return whatsappTemplateConfig
+        .replaceAll('{{saludo}}', saludoActual())
+        .replaceAll('{{tipo}}', tipoTexto)
+        .replaceAll('{{nombre}}', nombre)
+        .replaceAll('{{cuando}}', cuandoCap)
+        .replaceAll('{{hora}}', fmtHora(it.start))
+        .replaceAll('{{link}}', link);
+    }
     return `¡Hola, ${saludoActual()}!!! Te quería recordar el siguiente ${tipoTexto}:\n\n` +
       `${nombre}\n` +
       `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
@@ -2149,10 +2169,10 @@
     }
 
     setMsg('h-msg', 'Bloqueando...', '');
-    fetch('/api/gestion/bloquear-horario', {
+    fetch('/api/gestion/bloqueos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: fecha, horaInicio, horaFin, motivo }),
+      body: JSON.stringify({ key: gestionKey, modo: 'horario', date: fecha, horaInicio, horaFin, motivo }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -2190,7 +2210,7 @@
         cancelLabel: 'Cancelar',
       }).then((ok) => {
         if (!ok) return;
-        fetch('/api/gestion/bloqueo-dia', {
+        fetch('/api/gestion/bloqueos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: gestionKey, accion: 'desbloquear', date: currentDate }),
@@ -2219,7 +2239,7 @@
     }
 
     setMsg('b-msg', 'Bloqueando...', '');
-    fetch('/api/gestion/bloqueo-dia', {
+    fetch('/api/gestion/bloqueos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: gestionKey, accion: 'bloquear', date: fecha, motivo }),
@@ -2535,7 +2555,7 @@
   // oficial) antes de sumarlas — todas la misma infraestructura StreamTheWorld/
   // Triton Digital, incluida Blackie FM (fuente real detrás del sitio no oficial
   // blackiefm.com.ar).
-  const RADIO_ESTACIONES = [
+  let RADIO_ESTACIONES = [
     { nombre: 'Radio Mitre', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/AM790_56AAC.aac' },
     { nombre: 'La 100', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/FM999_56.mp3' },
     { nombre: 'Aspen', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/ASPENAAC.aac' },
@@ -2546,8 +2566,66 @@
   // Las filas existen DOS veces en el DOM (sidebar desktop + tarjeta mobile, mismo
   // data-idx en ambas) — se actualizan todas juntas, mismo patrón que sum-turnos/
   // sum-turnos-m para el resumen.
-  const radioRows = Array.from(document.querySelectorAll('.radio-row'));
+  let radioRows = Array.from(document.querySelectorAll('.radio-row'));
   let radioIdxActual = null;
+
+  // Plantilla de WhatsApp configurable desde /admin (recurso "textos") — null hasta
+  // que se cargue (o si nunca se configuró nada), mensajeRecordatorio() usa el texto
+  // de siempre en ese caso.
+  let whatsappTemplateConfig = null;
+  async function cargarTextosConfig() {
+    try {
+      const r = await fetch(`/api/gestion/admin?recurso=textos&key=${encodeURIComponent(gestionKey)}`);
+      if (!r.ok) return;
+      const textos = await r.json();
+      if (textos && textos.whatsappTemplate) whatsappTemplateConfig = textos.whatsappTemplate;
+    } catch {
+      // sin conexión o sin configurar: sigue usando el texto de siempre
+    }
+  }
+
+  // Estaciones configurables desde /admin (api/gestion/admin.js, recurso "radios").
+  // Si la carga falla o no hay nada guardado todavía, se queda con las 5 filas
+  // estáticas de arriba tal cual ya estaban (cero cambio de DOM, cero riesgo). Solo si
+  // realmente hay una lista guardada se regeneran las filas (desktop + mobile).
+  async function cargarRadiosConfig() {
+    try {
+      const r = await fetch(`/api/gestion/admin?recurso=radios&key=${encodeURIComponent(gestionKey)}`);
+      if (!r.ok) return;
+      const { estaciones } = await r.json();
+      if (!Array.isArray(estaciones) || !estaciones.length) return;
+      RADIO_ESTACIONES = estaciones;
+      regenerarFilasRadio();
+    } catch {
+      // sin conexión o sin configurar: se queda con las 5 estaciones de siempre
+    }
+  }
+
+  function filaRadioHtml(est, i) {
+    return `<button type="button" class="radio-row" data-idx="${i}">` +
+      `<span class="radio-row-play">▶</span>` +
+      `<span class="radio-row-info"><span class="radio-row-name">${est.nombre}</span></span>` +
+      `</button>`;
+  }
+
+  function regenerarFilasRadio() {
+    const wasPlaying = !radioAudio.paused;
+    radioAudio.pause();
+    radioIdxActual = null;
+    ['radio-card', 'radio-card-m'].forEach((cardId) => {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const titulo = card.querySelector('.radio-card-title');
+      const html = RADIO_ESTACIONES.map(filaRadioHtml).join('');
+      card.innerHTML = '';
+      if (titulo) card.appendChild(titulo);
+      card.insertAdjacentHTML('beforeend', html);
+    });
+    radioRows = Array.from(document.querySelectorAll('.radio-row'));
+    bindRadioRowClicks();
+    renderRadioRows();
+    void wasPlaying; // la estación anterior puede ya no existir en la lista nueva — no se reanuda sola
+  }
 
   function renderRadioRows() {
     radioRows.forEach((row) => {
@@ -2573,17 +2651,20 @@
     radioAudio.play().catch(() => {});
   }
 
-  radioRows.forEach((row) => {
-    const i = parseInt(row.dataset.idx, 10);
-    row.addEventListener('click', () => {
-      if (i === radioIdxActual && !radioAudio.paused) {
-        // Pausar la que ya está sonando (no es un cambio de estación).
-        radioAudio.pause();
-        return;
-      }
-      reproducirEstacion(i);
+  function bindRadioRowClicks() {
+    radioRows.forEach((row) => {
+      const i = parseInt(row.dataset.idx, 10);
+      row.addEventListener('click', () => {
+        if (i === radioIdxActual && !radioAudio.paused) {
+          // Pausar la que ya está sonando (no es un cambio de estación).
+          radioAudio.pause();
+          return;
+        }
+        reproducirEstacion(i);
+      });
     });
-  });
+  }
+  bindRadioRowClicks();
   radioAudio.addEventListener('play', renderRadioRows);
   radioAudio.addEventListener('pause', renderRadioRows);
 

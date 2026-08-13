@@ -4,6 +4,7 @@ import {
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
+import { logActividad } from '../../lib/adminConfig.js';
 
 // Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
 // para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
@@ -23,6 +24,7 @@ export default async function handler(req, res) {
 
     if (accion === 'cancelar') {
       await calendar.events.delete({ calendarId, eventId });
+      await logActividad({ tipo: 'turno_cancelado', detalle: eventId, actor: 'gestión (Ayelen)' });
       return res.status(200).json({ success: true, message: 'Turno cancelado.' });
     }
 
@@ -44,6 +46,7 @@ export default async function handler(req, res) {
       const { data: original } = await calendar.events.get({ calendarId, eventId });
       const nuevaDescripcion = escribirConfirmado(original.description || '', !!confirmado);
       await calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } });
+      await logActividad({ tipo: confirmado ? 'turno_confirmado' : 'turno_desconfirmado', detalle: eventId, actor: 'gestión (Ayelen)' });
       return res.status(200).json({
         success: true,
         message: confirmado ? 'Turno marcado como confirmado.' : 'Turno marcado como sin confirmar.',
@@ -94,6 +97,7 @@ export default async function handler(req, res) {
     }
 
     await calendar.events.patch({ calendarId, eventId, requestBody });
+    await logActividad({ tipo: 'turno_reprogramado', detalle: `${eventId} → ${nuevaFecha} ${nuevaHora}`, actor: 'gestión (Ayelen)' });
 
     res.status(200).json({ success: true, message: `Movido al ${nuevaFecha} a las ${nuevaHora} hs.` });
   } catch (err) {

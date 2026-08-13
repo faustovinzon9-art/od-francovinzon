@@ -6,6 +6,7 @@ import {
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
 import { conReintentos } from '../lib/retry.js';
+import { obtenerHorariosConfig, logActividad } from '../lib/adminConfig.js';
 
 // El ticket térmico imprime un QR también para sobreturnos (ver gestion/index.html),
 // así que "obtener"/"cancelar" tienen que poder apuntar a SOBRETURNOS_CALENDAR_ID —
@@ -42,8 +43,12 @@ export default async function handler(req, res) {
   try {
     const { date, time, nombre, apellido, telefono, dni, motivo, esNuevo } = req.body;
     const calendar = getCalendarClient();
+    const { slotMinutes } = await obtenerHorariosConfig();
     // Misma lógica que usa el chatbot para la reserva conversacional — ver lib/googleCalendar.js.
-    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, motivo, esNuevo });
+    const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, motivo, esNuevo, slotMinutes });
+    if (resultado.success) {
+      await logActividad({ tipo: 'turno_creado', detalle: `${nombre} ${apellido} — ${date} ${time}`, actor: 'paciente (/turnos)' });
+    }
     res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
@@ -177,6 +182,7 @@ async function confirmarPropio(req, res) {
     }
     const nuevaDescripcion = escribirConfirmado(ev.description || '', true);
     await conReintentos(() => calendar.events.patch({ calendarId: calId, eventId, requestBody: { description: nuevaDescripcion } }));
+    await logActividad({ tipo: 'turno_confirmado', detalle: eventId, actor: 'paciente (/turno)' });
     res.status(200).json({ success: true, message: '¡Turno confirmado! Gracias por avisarnos.' });
   } catch (err) {
     console.error(err);
@@ -193,6 +199,7 @@ async function cancelarPropio(req, res) {
     }
     const calendar = getCalendarClient();
     await conReintentos(() => calendar.events.delete({ calendarId: resolverCalendarId(calendarId), eventId }));
+    await logActividad({ tipo: 'turno_cancelado', detalle: eventId, actor: 'paciente (/turno)' });
     res.status(200).json({ success: true, message: 'Turno cancelado.' });
   } catch (err) {
     console.error(err);
@@ -262,6 +269,7 @@ async function moverPropio(req, res) {
       if (!resultado.success) return res.status(200).json(resultado);
 
       await conReintentos(() => calendar.events.delete({ calendarId: SOBRETURNOS_CALENDAR_ID, eventId }));
+      await logActividad({ tipo: 'turno_reprogramado', detalle: `${eventId} → ${date} ${time}`, actor: 'paciente (/turno)' });
 
       return res.status(200).json({
         success: true,
@@ -286,6 +294,8 @@ async function moverPropio(req, res) {
         end: { dateTime: newEnd.toISOString(), timeZone: TIME_ZONE },
       },
     }));
+
+    await logActividad({ tipo: 'turno_reprogramado', detalle: `${eventId} → ${date} ${time}`, actor: 'paciente (/turno)' });
 
     res.status(200).json({
       success: true,

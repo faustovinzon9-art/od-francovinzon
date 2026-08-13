@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-13 (decimocuarta vuelta) — Panel /admin completo
+
+Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `feature/panel-admin`).
+
+- Panel nuevo `/admin` (clave propia `ADMIN_KEY`) con las 9 secciones pedidas: horarios/agenda, textos y plantilla de WhatsApp, listas desplegables, radios, datos de pacientes (búsqueda + exports PDF/CSV), accesos (rotar `GESTION_KEY`), registro de actividad, monitoreo técnico y dashboard de métricas. Detalle completo en `architecture.md`, sección "Panel /admin".
+- Fusionó `bloqueo-dia.js` + `bloquear-horario.js` → `api/gestion/bloqueos.js` para liberar el cupo de `api/gestion/admin.js` dentro del límite de 12 funciones serverless — sigue en 12/12, sin margen para el próximo endpoint.
+- Nueva dependencia: `pdfkit` (exports en PDF). Nuevas variables de entorno: `ADMIN_KEY` (obligatoria para que `/admin` funcione), `VERCEL_API_TOKEN` (opcional, solo para rotar `GESTION_KEY` desde el panel).
+- `lib/googleCalendar.js` se tocó de forma puramente aditiva (parámetros opcionales `schedule`/`slotMinutes` en `getDisponibilidadMes`/`getHorariosLibresDia`/`crearTurno`, default = lo de siempre) para que los horarios configurados desde `/admin` apliquen en `/turnos`, `/gestion` y el chatbot sin duplicar la lógica de disponibilidad. `isValidGestionKey()` no se tocó (ver `decisions.md`).
+- Probado: sintaxis revisada a mano línea por línea (sin Node.js disponible en este entorno para `node --check` ni para correr nada — se verificó balance de llaves/paréntesis con Python y una lectura completa de cada archivo tocado). No se pudo probar en vivo contra Calendar/Sheets reales ni contra el preview de Vercel real — los deployments de preview de este proyecto tienen protección SSO de Vercel (ver la "Limitación conocida" de `CLAUDE.md`) y este entorno no tiene sesión de Vercel ni de GitHub CLI para inspeccionar el deploy por API. Se mergeó a `main` con ese nivel de verificación (más liviano que lo habitual) por pedido explícito de Fausto. Revisar `/admin` a fondo en producción cuanto antes.
+
 ## 2026-08-13 (decimotercera vuelta) — Nombre/Apellido separados, Title Case en turnos, cards de /pacientes compactas
 
 - `/turnos`: Nombre y Apellido pasan a ser dos campos obligatorios separados (antes un solo "Nombre y apellido"). "Nuevo turno" de `/gestion` ya los tenía separados, faltaba exigir apellido.

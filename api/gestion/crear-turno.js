@@ -1,11 +1,12 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, CLINIC_ADDRESS, TIME_ZONE,
-  SLOT_MINUTES, SOBRETURNO_MINUTES, toArgDate, eventBounds, isValidGestionKey, telefonoParaWhatsApp,
+  toArgDate, eventBounds, isValidGestionKey, telefonoParaWhatsApp,
   generarCodigoCorto, extraerCodigoCorto,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
+import { obtenerHorariosConfig, logActividad } from '../../lib/adminConfig.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -27,8 +28,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    const { slotMinutes, sobreturnoMinutes } = await obtenerHorariosConfig();
     const calendarId = sobreturno ? SOBRETURNOS_CALENDAR_ID : CALENDAR_ID;
-    const duration = sobreturno ? SOBRETURNO_MINUTES : SLOT_MINUTES;
+    const duration = sobreturno ? sobreturnoMinutes : slotMinutes;
 
     const start = toArgDate(date, time);
     const end = new Date(start.getTime() + duration * 60000);
@@ -92,6 +94,12 @@ export default async function handler(req, res) {
         end: { dateTime: end.toISOString(), timeZone: TIME_ZONE },
       },
     }));
+
+    await logActividad({
+      tipo: sobreturno ? 'sobreturno_creado' : 'turno_creado',
+      detalle: `${title} — ${date} ${time}`,
+      actor: 'gestión (Ayelen)',
+    });
 
     res.status(200).json({
       success: true,
