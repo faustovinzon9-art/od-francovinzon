@@ -162,21 +162,42 @@
      criterio best-effort del autocompletado de teléfono: match EXACTO de nombre+apellido
      normalizado, sin crear ningún vínculo permanente turno↔ficha). Oculto si no hay
      ninguna coincidencia, para no ocupar lugar en un día sin turnos con ficha. */
+  /* "Pacientes de hoy" y "¿Es este paciente?" — filas de ancho completo, a propósito
+     (antes eran chips angostos de carrusel horizontal con el nombre truncado con "…":
+     un problema real, porque si no se ve el nombre completo no se puede confirmar si
+     es o no la misma persona). Sin max-width/ellipsis en ningún nombre — si el nombre
+     es largo, la fila crece o el texto da la vuelta, nunca se corta. Letra más grande
+     que el resto de la lista de pacientes: esto lo usa Ayelen todo el día, de un
+     vistazo, y a veces también Franco. */
   .hoy-section { margin-bottom: 16px; }
   .hoy-section h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 10px; }
-  .hoy-carril { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-  .hoy-carril::-webkit-scrollbar { height: 5px; }
-  .hoy-carril::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
-  .hoy-chip { flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 7px; background: var(--white); border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 14px; min-width: 88px; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
-  .hoy-chip:hover { border-color: var(--gold); }
-  .hoy-chip-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; font-family: 'Fraunces', Georgia, serif; flex-shrink: 0; }
-  .hoy-chip-nombre { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hoy-chip-hora { font-size: 11px; color: var(--gold); font-weight: 700; }
-  .hoy-chip-sugerencia { border-style: dashed; border-color: var(--gold); }
-  .hoy-chip-sugerencia .hoy-chip-avatar { background: var(--gold); }
-  .hoy-chip-turno { font-size: 10.5px; color: var(--muted); text-align: center; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hoy-chip-confirmar { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--navy); background: var(--cream); border: none; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
-  .hoy-chip-confirmar:hover { background: var(--gold); color: var(--white); }
+  .hoy-carril { display: flex; flex-direction: column; gap: 9px; }
+  .hoy-row {
+    display: flex; align-items: center; gap: 14px; width: 100%; background: var(--white);
+    border: 1.5px solid var(--line); border-radius: 14px; padding: 13px 16px;
+    box-shadow: 0 1px 8px rgba(30,58,95,.06); text-align: left; cursor: pointer; box-sizing: border-box;
+  }
+  .hoy-row:hover { border-color: var(--gold); }
+  .hoy-row-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--navy); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; font-family: 'Fraunces', Georgia, serif; flex-shrink: 0; }
+  .hoy-row-nombre { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.3; }
+  .hoy-row-hora { font-size: 13.5px; color: var(--gold); font-weight: 700; margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+  .hoy-row-sugerencia { flex-wrap: wrap; border-style: dashed; border-color: var(--gold); cursor: default; }
+  .hoy-row-sugerencia .hoy-row-avatar { background: var(--gold); }
+  .hoy-row-info { flex: 1; min-width: 220px; }
+  .hoy-row-turno { font-size: 13.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .hoy-row-turno strong { color: var(--text); font-weight: 700; }
+  .hoy-row-acciones { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+  .hoy-row-si, .hoy-row-no {
+    font-size: 14px; font-weight: 700; border: none; border-radius: 10px; padding: 9px 18px; cursor: pointer;
+  }
+  .hoy-row-si { color: var(--white); background: var(--confirmado); }
+  .hoy-row-si:hover { filter: brightness(1.08); }
+  .hoy-row-no { color: var(--navy); background: var(--cream); border: 1.5px solid var(--line); }
+  .hoy-row-no:hover { border-color: var(--bloqueo); color: var(--bloqueo); }
+  @media (max-width: 480px) {
+    .hoy-row-sugerencia { align-items: flex-start; }
+    .hoy-row-acciones { margin-left: 60px; margin-top: 4px; }
+  }
 
   .loading-note { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
 
@@ -726,13 +747,16 @@
   // ---------- "Pacientes de hoy" + resumen del sidebar + autocompletado cruzado de
   // teléfono ----------
   // Un solo fetch de turnos-dia.js (misma GESTION_KEY que el resto del panel — no hizo
-  // falta ninguna ruta nueva) alimenta el cruce turno↔ficha, en 4 niveles de confianza
+  // falta ninguna ruta nueva) alimenta el cruce turno↔ficha, en 5 niveles de confianza
   // (de más a menos confiable), ninguno de los cuales autocompleta ni fusiona datos:
   //   1. DNI exacto (si el turno lo tiene, ver turnos/index.html) -> match directo.
   //   2. Nombre y apellido exactos (normalizados) -> match directo.
-  //   3. Mismo teléfono + nombre parecido pero no exacto -> sugerencia "¿Es este
-  //      paciente?", se abre solo si Ayelen confirma con un toque.
-  //   4. Nombre parecido sin teléfono ni DNI que lo respalde -> no se adivina, queda
+  //   3. Teléfono con un "Sí" ya guardado antes (ver mapeos, modo=mapeos) -> match
+  //      directo automático, sin volver a preguntar — y recorrige el nombre en
+  //      silencio si hace falta (ver confirmarMatchSilencioso).
+  //   4. Mismo teléfono + nombre parecido pero no exacto, SIN un "No" ya guardado para
+  //      ese par -> sugerencia "¿Es este paciente?" con botones Sí/No explícitos.
+  //   5. Nombre parecido sin teléfono ni DNI que lo respalde -> no se adivina, queda
   //      sin match para buscarlo a mano.
   const hoySection = document.getElementById('hoy-section');
   const hoyCarril = document.getElementById('hoy-carril');
@@ -740,6 +764,10 @@
   const sugerenciasCarril = document.getElementById('sugerencias-carril');
   let pacientesDeHoy = [];
   let sugerenciasDeHoy = [];
+  // telefono (últimos 10 dígitos) -> Set(dni normalizado) ya confirmado/descartado a
+  // mano en "¿Es este paciente?" — ver cargarDatosDeHoy() (modo=mapeos).
+  let mapeosPositivos = new Map();
+  let mapeosNegativos = new Map();
 
   // Umbral de similitud (0 a 1) para considerar un nombre "parecido" a otro — cubre
   // diminutivos/variantes ("Pepe" vs "José") siempre y cuando el resto del nombre
@@ -814,6 +842,21 @@
     } catch (e) { turnosReales = []; }
 
     document.getElementById('sum-turnos').textContent = turnosReales.length;
+
+    // Mapeo teléfono->dni ya confirmado ("Sí"/"No" de vueltas anteriores, ver
+    // modo=mapeos) — se recarga en cada vuelta por si Ayelen acaba de confirmar algo.
+    try {
+      const filas = await apiGet({ modo: 'mapeos' });
+      mapeosPositivos = new Map();
+      mapeosNegativos = new Map();
+      (Array.isArray(filas) ? filas : []).forEach((f) => {
+        const destino = f.decision === 'si' ? mapeosPositivos : f.decision === 'no' ? mapeosNegativos : null;
+        if (!destino || !f.telefono || !f.dni) return;
+        if (!destino.has(f.telefono)) destino.set(f.telefono, new Set());
+        destino.get(f.telefono).add(f.dni);
+      });
+    } catch (e) { mapeosPositivos = new Map(); mapeosNegativos = new Map(); }
+
     await procesarPacientesDeHoy(turnosReales);
 
     // Huecos libres hoy: mismo endpoint público que ya usa /gestion para su resumen
@@ -831,12 +874,15 @@
     const vistos = new Set();
     const directos = [];
     const sugerencias = [];
+    const correccionesSilenciosas = [];
 
     const ordenados = turnosReales.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
 
     for (const it of ordenados) {
       const nombreTurno = normalizar((it.title || '').trim().replace(/\s+/g, ' '));
       if (!nombreTurno) continue;
+
+      const telTurno = normalizarTelefonoComparacion(it.telefono);
 
       // Nivel 1: DNI exacto.
       const dniTurno = normalizarDni(it.dni || '');
@@ -847,6 +893,17 @@
         ficha = pacientes.find((p) => normalizarNombreCompleto(p.nombre, p.apellido) === nombreTurno);
       }
 
+      // Nivel 3: teléfono con un "Sí" ya guardado antes -> match directo automático,
+      // sin volver a preguntar (ver mapeosPositivos, cargarDatosDeHoy).
+      let esMatchPorMapeo = false;
+      if (!ficha && telTurno) {
+        const dnisConfirmados = mapeosPositivos.get(telTurno);
+        if (dnisConfirmados) {
+          ficha = pacientes.find((p) => !vistos.has(p.id) && dnisConfirmados.has(normalizarDni(p.dni)));
+          if (ficha) esMatchPorMapeo = true;
+        }
+      }
+
       if (ficha) {
         if (vistos.has(ficha.id)) continue;
         vistos.add(ficha.id);
@@ -854,18 +911,26 @@
           id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatHoraArg(it.start),
           turnoId: it.id, turnoCalendarId: it.calendarId, turnoTelefono: it.telefono,
         });
+        // Match automático (nivel 3): re-confirma en silencio para que la corrección de
+        // nombre bidireccional se mantenga al día si algo cambió del otro lado desde la
+        // última vez — idempotente, no rompe nada repetirlo.
+        if (esMatchPorMapeo && it.telefono) {
+          correccionesSilenciosas.push({
+            eventId: it.id, calendarId: it.calendarId, telefono: it.telefono,
+            fichaId: ficha.id, dni: ficha.dni, turnoTitulo: it.title,
+          });
+        }
         continue;
       }
 
-      // Nivel 3: mismo teléfono + nombre parecido (no exacto) -> sugerencia a confirmar.
-      // Sin teléfono en el turno no hay con qué respaldar un nombre parecido -> nivel 4,
-      // queda sin match (no se adivina).
-      if (!it.telefono) continue;
-      const telTurno = normalizarTelefonoComparacion(it.telefono);
+      // Nivel 4: mismo teléfono + nombre parecido (no exacto) -> sugerencia a confirmar
+      // con Sí/No. Sin teléfono en el turno no hay con qué respaldar un nombre parecido
+      // -> nivel 5, queda sin match (no se adivina).
       if (!telTurno) continue;
 
+      const dnisDescartados = mapeosNegativos.get(telTurno) || new Set();
       const candidatos = pacientes
-        .filter((p) => !vistos.has(p.id))
+        .filter((p) => !vistos.has(p.id) && !dnisDescartados.has(normalizarDni(p.dni)))
         .map((p) => ({ p, sim: similitudNombre(nombreTurno, normalizarNombreCompleto(p.nombre, p.apellido)) }))
         .filter((c) => c.sim >= UMBRAL_SIMILITUD_NOMBRE && c.sim < 1)
         .sort((a, b) => b.sim - a.sim)
@@ -876,8 +941,8 @@
         if (telFicha && telFicha === telTurno) {
           vistos.add(p.id);
           sugerencias.push({
-            id: p.id, nombre: p.nombre, apellido: p.apellido, hora: formatHoraArg(it.start),
-            turnoNombre: it.title || '',
+            id: p.id, nombre: p.nombre, apellido: p.apellido, dni: p.dni, hora: formatHoraArg(it.start),
+            turnoNombre: it.title || '', turnoId: it.id, turnoCalendarId: it.calendarId, turnoTelefono: it.telefono,
           });
           break; // un solo candidato por turno alcanza
         }
@@ -889,6 +954,11 @@
     renderPacientesDeHoy();
     renderSugerenciasHoy();
     completarTelefonosCruzados(directos); // no se espera: best-effort en segundo plano
+    // Fire-and-forget, en silencio — no bloquea el render ni muestra nada si falla
+    // (se reintenta solo en la próxima carga, no hay dato que se pueda perder).
+    correccionesSilenciosas.forEach((c) => {
+      apiPost({ accion: 'confirmar-match', decision: 'si', ...c }).catch(() => {});
+    });
   }
 
   function renderPacientesDeHoy() {
@@ -897,34 +967,63 @@
       return;
     }
     hoyCarril.innerHTML = pacientesDeHoy.map((p) => `
-      <button type="button" class="hoy-chip" data-id="${p.id}">
-        <span class="hoy-chip-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
-        <span class="hoy-chip-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
-        <span class="hoy-chip-hora">${escapeHtml(p.hora)}</span>
+      <button type="button" class="hoy-row" data-id="${p.id}">
+        <span class="hoy-row-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
+        <span class="hoy-row-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
+        <span class="hoy-row-hora">${escapeHtml(p.hora)}</span>
       </button>
     `).join('');
-    hoyCarril.querySelectorAll('.hoy-chip').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
+    hoyCarril.querySelectorAll('.hoy-row').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
     hoySection.classList.remove('hidden');
   }
 
-  // Nivel 3: se muestra aparte de "Pacientes de hoy", con el nombre tal como está en el
-  // turno junto al de la ficha candidata, y nunca abre directo — hace falta el toque en
-  // "¿Es este paciente?" para confirmar antes de ir a la ficha.
+  // Nivel 4: se muestra aparte de "Pacientes de hoy", con el nombre tal como está en el
+  // turno junto al de la ficha candidata, y nunca abre directo — hace falta tocar Sí o
+  // No para resolverlo. La decisión queda guardada de forma permanente (por
+  // teléfono+DNI, ver accion=confirmar-match) para no volver a preguntar lo mismo.
   function renderSugerenciasHoy() {
     if (!sugerenciasDeHoy.length) {
       sugerenciasSection.classList.add('hidden');
       return;
     }
     sugerenciasCarril.innerHTML = sugerenciasDeHoy.map((p) => `
-      <div class="hoy-chip hoy-chip-sugerencia" data-id="${p.id}">
-        <span class="hoy-chip-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
-        <span class="hoy-chip-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</span>
-        <span class="hoy-chip-turno">Turno: ${escapeHtml(p.turnoNombre)} · ${escapeHtml(p.hora)}</span>
-        <button type="button" class="hoy-chip-confirmar" data-id="${p.id}">¿Es este paciente?</button>
+      <div class="hoy-row hoy-row-sugerencia" data-id="${p.id}">
+        <span class="hoy-row-avatar">${escapeHtml(((p.nombre[0] || '') + (p.apellido[0] || '')).toUpperCase())}</span>
+        <div class="hoy-row-info">
+          <div class="hoy-row-nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</div>
+          <div class="hoy-row-turno">Turno de hoy: <strong>${escapeHtml(p.turnoNombre)}</strong> · ${escapeHtml(p.hora)}</div>
+        </div>
+        <div class="hoy-row-acciones">
+          <button type="button" class="hoy-row-si" data-id="${p.id}">Sí</button>
+          <button type="button" class="hoy-row-no" data-id="${p.id}">No</button>
+        </div>
       </div>
     `).join('');
-    sugerenciasCarril.querySelectorAll('.hoy-chip-confirmar').forEach((btn) => btn.addEventListener('click', () => abrirFicha(btn.dataset.id)));
+    sugerenciasCarril.querySelectorAll('.hoy-row-si').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'si')));
+    sugerenciasCarril.querySelectorAll('.hoy-row-no').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'no')));
     sugerenciasSection.classList.remove('hidden');
+  }
+
+  // "Sí": vincula teléfono+DNI de forma permanente (no vuelve a preguntar), corrige el
+  // nombre del lado que esté incompleto, y el turno pasa a "Pacientes de hoy" — todo
+  // recalculando cargarDatosDeHoy() de nuevo, que ya sabe resolverlo solo con el mapeo
+  // recién guardado (mismo camino que un match automático). Nunca abre la ficha.
+  // "No": descarta la sugerencia y guarda que ese par no es un match, tampoco abre nada.
+  async function resolverSugerencia(fichaId, decision) {
+    const item = sugerenciasDeHoy.find((s) => s.id === fichaId);
+    if (!item) return;
+    try {
+      await apiPost({
+        accion: 'confirmar-match',
+        eventId: item.turnoId, calendarId: item.turnoCalendarId,
+        telefono: item.turnoTelefono, fichaId: item.id, dni: item.dni,
+        decision, turnoTitulo: item.turnoNombre,
+      });
+      toast(decision === 'si' ? '✅ Vinculado — no se vuelve a preguntar' : 'Descartado, no se repite esta sugerencia');
+      await cargarDatosDeHoy();
+    } catch (e) {
+      toast('No se pudo guardar. Probá de nuevo.');
+    }
   }
 
   // ---------- Autocompletado cruzado de teléfono (ver decisions.md): solo cuando el
