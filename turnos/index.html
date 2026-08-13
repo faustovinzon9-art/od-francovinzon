@@ -28,8 +28,15 @@
   .brand { text-align: center; margin-bottom: 18px; }
   .brand img { width: 100%; max-width: 280px; height: auto; margin-bottom: 12px; }
   .brand .tagline { font-family: 'Fraunces', Georgia, serif; font-size: 27px; font-weight: 700; color: var(--navy); }
-  .info-note { background: var(--white); border: 1px solid #EEE8D9; border-radius: 14px; padding: 12px 14px; font-size: 12.5px; color: var(--text); text-align: center; margin-bottom: 12px; line-height: 1.5; }
+  .info-note { background: var(--white); border: 1px solid #EEE8D9; border-radius: 14px; padding: 11px 14px; font-size: 11.5px; color: var(--text); text-align: center; margin-bottom: 12px; line-height: 1.5; }
   .info-note strong { color: var(--navy); }
+  .no-horario-card {
+    background: rgba(212, 162, 76, 0.08); border: 1.5px solid var(--gold); border-radius: 16px;
+    padding: 16px 18px; text-align: center; margin-bottom: 18px;
+    box-shadow: 0 4px 20px rgba(212, 162, 76, 0.16);
+  }
+  .no-horario-card p { font-size: 15.5px; font-weight: 600; color: var(--navy); line-height: 1.45; }
+  .no-horario-card strong { color: #C14437; }
   .contact-buttons { display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; }
   .contact-btn { display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-pill); padding: 10px 16px; font-size: 13px; font-weight: 600; text-decoration: none; }
   .contact-btn.whatsapp { background: #25D366; color: white; border: none; box-shadow: 0 4px 16px rgba(37, 211, 102, 0.4); }
@@ -301,7 +308,8 @@
   </div>
 
   <div class="info-note">
-    Esta agenda es para <strong>turnos programados</strong>. ¿Urgencia o consulta rápida? Usá los botones de abajo.
+    Esta agenda es para <strong>turnos programados</strong>.<br>
+    ¿Urgencia o consulta rápida? Usá los botones de abajo.
   </div>
 
   <div class="contact-buttons">
@@ -316,8 +324,8 @@
     </a>
   </div>
 
-  <div class="info-note" id="sin-horario-note">
-    ¿Ningún día u horario te queda cómodo? Escribinos por WhatsApp — siempre le encontramos la vuelta para conseguirte un lugar.
+  <div class="no-horario-card" id="sin-horario-note">
+    <p>¿Ningún horario te queda cómodo? <strong>Escribinos por WhatsApp</strong> y le buscamos la vuelta juntos.</p>
   </div>
 
   <div class="card" id="calendar-card">
@@ -353,7 +361,7 @@
     <label>Teléfono</label>
     <input type="tel" id="f-telefono">
 
-    <label>DNI (opcional)</label>
+    <label>DNI</label>
     <input type="text" id="f-dni" inputmode="numeric" placeholder="Sin puntos ni espacios">
 
     <label>Motivo de la consulta</label>
@@ -710,19 +718,18 @@
       showFormMsg('Elegí un horario primero.', 'error');
       return;
     }
-    if (!nombreCompleto || !telefonoIngresado) {
-      showFormMsg('Completá al menos nombre y teléfono.', 'error');
+    if (!nombreCompleto || !telefonoIngresado || !dniIngresado) {
+      showFormMsg('Completá nombre, teléfono y DNI.', 'error');
       return;
     }
     if (!itiTelefono.isValidNumber()) {
       showFormMsg('Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
-    // DNI opcional: si lo cargan tiene que ser numérico (se dejan pasar puntos/espacios
-    // sueltos por si los tipean, pero se limpian antes de mandar).
+    // Se dejan pasar puntos/espacios sueltos por si los tipean, pero se limpian antes de mandar.
     const dniLimpio = dniIngresado.replace(/[.\s]/g, '');
-    if (dniLimpio && !/^\d{6,9}$/.test(dniLimpio)) {
-      showFormMsg('Ese DNI no parece válido. Dejalo vacío o revisalo.', 'error');
+    if (!/^\d{6,9}$/.test(dniLimpio)) {
+      showFormMsg('Ese DNI no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
     const telefono = itiTelefono.getNumber();
@@ -967,11 +974,20 @@
   btnGuardarAcceso.addEventListener('click', async () => {
     const link = armarLinkGestionTurno();
     if (!link) return;
+    // El text solo (sin fecha/hora del turno) se veía vacío/raro en el destino
+    // (WhatsApp, Notas) — se antepone el detalle del turno, mismo formato "d de MES a
+    // las HH:mm hs." ya usado en el resto de la página. fechaSeleccionada/horarioSeleccionado
+    // ya están cargados acá tanto si se acaba de reservar como si se llegó por el QR.
+    let detalleTurno = 'Guardá este acceso para cancelar o cambiar tu turno cuando quieras:';
+    if (fechaSeleccionada && horarioSeleccionado) {
+      const [, m, d] = fechaSeleccionada.split('-').map(Number);
+      detalleTurno = `Tu turno: ${d} de ${MESES[m - 1]} a las ${horarioSeleccionado} hs.\n${detalleTurno}`;
+    }
     if (hayWebShare) {
       try {
         await navigator.share({
           title: 'Mi turno — Consultorio Franco Vinzón',
-          text: 'Guardá este acceso para poder cancelar o cambiar tu turno cuando quieras.',
+          text: detalleTurno,
           url: link,
         });
       } catch (err) {
@@ -980,7 +996,7 @@
       }
     } else {
       try {
-        await navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(`${detalleTurno}\n${link}`);
         toast('Copiado ✓');
       } catch (err) {
         toast('No se pudo copiar. Probá de nuevo.');
