@@ -11,8 +11,8 @@ import {
   getPacientesSheetsClient, getPacientesDriveClient, buildAuthUrl, exchangeCodeForTokens,
 } from '../../lib/googleOAuthPacientes.js';
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, normalizarTexto, extraerTelefono,
-  isValidGestionKey, getHorariosLibresDia, formatArgDay,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto, extraerTelefono,
+  isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -74,6 +74,9 @@ export default async function handler(req, res) {
     // nivel de exposición que decidió aceptar el usuario para esa página entera.
     if (req.method === 'GET' && req.query.modo === 'buscar-publico') {
       return await buscarPublico(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'hoy-publico') {
+      return await hoyPublico(req, res);
     }
     if (req.method === 'GET' && req.query.modo === 'fotos') {
       return await listarFotos(req, res);
@@ -254,6 +257,52 @@ async function buscarPublico(req, res) {
     .slice(0, 15);
 
   res.status(200).json(resultados);
+}
+
+// "Pacientes de hoy" para /mobilephotouploaderodfrancovinzon (ver el pedido, 2026-08-13)
+// — mismo criterio "de hoy" que /pacientes, pero simplificado a propósito: solo el
+// match EXACTO nombre+apellido turno<->ficha (nivel 1/2 de /pacientes), sin la cascada
+// de teléfono/similitud difusa (nivel 3/4/5) que ese panel sí hace — acá es un atajo de
+// conveniencia para no tener que buscar a mano, no la fuente de verdad del matching, así
+// que un paciente que no matchee exacto simplemente no aparece en la lista rápida (sigue
+// pudiendo buscarse a mano arriba, sin ningún dato perdido).
+async function hoyPublico(req, res) {
+  try {
+    const calendar = getCalendarClient();
+    const hoyStr = formatArgDay(new Date());
+    const desde = toArgDate(hoyStr, '00:00');
+    const hasta = new Date(desde.getTime() + 24 * 60 * 60000);
+
+    const [principal, sobreturnos] = await Promise.all([
+      conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 200 })),
+      conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 200 })),
+    ]);
+    const eventos = [...(principal.data.items || []), ...(sobreturnos.data.items || [])]
+      .filter((ev) => ev.start.dateTime && !(ev.description || '').includes(BLOCK_MARKER))
+      .sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
+
+    const drive = getPacientesDriveClient();
+    const archivos = await listarArchivosPacientes(drive);
+    const fichas = archivos.map((f) => {
+      const { nombre, apellido } = parsearNombreArchivo(f.name);
+      return { id: f.id, nombre, apellido };
+    });
+
+    const vistos = new Set();
+    const resultado = [];
+    eventos.forEach((ev) => {
+      const nombreTurno = normalizarTexto(ev.summary || '');
+      const ficha = fichas.find((p) => !vistos.has(p.id) && normalizarTexto(`${p.nombre} ${p.apellido}`) === nombreTurno);
+      if (!ficha) return;
+      vistos.add(ficha.id);
+      resultado.push({ id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatArgTime(new Date(ev.start.dateTime)) });
+    });
+
+    res.status(200).json(resultado);
+  } catch (err) {
+    console.error(err);
+    res.status(200).json([]);
+  }
 }
 
 // Detección de duplicados por DNI (único criterio — ver decisions.md): recorre todas las
