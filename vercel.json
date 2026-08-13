@@ -12,6 +12,6 @@
     }
   ],
   "functions": {
-    "api/gestion/admin.js": { "maxDuration": 60 }
+    "api/gestion/admin.js": { "maxDuration": 300 }
   }
 }

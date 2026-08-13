@@ -27,6 +27,16 @@ import {
 // POST de estos recursos siguen exigiendo ADMIN_KEY más abajo, ver `recurso` en POST).
 const RECURSOS_LECTURA_COMPARTIDA = new Set(['listas', 'radios', 'textos']);
 
+async function conError(fn, req, res) {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/admin.js', detalle: req.query?.recurso || '', error: err });
+    if (!res.headersSent) res.status(200).json({ success: false, error: err?.message || String(err) });
+  }
+}
+
 export default async function handler(req, res) {
   try {
     const key = req.method === 'GET' ? req.query.key : req.body.key;
@@ -53,10 +63,15 @@ export default async function handler(req, res) {
       if (recurso === 'actividad') return await getActividad(req, res);
       if (recurso === 'monitoreo') return await getMonitoreo(req, res);
       if (recurso === 'metricas') return await getMetricas(req, res);
-      if (recurso === 'export-financiero') return await exportFinancieroPdf(req, res);
-      if (recurso === 'export-ficha') return await exportFichaPdf(req, res);
-      if (recurso === 'export-pacientes-csv') return await exportPacientesCsv(req, res);
-      if (recurso === 'export-turnos') return await exportTurnos(req, res);
+      // Los export-* devuelven un archivo (PDF/CSV), no JSON — si algo dentro tira,
+      // el catch de más abajo los mandaría igual por el camino genérico de
+      // "Error inesperado." sin ninguna pista. Acá sí se envuelve cada uno para
+      // devolver el mensaje real (encontrado en producción, 2026-08-13: un fallo en
+      // exportFichaPdf era indistinguible de cualquier otro error del panel).
+      if (recurso === 'export-financiero') return await conError(exportFinancieroPdf, req, res);
+      if (recurso === 'export-ficha') return await conError(exportFichaPdf, req, res);
+      if (recurso === 'export-pacientes-csv') return await conError(exportPacientesCsv, req, res);
+      if (recurso === 'export-turnos') return await conError(exportTurnos, req, res);
       return res.status(400).json({ success: false, error: 'recurso inválido' });
     }
 
@@ -466,9 +481,16 @@ async function calcularTurnos(desde, hasta) {
 
 // Deuda: recorre las fichas de Pacientes leyendo el saldo — hoja liviana (unas pocas
 // celdas por ficha), pero son N llamadas a Sheets. Se acota a 200 fichas y se
-// consulta en lotes chicos secuenciales (mismo criterio que el resto del proyecto
-// con la cuota de Google, ver CLAUDE.md) para no disparar todo junto.
+// consulta en lotes secuenciales (mismo criterio que el resto del proyecto con la
+// cuota de Google, ver CLAUDE.md) para no disparar todo junto. Con muchos pacientes
+// esto es lo más lento de todo el dashboard con diferencia — se cachea en memoria
+// del proceso 2 minutos para que recargar el dashboard varias veces seguidas (como
+// al estar probándolo) no vuelva a escanear todas las fichas cada vez.
+let cacheDeuda = null; // { valor, ts }
+const TTL_DEUDA_MS = 120000;
 async function calcularDeuda() {
+  if (cacheDeuda && Date.now() - cacheDeuda.ts < TTL_DEUDA_MS) return cacheDeuda.valor;
+
   let conDeuda = 0, totalPacientesConSaldo = 0;
   const topDeudoresMonto = [];
   const topDeudoresAntiguedad = [];
@@ -482,7 +504,7 @@ async function calcularDeuda() {
     }));
     const archivos = (data.files || []).filter((f) => !/^⭐/.test(f.name)).slice(0, 200);
 
-    const LOTE = 20;
+    const LOTE = 40;
     for (let i = 0; i < archivos.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
@@ -519,7 +541,9 @@ async function calcularDeuda() {
 
   topDeudoresMonto.sort((a, b) => b.saldo - a.saldo);
   topDeudoresAntiguedad.sort((a, b) => b.dias - a.dias);
-  return { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad };
+  const valor = { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad };
+  cacheDeuda = { valor, ts: Date.now() };
+  return valor;
 }
 
 // Cancelados/reprogramados: Calendar no guarda turnos borrados, así que no hay forma
@@ -617,6 +641,18 @@ function csvEscape(v) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// Un Content-Disposition con tildes/ñ sin encodear (ej. "José" o "Núñez", nombres
+// reales comunes acá) hace que Node tire ERR_INVALID_CHAR al setear el header — bug
+// real encontrado en producción, 2026-08-13 ("Error inesperado" al exportar la ficha
+// de un paciente con nombre acentuado). Se sacan los diacríticos para el filename
+// (solo afecta el nombre de archivo sugerido, no el contenido del PDF).
+function nombreArchivoSeguro(texto) {
+  return String(texto || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '')
+    .trim() || 'archivo';
+}
+
 async function exportTurnos(req, res) {
   const { desde, hasta, formato } = req.query;
   const calendar = getCalendarClient();
@@ -694,7 +730,7 @@ async function exportFichaPdf(req, res) {
     mostrarFormaPago: true,
   });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${nombre}_${apellido}_ficha.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoSeguro(nombre)}_${nombreArchivoSeguro(apellido)}_ficha.pdf"`);
   res.status(200).send(buffer);
 }
 
@@ -722,6 +758,6 @@ async function exportFinancieroPdf(req, res) {
     soloFinanciero: true,
   });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${nombre}_${apellido}_estado_cuenta.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoSeguro(nombre)}_${nombreArchivoSeguro(apellido)}_estado_cuenta.pdf"`);
   res.status(200).send(buffer);
 }
