@@ -1466,7 +1466,7 @@
         `${nombre}\n` +
         `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
         `Cualquier cosa que necesites cambiar o consultar, entrá acá:\n${link}\n\n` +
-        `¡Nos vemos pronto!`;
+        `Más cerca de la fecha vas a poder confirmar el turno por el mismo link.`;
     }
 
     // Plantilla (2026-08-12, novena vuelta): el saludo, el nombre, la fecha/hora y el
@@ -2454,25 +2454,25 @@
   }
 
   // `dniId` es opcional (el form de sobreturno, "t-*", no tiene campo de DNI) — solo el
-  // form combinado de crear/editar turno ("mc-*") lo pasa.
+  // form combinado de crear/editar turno ("mc-*") lo pasa. Nombre y apellido se combinan
+  // en un solo string ANTES de mandarlo (trim de cada parte por separado, ver el pedido
+  // 2026-08-13 — un espacio colgado en cualquiera de los dos campos podía dejar un
+  // doble espacio que rompía el .includes() de buscarTelefono contra el título del
+  // turno; normalizarTexto() en lib/googleCalendar.js también se reforzó para colapsar
+  // espacios de más, así que esto queda cubierto dos veces).
+  //
+  // UX de confirmación (pedido explícito, 2026-08-13): NO se autocompleta directo —
+  // se junta teléfono (buscarTelefono) + DNI con prioridad ficha>turno (mismo criterio
+  // que antes, ahora resuelto ANTES de preguntar) y se muestra un popup "¿Estos datos
+  // son correctos?" con lo encontrado. Sí completa los dos campos, No no toca nada — el
+  // motivo es el mismo por el que ya no se usa matching solo por nombre en otras partes
+  // del proyecto: dos pacientes con nombre parecido no deberían mezclar sus datos sin
+  // que alguien lo confirme a ojo.
   function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId, iti, dniId) {
     let debounce = null;
     function trigger() {
       clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        const nombreCompleto = (document.getElementById(nombreId).value + ' ' + document.getElementById(apellidoId).value).trim();
-        const telInput = document.getElementById(telefonoId);
-        const dniInput = dniId ? document.getElementById(dniId) : null;
-        if (!nombreCompleto || telInput.value.trim()) return;
-        fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
-          .then((r) => (r.ok ? r.json() : { telefono: null, dni: null }))
-          .then((data) => {
-            if (!data.telefono || telInput.value.trim()) return;
-            setNumeroAutocompletado(iti, data.telefono, data.telefonoVerificado);
-            autocompletarDni(dniInput, data.telefono, data.dni);
-          })
-          .catch(() => {});
-      }, 500);
+      debounce = setTimeout(() => buscarYConfirmarDatos(nombreId, apellidoId, telefonoId, iti, dniId), 500);
     }
     document.getElementById(nombreId).addEventListener('blur', trigger);
     document.getElementById(apellidoId).addEventListener('blur', trigger);
@@ -2480,25 +2480,53 @@
   wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono', itiTTelefono);
   wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono', itiMcTelefono, 'mc-dni');
 
-  // Autocompletar DNI (ver el pedido, 2026-08-13): prioridad 1 = DNI de la ficha del
-  // paciente en /pacientes (más confiable, resuelto por teléfono contra
-  // api/gestion/pacientes.js modo=dni-por-telefono); prioridad 2, si no tiene ficha =
-  // `dniTurno`, el DNI que ya vino en la misma respuesta de arriba (turno anterior más
-  // reciente de esa persona, mismo candidato que el teléfono). Si ninguna aparece, el
-  // campo queda vacío para cargarlo a mano — no es obligatorio, y ese turno va a
-  // aparecer solo como "sin DNI" en la lista de tareas del sidebar hasta completarse.
-  function autocompletarDni(dniInput, telefono, dniTurno) {
-    if (!dniInput || dniInput.value.trim()) return;
-    fetch(`/api/gestion/pacientes?modo=dni-por-telefono&telefono=${encodeURIComponent(telefono)}&key=${encodeURIComponent(gestionKey)}`)
-      .then((r) => (r.ok ? r.json() : { dni: null }))
-      .then((data) => {
-        if (dniInput.value.trim()) return; // por si se tipeó a mano mientras se esperaba
-        const dni = data.dni || dniTurno;
-        if (dni) dniInput.value = dni;
-      })
-      .catch(() => {
-        if (!dniInput.value.trim() && dniTurno) dniInput.value = dniTurno;
-      });
+  async function buscarYConfirmarDatos(nombreId, apellidoId, telefonoId, iti, dniId) {
+    const nombreCompleto = `${document.getElementById(nombreId).value.trim()} ${document.getElementById(apellidoId).value.trim()}`.trim();
+    const telInput = document.getElementById(telefonoId);
+    const dniInput = dniId ? document.getElementById(dniId) : null;
+    const yaCompletos = () => telInput.value.trim() || (dniInput && dniInput.value.trim());
+    if (!nombreCompleto || yaCompletos()) return;
+
+    let data;
+    try {
+      const r = await fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`);
+      data = r.ok ? await r.json() : { telefono: null, dni: null };
+    } catch {
+      return;
+    }
+    if (!data.telefono || yaCompletos()) return;
+
+    // Prioridad 1: DNI de la ficha del paciente (más confiable, resuelto por teléfono
+    // contra api/gestion/pacientes.js). Prioridad 2, si no tiene ficha: `data.dni`, el
+    // DNI del turno anterior más reciente que ya vino en la misma respuesta de arriba.
+    let dniFinal = data.dni || null;
+    if (dniInput) {
+      try {
+        const r2 = await fetch(`/api/gestion/pacientes?modo=dni-por-telefono&telefono=${encodeURIComponent(data.telefono)}&key=${encodeURIComponent(gestionKey)}`);
+        const data2 = r2.ok ? await r2.json() : { dni: null };
+        if (data2.dni) dniFinal = data2.dni;
+      } catch {
+        // sin conexión al índice de fichas: se sigue con el DNI del turno si había uno
+      }
+    }
+    if (yaCompletos()) return; // se completó a mano mientras se esperaba
+
+    // " · " en vez de salto de línea: #confirm-msg es un <p> de texto plano sin
+    // white-space:pre-line (lo comparte con otros diálogos de confirmación), así que un
+    // "\n" se vería colapsado en un solo espacio de cualquier forma.
+    const telefonoParaMostrar = data.telefonoVerificado ? `+${data.telefono}` : data.telefono;
+    const mensaje = dniInput
+      ? `Teléfono: ${telefonoParaMostrar} · DNI: ${dniFinal || 'no encontrado'}`
+      : `Teléfono: ${telefonoParaMostrar}`;
+    const confirmado = await confirmDialog({
+      title: '¿Estos datos son correctos?',
+      message: mensaje,
+      confirmLabel: 'Sí',
+      cancelLabel: 'No',
+    });
+    if (!confirmado || yaCompletos()) return;
+    setNumeroAutocompletado(iti, data.telefono, data.telefonoVerificado);
+    if (dniInput && dniFinal) dniInput.value = dniFinal;
   }
 
   // ---------- Dropdown de autocompletado de pacientes mientras se escribe ----------
