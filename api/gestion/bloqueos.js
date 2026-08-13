@@ -1,5 +1,5 @@
 import {
-  getCalendarClient, CALENDAR_ID, BLOCK_MARKER, pad2, toArgDate, isValidGestionKey,
+  getCalendarClient, CALENDAR_ID, BLOCK_MARKER, TIME_ZONE, pad2, toArgDate, isValidGestionKey,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 
@@ -9,14 +9,15 @@ function nextDayStr(dateStr) {
   return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
 }
 
-// Bloquear y desbloquear un día completo comparten ruta (distinguidos por "accion")
-// para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
+// Bloquear/desbloquear un día completo y bloquear un horario puntual comparten ruta
+// (distinguidos por `modo`) para no pasarnos del límite de funciones serverless del
+// plan gratuito de Vercel (fusiona lo que antes eran bloqueo-dia.js + bloquear-horario.js).
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
 
-  const { key, date, motivo, accion } = req.body;
+  const { key, date, motivo, accion, horaInicio, horaFin, modo } = req.body;
 
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
@@ -24,6 +25,8 @@ export default async function handler(req, res) {
 
   try {
     const calendar = getCalendarClient();
+
+    if (modo === 'horario') return await bloquearHorario(calendar, req, res);
 
     if (accion === 'desbloquear') {
       const dayStart = toArgDate(date, '00:00');
@@ -64,7 +67,35 @@ export default async function handler(req, res) {
     res.status(200).json({ success: true, message: `Día ${date} bloqueado.` });
   } catch (err) {
     console.error(err);
-    await avisarFallo({ endpoint: 'api/gestion/bloqueo-dia.js', detalle: accion, error: err });
-    res.status(500).json({ success: false, message: 'Error al procesar el bloqueo del día.' });
+    await avisarFallo({ endpoint: 'api/gestion/bloqueos.js', detalle: modo === 'horario' ? 'horario' : accion, error: err });
+    res.status(500).json({ success: false, message: 'Error al procesar el bloqueo.' });
   }
+}
+
+async function bloquearHorario(calendar, req, res) {
+  const { date, horaInicio, horaFin, motivo } = req.body;
+  const start = toArgDate(date, horaInicio);
+  const end = toArgDate(date, horaFin);
+
+  if (!(end > start)) {
+    return res.status(200).json({
+      success: false,
+      message: 'La hora de fin tiene que ser posterior a la de inicio.',
+    });
+  }
+
+  await calendar.events.insert({
+    calendarId: CALENDAR_ID,
+    requestBody: {
+      summary: motivo ? `No atiende - ${motivo}` : 'No atiende',
+      description: BLOCK_MARKER,
+      start: { dateTime: start.toISOString(), timeZone: TIME_ZONE },
+      end: { dateTime: end.toISOString(), timeZone: TIME_ZONE },
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Bloqueado de ${horaInicio} a ${horaFin} el ${date}.`,
+  });
 }

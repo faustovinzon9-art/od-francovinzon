@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel administrativo | Franco Vinzón Odontólogo</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/isologo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1E3A5F; --navy-soft: #3E5A80; --gold: #D4A24C;
+    --cream: #FAF9F6; --line: #E9E4D8; --white: #FFFFFF;
+    --text: #2A2A2A; --muted: #8A8578;
+    --ok: #4F9A3C; --bad: #C1443A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
+  .hidden { display: none !important; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; font-size: 14px; }
+
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-box { background: var(--white); border-radius: 20px; padding: 32px 28px; max-width: 320px; width: 100%; box-shadow: 0 10px 40px rgba(30,58,95,.12); text-align: center; }
+  .login-box img { height: 40px; margin-bottom: 18px; }
+  .login-box h1 { font-size: 20px; margin-bottom: 6px; }
+  .login-box p { color: var(--muted); font-size: 12.5px; margin-bottom: 18px; }
+  .login-box input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .login-box input:focus { outline: none; border-color: var(--gold); }
+  .login-box button { width: 100%; background: var(--navy); color: var(--white); border: none; padding: 11px; border-radius: 10px; font-weight: 600; }
+  .login-error { color: var(--bad); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+
+  #app { max-width: 1280px; margin: 0 auto; padding: 20px 16px 60px; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .topbar img { width: 170px; max-width: 50vw; height: auto; }
+  .topbar h1 { font-size: 18px; }
+  .logout-btn { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  .layout { display: flex; gap: 24px; align-items: flex-start; }
+  .nav { display: flex; overflow-x: auto; gap: 6px; margin-bottom: 16px; padding-bottom: 4px; }
+  .nav button {
+    flex-shrink: 0; padding: 9px 14px; border-radius: 100px; border: 1.5px solid var(--line);
+    background: var(--white); color: var(--navy); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  }
+  .nav button.active { background: var(--navy); border-color: var(--navy); color: var(--white); }
+  @media (min-width: 980px) {
+    .nav { flex-direction: column; overflow: visible; width: 230px; flex-shrink: 0; position: sticky; top: 20px; }
+    .nav button { text-align: left; }
+  }
+  .content { flex: 1; min-width: 0; }
+
+  .card { background: var(--white); border-radius: 16px; padding: 22px; box-shadow: 0 1px 8px rgba(30,58,95,.06); margin-bottom: 18px; }
+  .card h2 { font-size: 18px; margin-bottom: 4px; }
+  .card .hint { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+  .field-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .field { flex: 1; min-width: 160px; }
+  .field.full { flex-basis: 100%; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--white);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--gold); }
+  .field textarea { min-height: 90px; resize: vertical; }
+  .btn { padding: 10px 18px; border-radius: 10px; border: none; font-weight: 600; font-size: 13px; }
+  .btn-primary { background: var(--navy); color: var(--white); }
+  .btn-primary:hover { background: var(--navy-soft); }
+  .btn-gold { background: var(--gold); color: var(--white); }
+  .btn-danger { background: var(--bad); color: var(--white); }
+  .btn-outline { background: var(--white); border: 1.5px solid var(--line); color: var(--navy); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .msg { font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+  .msg.error { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .table-wrap { overflow-x: auto; }
+
+  .tag-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; background: var(--cream); border: 1px solid var(--line); border-radius: 100px; padding: 5px 8px 5px 12px; font-size: 12.5px; }
+  .tag button { background: none; border: none; color: var(--muted); font-size: 13px; line-height: 1; padding: 2px; }
+  .tag button:hover { color: var(--bad); }
+  .tag-add { display: flex; gap: 8px; }
+  .tag-add input { flex: 1; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-tile { background: var(--cream); border-radius: 12px; padding: 14px 16px; }
+  .stat-tile .num { font-family: 'Fraunces', Georgia, serif; font-size: 26px; color: var(--navy); }
+  .stat-tile .label { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 100px; font-size: 13px; font-weight: 600; }
+  .status-pill.ok { background: rgba(79,154,60,.12); color: var(--ok); }
+  .status-pill.bad { background: rgba(193,68,55,.12); color: var(--bad); }
+
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin: 14px 0; }
+  .bar { flex: 1; background: var(--navy); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
+  .bar:hover { background: var(--gold); }
+
+  .activity-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-item .fecha { color: var(--muted); white-space: nowrap; font-size: 11.5px; min-width: 120px; }
+  .activity-item .tipo { font-weight: 700; color: var(--navy); }
+
+  .toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { background: var(--navy); color: var(--white); padding: 11px 20px; border-radius: 100px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,.18); opacity: 0; transform: translateY(10px); transition: opacity .25s ease, transform .25s ease; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(30,58,95,.35); display: flex; align-items: center; justify-content: center; z-index: 998; opacity: 0; transition: opacity .18s ease; padding: 20px; }
+  .confirm-overlay.show { opacity: 1; }
+  .confirm-box { background: var(--white); border-radius: 16px; padding: 24px; max-width: 340px; width: 100%; }
+  .confirm-box h3 { font-size: 16px; margin-bottom: 8px; }
+  .confirm-box p { font-size: 13px; color: var(--text); margin-bottom: 18px; }
+  .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  .search-box { display: flex; gap: 8px; margin-bottom: 14px; }
+  .search-box input { flex: 1; }
+  .patient-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .patient-row:last-child { border-bottom: none; }
+  .patient-row .nombre { font-weight: 600; }
+  .patient-row .dni { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <img src="../assets/isologo.png" alt="">
+    <h1>Panel administrativo</h1>
+    <p>Acceso solo para Fausto — clave propia, distinta de la de gestión.</p>
+    <input type="password" id="key-input" placeholder="Clave de administrador" autocomplete="off">
+    <button id="login-btn">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
+    <h1>Panel administrativo</h1>
+    <button class="logout-btn" id="logout-btn">Salir</button>
+  </div>
+
+  <div class="layout">
+    <div class="nav" id="nav">
+      <button data-sec="dashboard" class="active">📊 Dashboard</button>
+      <button data-sec="horarios">🗓️ Horarios y agenda</button>
+      <button data-sec="textos">✏️ Textos y plantillas</button>
+      <button data-sec="listas">📋 Listas desplegables</button>
+      <button data-sec="radios">📻 Radios</button>
+      <button data-sec="pacientes">🧾 Datos de pacientes</button>
+      <button data-sec="accesos">🔑 Accesos</button>
+      <button data-sec="actividad">🕒 Registro de actividad</button>
+      <button data-sec="monitoreo">🛠️ Monitoreo técnico</button>
+    </div>
+
+    <div class="content">
+
+      <!-- ---------- Dashboard ---------- -->
+      <div class="section" id="sec-dashboard">
+        <div class="card">
+          <h2>Dashboard de métricas</h2>
+          <p class="hint">Últimos <span id="dash-rango">30</span> días. <button class="btn btn-outline" id="dash-refrescar" style="padding:5px 12px;font-size:11.5px;">Actualizar</button></p>
+          <div class="stat-grid" id="dash-stats"></div>
+          <h3 style="font-size:14px;margin-bottom:6px;">Turnos por día</h3>
+          <div class="bars" id="dash-bars"></div>
+          <div class="msg" id="dash-msg"></div>
+        </div>
+        <div class="card">
+          <h2>Top deudores por monto</h2>
+          <div class="table-wrap"><table id="dash-deudores-monto"><thead><tr><th>Paciente</th><th>Saldo</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="card">
+          <h2>Top deudores por antigüedad de la deuda</h2>
+          <div class="table-wrap"><table id="dash-deudores-antiguedad"><thead><tr><th>Paciente</th><th>Días sin pago</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- ---------- Horarios y agenda ---------- -->
+      <div class="section hidden" id="sec-horarios">
+        <div class="card">
+          <h2>Horario semanal</h2>
+          <p class="hint">Rangos "HH:mm-HH:mm" separados por coma para días con más de un turno (ej. martes mañana y tarde). Dejar vacío = cerrado ese día.</p>
+          <div id="horarios-dias"></div>
+          <div class="field-row">
+            <div class="field"><label>Duración de turno (min)</label><input type="number" id="h-slot" min="5" step="5"></div>
+            <div class="field"><label>Duración de sobreturno (min)</label><input type="number" id="h-sobreturno" min="5" step="5"></div>
+          </div>
+          <button class="btn btn-primary" id="h-guardar">Guardar horarios</button>
+          <div class="msg" id="h-msg"></div>
+        </div>
+        <div class="card">
+          <h2>Feriados / días y horarios bloqueados</h2>
+          <div class="field-row">
+            <div class="field"><label>Fecha</label><input type="date" id="b-fecha"></div>
+            <div class="field"><label>Motivo (opcional)</label><input type="text" id="b-motivo"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Desde (vacío = día completo)</label><input type="time" id="b-desde"></div>
+            <div class="field"><label>Hasta</label><input type="time" id="b-hasta"></div>
+          </div>
+          <button class="btn btn-gold" id="b-bloquear">Bloquear</button>
+          <div class="msg" id="b-msg"></div>
+          <div class="table-wrap" style="margin-top:16px;"><table id="b-tabla"><thead><tr><th>Fecha</th><th>Horario</th><th>Motivo</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- ---------- Textos y plantillas ---------- -->
+      <div class="section hidden" id="sec-textos">
+        <div class="card">
+          <h2>Plantilla del mensaje de WhatsApp (recordatorio, /gestion)</h2>
+          <p class="hint">Placeholders disponibles: {{saludo}} {{nombre}} {{cuando}} {{hora}} {{tipo}} {{link}}</p>
+          <div class="field full"><textarea id="t-whatsapp" style="min-height:140px;"></textarea></div>
+          <h2 style="margin-top:18px;">Textos fijos de /turnos</h2>
+          <div class="field-row">
+            <div class="field full"><label>Dirección del consultorio</label><input type="text" id="t-direccion"></div>
+          </div>
+          <div class="field-row">
+            <div class="field full"><label>Bienvenida a paciente nuevo</label><input type="text" id="t-bienvenida"></div>
+          </div>
+          <button class="btn btn-primary" id="t-guardar">Guardar textos</button>
+          <div class="msg" id="t-msg"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Listas desplegables ---------- -->
+      <div class="section hidden" id="sec-listas">
+        <div class="card">
+          <h2>Obras sociales</h2>
+          <div class="tag-list" id="l-obras"></div>
+          <div class="tag-add"><input type="text" id="l-obras-nuevo" placeholder="Agregar obra social..."><button class="btn btn-outline" data-lista="obrasSociales">Agregar</button></div>
+        </div>
+        <div class="card">
+          <h2>Planes</h2>
+          <div class="tag-list" id="l-planes"></div>
+          <div class="tag-add"><input type="text" id="l-planes-nuevo" placeholder="Agregar plan..."><button class="btn btn-outline" data-lista="planes">Agregar</button></div>
+        </div>
+        <div class="card">
+          <h2>Tipos de tratamiento</h2>
+          <div class="tag-list" id="l-tratamientos"></div>
+          <div class="tag-add"><input type="text" id="l-tratamientos-nuevo" placeholder="Agregar tratamiento..."><button class="btn btn-outline" data-lista="tratamientos">Agregar</button></div>
+        </div>
+        <div class="msg" id="l-msg"></div>
+      </div>
+
+      <!-- ---------- Radios ---------- -->
+      <div class="section hidden" id="sec-radios">
+        <div class="card">
+          <h2>Estaciones de radio (/gestion)</h2>
+          <p class="hint">Nombre + URL del stream de audio directo (mp3/aac).</p>
+          <div id="radios-lista"></div>
+          <button class="btn btn-outline" id="r-agregar" style="margin-top:8px;">+ Agregar estación</button>
+          <div class="row-actions"><button class="btn btn-primary" id="r-guardar">Guardar estaciones</button></div>
+          <div class="msg" id="r-msg"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Datos de pacientes ---------- -->
+      <div class="section hidden" id="sec-pacientes">
+        <div class="card">
+          <h2>Buscar paciente</h2>
+          <div class="search-box"><input type="text" id="p-buscar" placeholder="Nombre o apellido..."></div>
+          <div id="p-resultados"></div>
+        </div>
+        <div class="card">
+          <h2>Exportar</h2>
+          <div class="row-actions">
+            <button class="btn btn-outline" id="p-export-pacientes-csv">Exportar todos los pacientes (CSV)</button>
+          </div>
+          <h3 style="font-size:14px;margin:16px 0 8px;">Turnos por rango de fechas</h3>
+          <div class="field-row">
+            <div class="field"><label>Desde</label><input type="date" id="p-turnos-desde"></div>
+            <div class="field"><label>Hasta</label><input type="date" id="p-turnos-hasta"></div>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-outline" id="p-export-turnos-csv">Exportar turnos (CSV)</button>
+            <button class="btn btn-outline" id="p-export-turnos-pdf">Exportar turnos (PDF)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- Accesos ---------- -->
+      <div class="section hidden" id="sec-accesos">
+        <div class="card">
+          <h2>Cambiar clave de /gestion</h2>
+          <p class="hint">Requiere haber configurado VERCEL_API_TOKEN en Vercel (una sola vez). Puede tardar unos minutos en aplicarse.</p>
+          <div class="field"><label>Nueva clave (mín. 6 caracteres)</label><input type="text" id="a-nueva-clave"></div>
+          <button class="btn btn-danger" id="a-cambiar">Cambiar clave</button>
+          <div class="msg" id="a-msg"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Actividad ---------- -->
+      <div class="section hidden" id="sec-actividad">
+        <div class="card">
+          <h2>Registro de actividad</h2>
+          <div id="act-lista"></div>
+        </div>
+      </div>
+
+      <!-- ---------- Monitoreo ---------- -->
+      <div class="section hidden" id="sec-monitoreo">
+        <div class="card">
+          <h2>Estado general</h2>
+          <div id="mon-estado"></div>
+          <button class="btn btn-outline" id="mon-detalle-btn" style="margin-top:14px;">Ver detalle técnico</button>
+          <pre id="mon-detalle" class="hidden" style="margin-top:12px; background:var(--cream); padding:12px; border-radius:10px; font-size:11.5px; overflow-x:auto; white-space:pre-wrap;"></pre>
+        </div>
+        <div class="card">
+          <h2>Últimas alertas</h2>
+          <div id="mon-alertas"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="confirm-overlay hidden" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-msg"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline" id="confirm-cancel-btn">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let adminKey = sessionStorage.getItem('adminKey') || '';
+  const loginScreen = document.getElementById('login-screen');
+  const appEl = document.getElementById('app');
+  const keyInput = document.getElementById('key-input');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
+  const toastContainer = document.getElementById('toast-container');
+  const confirmOverlay = document.getElementById('confirm-overlay');
+
+  function toast(mensaje) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = mensaje;
+    toastContainer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, 2600);
+  }
+
+  function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' }) {
+    return new Promise((resolve) => {
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-msg').textContent = message;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      const cancelBtn = document.getElementById('confirm-cancel-btn');
+      okBtn.textContent = confirmLabel;
+      cancelBtn.textContent = cancelLabel;
+      confirmOverlay.classList.remove('hidden');
+      requestAnimationFrame(() => confirmOverlay.classList.add('show'));
+      function cerrar(resultado) {
+        confirmOverlay.classList.remove('show');
+        setTimeout(() => confirmOverlay.classList.add('hidden'), 180);
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(resultado);
+      }
+      function onOk() { cerrar(true); }
+      function onCancel() { cerrar(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  function onUnauthorized() {
+    sessionStorage.removeItem('adminKey');
+    adminKey = '';
+    appEl.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    loginError.textContent = 'Clave incorrecta.';
+  }
+
+  async function apiGet(recurso, extra = {}) {
+    const qs = new URLSearchParams({ recurso, key: adminKey, ...extra }).toString();
+    const r = await fetch(`/api/gestion/admin?${qs}`);
+    if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+    return r.json();
+  }
+  async function apiPost(recurso, body = {}) {
+    const r = await fetch('/api/gestion/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recurso, key: adminKey, ...body }),
+    });
+    if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
+    return r.json();
+  }
+
+  function tryLogin() {
+    const k = keyInput.value.trim();
+    if (!k) return;
+    adminKey = k;
+    sessionStorage.setItem('adminKey', k);
+    arrancar();
+  }
+  loginBtn.addEventListener('click', tryLogin);
+  keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('adminKey');
+    adminKey = '';
+    appEl.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+  });
+
+  function arrancar() {
+    if (!adminKey) return;
+    loginScreen.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    fetch('/api/gestion/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: adminKey, recurso: 'login-log', panel: '/admin' }),
+    }).catch(() => {});
+    cargarSeccion('dashboard');
+  }
+  if (adminKey) arrancar();
+
+  // ---------- Navegación ----------
+  const SECCIONES_CARGADAS = new Set();
+  document.getElementById('nav').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-sec]');
+    if (!btn) return;
+    cargarSeccion(btn.dataset.sec);
+  });
+  function cargarSeccion(sec) {
+    document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.sec === sec));
+    document.querySelectorAll('.section').forEach((s) => s.classList.toggle('hidden', s.id !== `sec-${sec}`));
+    if (SECCIONES_CARGADAS.has(sec)) return;
+    SECCIONES_CARGADAS.add(sec);
+    const loaders = {
+      dashboard: cargarDashboard, horarios: cargarHorarios, textos: cargarTextos,
+      listas: cargarListas, radios: cargarRadios, pacientes: () => {},
+      accesos: () => {}, actividad: cargarActividad, monitoreo: cargarMonitoreo,
+    };
+    (loaders[sec] || (() => {}))();
+  }
+
+  function setMsg(id, texto, tipo) {
+    const el = document.getElementById(id);
+    el.textContent = texto;
+    el.className = `msg ${tipo || ''}`;
+  }
+
+  // ---------- Dashboard ----------
+  async function cargarDashboard() {
+    try {
+      const m = await apiGet('metricas', { dias: 30 });
+      document.getElementById('dash-rango').textContent = m.rangoDias;
+      document.getElementById('dash-stats').innerHTML = [
+        ['Turnos totales', m.totalTurnos],
+        ['% reservado online', `${m.porcentajeOnline}%`],
+        ['% cargado por Ayelen', `${m.porcentajeCargadoAyelen}%`],
+        ['% confirmados', `${m.porcentajeConfirmados}%`],
+        ['% pacientes nuevos', `${m.porcentajeNuevos}%`],
+        ['% recurrentes', `${m.porcentajeRecurrentes}%`],
+        ['% pacientes con deuda', m.porcentajeConDeuda == null ? 'N/D' : `${m.porcentajeConDeuda}%`],
+      ].map(([label, num]) => `<div class="stat-tile"><div class="num">${num}</div><div class="label">${label}</div></div>`).join('');
+
+      const max = Math.max(1, ...m.volumenPorDia.map((d) => d.cantidad));
+      document.getElementById('dash-bars').innerHTML = m.volumenPorDia.map((d) =>
+        `<div class="bar" style="height:${Math.max(2, Math.round((d.cantidad / max) * 116))}px" title="${d.fecha}: ${d.cantidad}"></div>`
+      ).join('') || '<p class="hint">Sin turnos en este rango.</p>';
+
+      document.querySelector('#dash-deudores-monto tbody').innerHTML = m.topDeudoresMonto.map((d) =>
+        `<tr><td>${d.nombre}</td><td>$${d.saldo.toLocaleString('es-AR')}</td></tr>`
+      ).join('') || '<tr><td colspan="2">Sin deudores.</td></tr>';
+
+      document.querySelector('#dash-deudores-antiguedad tbody').innerHTML = m.topDeudoresAntiguedad.map((d) =>
+        `<tr><td>${d.nombre}</td><td>${d.dias} días</td></tr>`
+      ).join('') || '<tr><td colspan="2">Sin datos.</td></tr>';
+
+      setMsg('dash-msg', '', '');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('dash-msg', 'No se pudieron cargar las métricas.', 'error');
+    }
+  }
+  document.getElementById('dash-refrescar').addEventListener('click', cargarDashboard);
+
+  // ---------- Horarios y agenda ----------
+  const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  function rangosATexto(rangos) { return (rangos || []).map(([a, b]) => `${a}-${b}`).join(', '); }
+  function textoARangos(texto) {
+    return texto.split(',').map((s) => s.trim()).filter(Boolean).map((s) => {
+      const [a, b] = s.split('-').map((x) => x.trim());
+      return [a, b];
+    }).filter(([a, b]) => a && b);
+  }
+  async function cargarHorarios() {
+    try {
+      const h = await apiGet('horarios');
+      document.getElementById('horarios-dias').innerHTML = DIAS_SEMANA.map((nombre, i) =>
+        `<div class="field-row"><div class="field full"><label>${nombre}</label><input type="text" data-dia="${i}" value="${rangosATexto(h.schedule[i])}" placeholder="Ej: 08:00-15:00"></div></div>`
+      ).join('');
+      document.getElementById('h-slot').value = h.slotMinutes;
+      document.getElementById('h-sobreturno').value = h.sobreturnoMinutes;
+
+      document.querySelector('#b-tabla tbody').innerHTML = h.bloqueos.map((b) =>
+        `<tr><td>${b.fecha}</td><td>${b.diaCompleto ? 'Día completo' : `${b.horaInicio}-${b.horaFin}`}</td><td>${b.motivo}</td>` +
+        `<td><button class="btn btn-outline" data-desbloquear="${b.id}" style="padding:5px 10px;font-size:11px;">Quitar</button></td></tr>`
+      ).join('') || '<tr><td colspan="4">Sin bloqueos próximos.</td></tr>';
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('h-msg', 'No se pudieron cargar los horarios.', 'error');
+    }
+  }
+  document.getElementById('h-guardar').addEventListener('click', async () => {
+    const schedule = {};
+    document.querySelectorAll('#horarios-dias [data-dia]').forEach((input) => {
+      schedule[input.dataset.dia] = textoARangos(input.value);
+    });
+    setMsg('h-msg', 'Guardando...', '');
+    try {
+      const res = await apiPost('horarios', {
+        accion: 'guardar', schedule,
+        slotMinutes: document.getElementById('h-slot').value,
+        sobreturnoMinutes: document.getElementById('h-sobreturno').value,
+      });
+      setMsg('h-msg', res.success ? 'Guardado. Se aplica al toque.' : (res.message || 'No se pudo guardar.'), res.success ? 'ok' : 'error');
+      if (res.success) toast('Horarios actualizados');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('h-msg', 'Error de red.', 'error');
+    }
+  });
+  document.getElementById('b-bloquear').addEventListener('click', async () => {
+    const fecha = document.getElementById('b-fecha').value;
+    const motivo = document.getElementById('b-motivo').value.trim();
+    const desde = document.getElementById('b-desde').value;
+    const hasta = document.getElementById('b-hasta').value;
+    if (!fecha) { setMsg('b-msg', 'Elegí una fecha.', 'error'); return; }
+    setMsg('b-msg', 'Bloqueando...', '');
+    try {
+      const body = desde && hasta
+        ? { accion: 'bloquear-horario', date: fecha, horaInicio: desde, horaFin: hasta, motivo }
+        : { accion: 'bloquear-dia', date: fecha, motivo };
+      const res = await apiPost('horarios', body);
+      setMsg('b-msg', res.success ? 'Bloqueado.' : (res.message || 'No se pudo bloquear.'), res.success ? 'ok' : 'error');
+      if (res.success) { toast('Bloqueo creado'); cargarHorarios(); }
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('b-msg', 'Error de red.', 'error');
+    }
+  });
+  document.getElementById('b-tabla').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-desbloquear]');
+    if (!btn) return;
+    const ok = await confirmDialog({ title: 'Quitar bloqueo', message: '¿Estás seguro?', confirmLabel: 'Quitar' });
+    if (!ok) return;
+    try {
+      await apiPost('horarios', { accion: 'desbloquear', eventId: btn.dataset.desbloquear });
+      toast('Bloqueo eliminado');
+      cargarHorarios();
+    } catch { /* onUnauthorized ya maneja el 401 */ }
+  });
+
+  // ---------- Textos y plantillas ----------
+  async function cargarTextos() {
+    try {
+      const t = await apiGet('textos');
+      document.getElementById('t-whatsapp').value = t.whatsappTemplate || '';
+      document.getElementById('t-direccion').value = t.direccion || '';
+      document.getElementById('t-bienvenida').value = t.bienvenidaNuevoPaciente || '';
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('t-msg', 'No se pudieron cargar los textos.', 'error');
+    }
+  }
+  document.getElementById('t-guardar').addEventListener('click', async () => {
+    setMsg('t-msg', 'Guardando...', '');
+    try {
+      const res = await apiPost('textos', {
+        whatsappTemplate: document.getElementById('t-whatsapp').value,
+        direccion: document.getElementById('t-direccion').value,
+        bienvenidaNuevoPaciente: document.getElementById('t-bienvenida').value,
+      });
+      setMsg('t-msg', res.success ? 'Guardado.' : 'No se pudo guardar.', res.success ? 'ok' : 'error');
+      if (res.success) toast('Textos actualizados');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('t-msg', 'Error de red.', 'error');
+    }
+  });
+
+  // ---------- Listas desplegables ----------
+  let listasActuales = { obrasSociales: [], planes: [], tratamientos: [] };
+  const LISTA_EL = { obrasSociales: 'l-obras', planes: 'l-planes', tratamientos: 'l-tratamientos' };
+  function renderListas() {
+    Object.entries(LISTA_EL).forEach(([key, elId]) => {
+      document.getElementById(elId).innerHTML = (listasActuales[key] || []).map((v, i) =>
+        `<span class="tag">${v}<button data-quitar="${key}" data-idx="${i}">✕</button></span>`
+      ).join('');
+    });
+  }
+  async function cargarListas() {
+    try {
+      listasActuales = await apiGet('listas');
+      renderListas();
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('l-msg', 'No se pudieron cargar las listas.', 'error');
+    }
+  }
+  async function guardarListas() {
+    try {
+      const res = await apiPost('listas', listasActuales);
+      setMsg('l-msg', res.success ? 'Guardado.' : 'No se pudo guardar.', res.success ? 'ok' : 'error');
+      if (res.success) toast('Listas actualizadas');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('l-msg', 'Error de red.', 'error');
+    }
+  }
+  document.querySelectorAll('[data-lista]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lista = btn.dataset.lista;
+      const input = document.getElementById(`l-${lista === 'obrasSociales' ? 'obras' : lista}-nuevo`);
+      const valor = input.value.trim();
+      if (!valor) return;
+      listasActuales[lista] = [...(listasActuales[lista] || []), valor];
+      input.value = '';
+      renderListas();
+      guardarListas();
+    });
+  });
+  document.getElementById('sec-listas').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-quitar]');
+    if (!btn) return;
+    const lista = btn.dataset.quitar;
+    const idx = Number(btn.dataset.idx);
+    listasActuales[lista] = listasActuales[lista].filter((_, i) => i !== idx);
+    renderListas();
+    guardarListas();
+  });
+
+  // ---------- Radios ----------
+  let radiosActuales = [];
+  function renderRadios() {
+    document.getElementById('radios-lista').innerHTML = radiosActuales.map((est, i) => `
+      <div class="field-row" data-radio-idx="${i}">
+        <div class="field"><label>Nombre</label><input type="text" data-radio-campo="nombre" value="${(est.nombre || '').replace(/"/g, '&quot;')}"></div>
+        <div class="field" style="flex:2;"><label>URL del stream</label><input type="text" data-radio-campo="url" value="${(est.url || '').replace(/"/g, '&quot;')}"></div>
+        <button class="btn btn-outline" data-radio-quitar="${i}" style="align-self:flex-end;padding:9px 12px;">✕</button>
+      </div>
+    `).join('');
+  }
+  async function cargarRadios() {
+    try {
+      const r = await apiGet('radios');
+      radiosActuales = r.estaciones || [];
+      renderRadios();
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('r-msg', 'No se pudieron cargar las radios.', 'error');
+    }
+  }
+  document.getElementById('r-agregar').addEventListener('click', () => {
+    radiosActuales.push({ nombre: '', url: '' });
+    renderRadios();
+  });
+  document.getElementById('radios-lista').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-radio-quitar]');
+    if (!btn) return;
+    radiosActuales.splice(Number(btn.dataset.radioQuitar), 1);
+    renderRadios();
+  });
+  document.getElementById('radios-lista').addEventListener('input', (e) => {
+    const wrap = e.target.closest('[data-radio-idx]');
+    if (!wrap) return;
+    const i = Number(wrap.dataset.radioIdx);
+    radiosActuales[i][e.target.dataset.radioCampo] = e.target.value;
+  });
+  document.getElementById('r-guardar').addEventListener('click', async () => {
+    setMsg('r-msg', 'Guardando...', '');
+    try {
+      const res = await apiPost('radios', { estaciones: radiosActuales.filter((e) => e.nombre && e.url) });
+      setMsg('r-msg', res.success ? 'Guardado.' : (res.message || 'No se pudo guardar.'), res.success ? 'ok' : 'error');
+      if (res.success) toast('Radios actualizadas');
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('r-msg', 'Error de red.', 'error');
+    }
+  });
+
+  // ---------- Datos de pacientes ----------
+  let buscarTimer = null;
+  document.getElementById('p-buscar').addEventListener('input', (e) => {
+    clearTimeout(buscarTimer);
+    const q = e.target.value.trim();
+    if (q.length < 2) { document.getElementById('p-resultados').innerHTML = ''; return; }
+    buscarTimer = setTimeout(() => buscarPacientes(q), 300);
+  });
+  async function buscarPacientes(q) {
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=listar&key=${encodeURIComponent(adminKey)}`);
+      if (r.status === 401) { onUnauthorized(); return; }
+      const todos = await r.json();
+      const qn = q.toLowerCase();
+      const filtrados = todos.filter((p) => `${p.nombre} ${p.apellido}`.toLowerCase().includes(qn)).slice(0, 25);
+      document.getElementById('p-resultados').innerHTML = filtrados.map((p) => `
+        <div class="patient-row">
+          <div><div class="nombre">${p.nombre} ${p.apellido}</div><div class="dni">DNI ${p.dni || '—'}</div></div>
+          <div class="row-actions">
+            <a class="btn btn-outline" style="padding:6px 10px;font-size:11.5px;text-decoration:none;" href="/pacientes" target="_blank">Abrir en /pacientes</a>
+            <a class="btn btn-outline" style="padding:6px 10px;font-size:11.5px;text-decoration:none;" href="/api/gestion/admin?recurso=export-ficha&id=${p.id}&key=${encodeURIComponent(adminKey)}">Ficha (PDF)</a>
+            <a class="btn btn-outline" style="padding:6px 10px;font-size:11.5px;text-decoration:none;" href="/api/gestion/admin?recurso=export-financiero&id=${p.id}&key=${encodeURIComponent(adminKey)}">Estado de cuenta (PDF, sin forma de pago)</a>
+          </div>
+        </div>
+      `).join('') || '<p class="hint">Sin resultados.</p>';
+    } catch { /* red */ }
+  }
+  document.getElementById('p-export-pacientes-csv').addEventListener('click', () => {
+    window.location.href = `/api/gestion/admin?recurso=export-pacientes-csv&key=${encodeURIComponent(adminKey)}`;
+  });
+  document.getElementById('p-export-turnos-csv').addEventListener('click', () => {
+    const desde = document.getElementById('p-turnos-desde').value;
+    const hasta = document.getElementById('p-turnos-hasta').value;
+    if (!desde || !hasta) { toast('Elegí desde y hasta'); return; }
+    window.location.href = `/api/gestion/admin?recurso=export-turnos&desde=${desde}&hasta=${hasta}&key=${encodeURIComponent(adminKey)}`;
+  });
+  document.getElementById('p-export-turnos-pdf').addEventListener('click', () => {
+    const desde = document.getElementById('p-turnos-desde').value;
+    const hasta = document.getElementById('p-turnos-hasta').value;
+    if (!desde || !hasta) { toast('Elegí desde y hasta'); return; }
+    window.location.href = `/api/gestion/admin?recurso=export-turnos&desde=${desde}&hasta=${hasta}&formato=pdf&key=${encodeURIComponent(adminKey)}`;
+  });
+
+  // ---------- Accesos ----------
+  document.getElementById('a-cambiar').addEventListener('click', async () => {
+    const nuevaClave = document.getElementById('a-nueva-clave').value.trim();
+    if (nuevaClave.length < 6) { setMsg('a-msg', 'Mínimo 6 caracteres.', 'error'); return; }
+    const ok = await confirmDialog({
+      title: 'Cambiar clave de gestión',
+      message: 'Ayelen va a necesitar la clave nueva para volver a entrar a /gestion. ¿Confirmás?',
+      confirmLabel: 'Cambiar clave',
+    });
+    if (!ok) return;
+    setMsg('a-msg', 'Cambiando...', '');
+    try {
+      const res = await apiPost('accesos', { accion: 'rotar-gestion-key', nuevaClave });
+      setMsg('a-msg', res.message || (res.success ? 'Listo.' : 'No se pudo cambiar.'), res.success ? 'ok' : 'error');
+      if (res.success) { toast('Clave actualizada'); document.getElementById('a-nueva-clave').value = ''; }
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('a-msg', 'Error de red.', 'error');
+    }
+  });
+
+  // ---------- Actividad ----------
+  async function cargarActividad() {
+    try {
+      const { eventos } = await apiGet('actividad');
+      document.getElementById('act-lista').innerHTML = eventos.map((ev) => `
+        <div class="activity-item">
+          <span class="fecha">${new Date(ev.fecha).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}</span>
+          <span><span class="tipo">${ev.tipo}</span> — ${ev.detalle} <span style="color:var(--muted);">(${ev.actor})</span></span>
+        </div>
+      `).join('') || '<p class="hint">Sin actividad registrada todavía.</p>';
+    } catch (e) {
+      if (e.message !== 'unauthorized') toast('No se pudo cargar la actividad');
+    }
+  }
+
+  // ---------- Monitoreo ----------
+  async function cargarMonitoreo() {
+    try {
+      const m = await apiGet('monitoreo');
+      document.getElementById('mon-estado').innerHTML = m.ok
+        ? '<span class="status-pill ok">✅ Todo funcionando bien</span>'
+        : '<span class="status-pill bad">⚠️ Hay un problema</span>';
+      document.getElementById('mon-detalle').textContent = JSON.stringify(m, null, 2);
+
+      document.getElementById('mon-alertas').innerHTML = (m.alertasRecientes || []).map((a) => `
+        <div class="activity-item">
+          <span class="fecha">${new Date(a.fecha).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}</span>
+          <span><span class="tipo">${a.endpoint}</span> — ${a.mensaje}</span>
+        </div>
+      `).join('') || '<p class="hint">Sin alertas recientes.</p>';
+    } catch (e) {
+      if (e.message !== 'unauthorized') toast('No se pudo cargar el monitoreo');
+    }
+  }
+  document.getElementById('mon-detalle-btn').addEventListener('click', () => {
+    document.getElementById('mon-detalle').classList.toggle('hidden');
+  });
+</script>
+</body>
+</html>

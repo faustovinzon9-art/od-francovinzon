@@ -1,5 +1,6 @@
 import { getCalendarClient, getDisponibilidadMes, getHorariosLibresDia } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
+import { obtenerHorariosConfig } from '../lib/adminConfig.js';
 
 // Fusiona lo que antes eran disponibilidad-mes.js + horarios-dia.js (mismo patrón de
 // "modo" ya usado en api/gestion/buscar.js) para no sumar un archivo nuevo — ver
@@ -11,15 +12,16 @@ export default async function handler(req, res) {
   const esModoDia = req.query.modo === 'dia';
   try {
     const calendar = getCalendarClient();
+    const { schedule, slotMinutes } = await obtenerHorariosConfig();
 
     if (esModoDia) {
-      const free = await getHorariosLibresDia(calendar, req.query.date);
+      const free = await getHorariosLibresDia(calendar, req.query.date, schedule, slotMinutes);
       return res.status(200).json(free);
     }
 
     const year = parseInt(req.query.year, 10);
     const month = parseInt(req.query.month, 10); // 1-12
-    const result = await getDisponibilidadMes(calendar, year, month);
+    const result = await getDisponibilidadMes(calendar, year, month, schedule, slotMinutes);
     res.status(200).json(result);
   } catch (err) {
     console.error(err);

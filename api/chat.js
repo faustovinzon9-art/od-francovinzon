@@ -1,8 +1,9 @@
 import {
   getCalendarClient, getDisponibilidadMes, getHorariosLibresDia, crearTurno,
-  CLINIC_ADDRESS, WEEKLY_SCHEDULE,
+  CLINIC_ADDRESS,
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
+import { obtenerHorariosConfig } from '../lib/adminConfig.js';
 
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const MAX_MENSAJES = 30; // tope de mensajes por conversación, para cuidar la cuota gratis de Gemini
@@ -10,21 +11,22 @@ const MAX_VUELTAS_FUNCIONES = 6; // tope de idas y vueltas de function-calling p
 
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
-function horariosAtencionTexto() {
+function horariosAtencionTexto(schedule) {
   return DIAS_SEMANA.map((nombre, i) => {
-    const rangos = WEEKLY_SCHEDULE[i] || [];
+    const rangos = schedule[i] || [];
     if (rangos.length === 0) return `${nombre}: cerrado`;
     return `${nombre}: ${rangos.map(([ini, fin]) => `${ini} a ${fin}`).join(' y ')}`;
   }).join(', ');
 }
 
-function systemPrompt(origen) {
+async function systemPrompt(origen) {
+  const { schedule } = await obtenerHorariosConfig();
   return `Sos el asistente virtual del Consultorio Odontológico Franco Vinzón, en ${CLINIC_ADDRESS}. Respondés siempre en español rioplatense, cálido y claro, sin exagerar la extensión.
 
 Respondé siempre en texto plano conversacional, como si estuvieras chateando por WhatsApp. NUNCA uses sintaxis Markdown: nada de asteriscos para negrita (**texto**), nada de listas con guion o viñeta al inicio de línea, nada de numeración tipo "1.", nada de encabezados con #. Si necesitás nombrar varias cosas (tratamientos, horarios, etc.), hacelo en una oración normal separada por comas, o en líneas simples separadas por saltos de línea sin ningún símbolo delante.
 
 Datos reales del consultorio (no inventes otros):
-- Horarios de atención: ${horariosAtencionTexto()}.
+- Horarios de atención: ${horariosAtencionTexto(schedule)}.
 - WhatsApp para turnos y consultas: +54 3442 457764 (link: https://wa.me/5403442457764).
 - WhatsApp solo para urgencias dentales: +54 3442 403556 (link: https://wa.me/543442403556).
 - Tratamientos que se ofrecen: Escaneo 3D (escaneo intraoral digital, sin moldes), Ortodoncia, Blanqueamiento dental, Odontopediatría, Endodoncia mecanizada, Reconstrucciones estéticas, Carillas dentales, Implantes, Limpieza dental, y atención de Urgencias.
@@ -142,7 +144,7 @@ async function llamarGemini(contents, origen) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt(origen) }] },
+        system_instruction: { parts: [{ text: await systemPrompt(origen) }] },
         contents,
         tools: TOOLS,
         generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
@@ -165,12 +167,14 @@ async function ejecutarFuncion(nombre, args, calendar) {
     if (nombre === 'consultar_dias_disponibles') {
       const year = parseInt(args.year, 10);
       const month = parseInt(args.month, 10);
-      const data = await getDisponibilidadMes(calendar, year, month);
+      const { schedule, slotMinutes } = await obtenerHorariosConfig();
+      const data = await getDisponibilidadMes(calendar, year, month, schedule, slotMinutes);
       const disponibles = Object.keys(data).filter((d) => data[d]).map(Number).sort((a, b) => a - b);
       return { disponibles };
     }
     if (nombre === 'consultar_horarios') {
-      const horarios = await getHorariosLibresDia(calendar, args.date);
+      const { schedule, slotMinutes } = await obtenerHorariosConfig();
+      const horarios = await getHorariosLibresDia(calendar, args.date, schedule, slotMinutes);
       return { horarios };
     }
     if (nombre === 'crear_turno') {
@@ -184,6 +188,7 @@ async function ejecutarFuncion(nombre, args, calendar) {
           message: 'Ese teléfono no incluye el código de país. Pedíselo de nuevo a la persona con un ejemplo, como "+54 9 3442 123456", y no asumas el país.',
         };
       }
+      const { slotMinutes } = await obtenerHorariosConfig();
       return crearTurno(calendar, {
         date: args.date,
         time: args.time,
@@ -192,6 +197,7 @@ async function ejecutarFuncion(nombre, args, calendar) {
         telefono,
         motivo: args.motivo || '',
         esNuevo: !!args.esNuevo,
+        slotMinutes,
         origen: 'chat',
       });
     }
