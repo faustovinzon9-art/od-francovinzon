@@ -3,6 +3,7 @@ import {
   asegurarCodigoCorto,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
+import { aTituloCase } from '../../lib/pacientesSheet.js';
 
 // Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
 // para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
@@ -83,7 +84,7 @@ export default async function handler(req, res) {
     // Título del evento: solo "Nombre Apellido" (ver decisions.md) — permite
     // corregir un nombre mal tipeado desde el mismo flujo de mover/editar.
     if (nombre && nombre.trim()) {
-      requestBody.summary = `${nombre.trim()} ${(apellido || '').trim()}`.trim();
+      requestBody.summary = `${aTituloCase(nombre.trim())} ${aTituloCase((apellido || '').trim())}`.trim();
     }
     if (motivo && motivo.trim()) {
       const desc = original.description || '';
