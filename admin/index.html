@@ -180,6 +180,7 @@
         </div>
         <div class="card">
           <h2>Top deudores por monto</h2>
+          <p class="hint" id="dash-deuda-completitud"></p>
           <div class="table-wrap"><table id="dash-deudores-monto"><thead><tr><th>Paciente</th><th>Saldo</th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="card">
@@ -466,7 +467,7 @@
   }
 
   // ---------- Dashboard ----------
-  async function cargarDashboard() {
+  async function cargarDashboard(forzar) {
     // El cálculo de deuda recorre todas las fichas de /pacientes una por una — con
     // varias decenas de pacientes puede tardar unos segundos reales, no es un
     // cuelgue. Mostrar "Cargando..." en vez de dejar todo en blanco mientras se
@@ -477,7 +478,7 @@
     document.querySelector('#dash-deudores-antiguedad tbody').innerHTML = '<tr><td colspan="2">Cargando…</td></tr>';
     setMsg('dash-msg', '', '');
     try {
-      const m = await apiGet('metricas', { dias: 30 });
+      const m = await apiGet('metricas', forzar ? { dias: 30, forzar: 1 } : { dias: 30 });
       document.getElementById('dash-rango').textContent = m.rangoDias;
       document.getElementById('dash-stats').innerHTML = [
         ['Turnos totales', m.totalTurnos],
@@ -505,6 +506,16 @@
         `<tr><td>${d.nombre}</td><td>${d.dias} días</td></tr>`
       ).join('') || '<tr><td colspan="2">Sin datos.</td></tr>';
 
+      // Visibilidad de completitud del escaneo de fichas — antes una ficha que no se
+      // podía leer (rate limit transitorio, error de Sheets) desaparecía en silencio
+      // del cálculo de deuda sin ningún rastro (pedido explícito, 2026-08-13: "fijate
+      // si se están completando todos los saldos").
+      const completitud = document.getElementById('dash-deuda-completitud');
+      completitud.textContent = m.fichasFallidas
+        ? `⚠️ ${m.fichasFallidas} de ${m.totalPacientesConSaldo + m.fichasFallidas} fichas no se pudieron leer para este cálculo — puede faltar algún deudor. Probá "Actualizar".`
+        : `Calculado sobre ${m.totalPacientesConSaldo} fichas.`;
+      completitud.style.color = m.fichasFallidas ? 'var(--bad)' : '';
+
       // Algunas partes pueden fallar sin tumbar el resto (ver getMetricas en
       // api/gestion/admin.js) — si pasó, se muestra acá el motivo real en vez de
       // dejarlo invisible en los logs de Vercel.
@@ -513,7 +524,7 @@
       if (e.message !== 'unauthorized') setMsg('dash-msg', 'No se pudieron cargar las métricas.', 'error');
     }
   }
-  document.getElementById('dash-refrescar').addEventListener('click', cargarDashboard);
+  document.getElementById('dash-refrescar').addEventListener('click', () => cargarDashboard(true));
 
   // ---------- Horarios y agenda ----------
   const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];

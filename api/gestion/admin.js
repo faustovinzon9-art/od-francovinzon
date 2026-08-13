@@ -488,23 +488,36 @@ async function calcularTurnos(desde, hasta) {
 // al estar probándolo) no vuelva a escanear todas las fichas cada vez.
 let cacheDeuda = null; // { valor, ts }
 const TTL_DEUDA_MS = 120000;
-async function calcularDeuda() {
-  if (cacheDeuda && Date.now() - cacheDeuda.ts < TTL_DEUDA_MS) return cacheDeuda.valor;
+async function calcularDeuda(forzar) {
+  if (!forzar && cacheDeuda && Date.now() - cacheDeuda.ts < TTL_DEUDA_MS) return cacheDeuda.valor;
 
-  let conDeuda = 0, totalPacientesConSaldo = 0;
+  let conDeuda = 0, totalPacientesConSaldo = 0, fallidos = 0;
   const topDeudoresMonto = [];
   const topDeudoresAntiguedad = [];
   try {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
-    const { data } = await conReintentos(() => drive.files.list({
-      q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
-      fields: 'files(id, name)',
-      pageSize: 250,
-    }));
-    const archivos = (data.files || []).filter((f) => !/^⭐/.test(f.name)).slice(0, 200);
 
-    const LOTE = 40;
+    // Paginado completo — con `pageSize` solo (sin seguir `nextPageToken`) se corta
+    // en la primera página y cualquier ficha más allá de esa página queda afuera del
+    // cálculo entero, en silencio (bug real sospechado en producción, 2026-08-13: "no
+    // se están tomando valores más altos"). PACIENTES_FOLDER_ID no debería tener miles
+    // de archivos, pero no hay motivo para asumir un tope arbitrario acá.
+    let archivos = [];
+    let pageToken;
+    do {
+      const { data } = await conReintentos(() => drive.files.list({
+        q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+        fields: 'files(id, name), nextPageToken',
+        pageSize: 250,
+        pageToken,
+      }));
+      archivos = archivos.concat(data.files || []);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    archivos = archivos.filter((f) => !/^⭐/.test(f.name));
+
+    const LOTE = 25;
     for (let i = 0; i < archivos.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
@@ -522,11 +535,13 @@ async function calcularDeuda() {
           const diasNum = diasNumCrudo > 3650 ? 0 : diasNumCrudo;
           const { nombre, apellido } = parsearNombreArchivo(f.name);
           return { nombre: `${nombre} ${apellido}`.trim(), saldo: saldoNum, dias: diasNum };
-        } catch {
+        } catch (err) {
+          console.warn(`[admin.js] no se pudo leer la ficha ${f.name} para deuda:`, err?.message || err);
           return null;
         }
       }));
-      resultados.filter(Boolean).forEach((r) => {
+      resultados.forEach((r) => {
+        if (!r) { fallidos++; return; }
         totalPacientesConSaldo++;
         if (r.saldo > 0) {
           conDeuda++;
@@ -535,13 +550,16 @@ async function calcularDeuda() {
         }
       });
     }
+    if (fallidos > 0) {
+      console.warn(`[admin.js] deuda: ${fallidos} de ${archivos.length} fichas no se pudieron leer (quedan afuera del cálculo)`);
+    }
   } catch (err) {
     console.warn('[admin.js] no se pudo calcular deuda de pacientes:', err?.message || err);
   }
 
   topDeudoresMonto.sort((a, b) => b.saldo - a.saldo);
   topDeudoresAntiguedad.sort((a, b) => b.dias - a.dias);
-  const valor = { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad };
+  const valor = { conDeuda, totalPacientesConSaldo, fallidos, topDeudoresMonto, topDeudoresAntiguedad };
   cacheDeuda = { valor, ts: Date.now() };
   return valor;
 }
@@ -583,7 +601,7 @@ async function getMetricas(req, res) {
   const errores = [];
   const [
     { eventos, porDia, online, cargadoAyelen, confirmados, nuevos, recurrentes, total },
-    { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad },
+    { conDeuda, totalPacientesConSaldo, fallidos: fichasFallidas, topDeudoresMonto, topDeudoresAntiguedad },
     { cancelados, reprogramados },
   ] = await Promise.all([
     calcularTurnos(desde, hasta).catch((err) => {
@@ -591,7 +609,7 @@ async function getMetricas(req, res) {
       errores.push(`turnos: ${err?.message || err}`);
       return TURNOS_VACIO;
     }),
-    calcularDeuda(),
+    calcularDeuda(!!req.query.forzar),
     calcularCancelacionesYReprogramaciones(desde, hasta),
   ]);
 
@@ -610,6 +628,8 @@ async function getMetricas(req, res) {
     porcentajeConDeuda: totalPacientesConSaldo ? Math.round((conDeuda / totalPacientesConSaldo) * 100) : null,
     topDeudoresMonto: topDeudoresMonto.slice(0, 10),
     topDeudoresAntiguedad: topDeudoresAntiguedad.slice(0, 10),
+    totalPacientesConSaldo,
+    fichasFallidas,
   });
 }
 
