@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
 
-  const { key, date, time, nombre, apellido, telefono, motivo, sobreturno, esNuevo } = req.body;
+  const { key, date, time, nombre, apellido, telefono, dni, motivo, sobreturno, esNuevo } = req.body;
 
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     const description =
       `Teléfono: ${telNormalizado}\n` +
       'Teléfono verificado: Sí\n' +
+      `DNI: ${dni || '-'}\n` +
       `Motivo: ${motivo}\n` +
       `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
       `Código corto: ${codigoCorto}\n` +

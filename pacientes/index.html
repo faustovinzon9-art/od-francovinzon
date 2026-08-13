@@ -104,6 +104,18 @@
   .panel-msg { margin-top: 10px; font-size: 12.5px; font-weight: 600; }
   .panel-msg.error { color: var(--bloqueo); }
 
+  /* Loading state de botones de acción — ver setBtnLoading()/quitarBtnLoading() */
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+  .btn-spinner {
+    display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px;
+    border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+    animation: btn-spin .7s linear infinite;
+  }
+  .icon-btn .btn-spinner { margin-right: 0; border-color: rgba(30,58,95,.25); border-top-color: var(--navy); }
+  .icon-btn.trash .btn-spinner { border-color: rgba(193,68,55,.3); border-top-color: var(--bloqueo); }
+  .hoy-row-no .btn-spinner { border-color: rgba(30,58,95,.25); border-top-color: var(--navy); }
+  button:disabled, .icon-btn:disabled { opacity: .7; cursor: not-allowed; }
+
   /* Ficha */
   .ficha-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
   .ficha-header h1 { font-size: 27px; }
@@ -684,6 +696,19 @@
     });
   }
 
+  // ---------- Loading state genérico para botones de acción: spinner + texto (o solo
+  // spinner en los íconos chicos sin lugar para texto), deshabilitado mientras dura,
+  // contenido original guardado en dataset para restaurarlo tal cual al terminar. ----------
+  function setBtnLoading(btn, texto) {
+    if (btn.dataset.contenidoOriginal === undefined) btn.dataset.contenidoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = texto ? `<span class="btn-spinner"></span>${escapeHtml(texto)}` : '<span class="btn-spinner"></span>';
+  }
+  function quitarBtnLoading(btn) {
+    btn.disabled = false;
+    if (btn.dataset.contenidoOriginal !== undefined) btn.innerHTML = btn.dataset.contenidoOriginal;
+  }
+
   // ---------- Lista ----------
   const searchInput = document.getElementById('search-input');
   const patientListEl = document.getElementById('patient-list');
@@ -692,9 +717,16 @@
 
   async function cargarLista() {
     try {
-      pacientes = await apiGet({ modo: 'listar' });
-      renderLista();
-      renderBannerDuplicados();
+      const nuevos = await apiGet({ modo: 'listar' });
+      // Solo se vuelve a pintar la lista/banner de duplicados si el contenido realmente
+      // cambió — evita reemplazar el innerHTML (y perder el estado visual de la fila) en
+      // cada vuelta del auto-refresh cuando no pasó nada nuevo.
+      const cambio = JSON.stringify(nuevos) !== JSON.stringify(pacientes);
+      pacientes = nuevos;
+      if (cambio) {
+        renderLista();
+        renderBannerDuplicados();
+      }
       cargarDatosDeHoy(); // no se espera: sección secundaria (carrusel + sidebar), no bloquea el resto
     } catch (e) {
       if (e.message !== 'unauthorized') patientListEl.innerHTML = '<div class="empty-note">No se pudo cargar la lista.</div>';
@@ -949,10 +981,15 @@
       }
     }
 
+    // Mismo criterio que cargarLista(): solo re-pintar cada carril si su contenido
+    // cambió, para que el auto-refresh de cada 60s no parpadee ni pierda el scroll
+    // cuando "Pacientes de hoy"/"¿Es este paciente?" siguen exactamente igual.
+    const directosCambio = JSON.stringify(directos) !== JSON.stringify(pacientesDeHoy);
+    const sugerenciasCambio = JSON.stringify(sugerencias) !== JSON.stringify(sugerenciasDeHoy);
     pacientesDeHoy = directos;
     sugerenciasDeHoy = sugerencias;
-    renderPacientesDeHoy();
-    renderSugerenciasHoy();
+    if (directosCambio) renderPacientesDeHoy();
+    if (sugerenciasCambio) renderSugerenciasHoy();
     completarTelefonosCruzados(directos); // no se espera: best-effort en segundo plano
     // Fire-and-forget, en silencio — no bloquea el render ni muestra nada si falla
     // (se reintenta solo en la próxima carga, no hay dato que se pueda perder).
@@ -999,8 +1036,8 @@
         </div>
       </div>
     `).join('');
-    sugerenciasCarril.querySelectorAll('.hoy-row-si').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'si')));
-    sugerenciasCarril.querySelectorAll('.hoy-row-no').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'no')));
+    sugerenciasCarril.querySelectorAll('.hoy-row-si').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'si', btn)));
+    sugerenciasCarril.querySelectorAll('.hoy-row-no').forEach((btn) => btn.addEventListener('click', () => resolverSugerencia(btn.dataset.id, 'no', btn)));
     sugerenciasSection.classList.remove('hidden');
   }
 
@@ -1009,9 +1046,17 @@
   // recalculando cargarDatosDeHoy() de nuevo, que ya sabe resolverlo solo con el mapeo
   // recién guardado (mismo camino que un match automático). Nunca abre la ficha.
   // "No": descarta la sugerencia y guarda que ese par no es un match, tampoco abre nada.
-  async function resolverSugerencia(fichaId, decision) {
+  async function resolverSugerencia(fichaId, decision, btn) {
     const item = sugerenciasDeHoy.find((s) => s.id === fichaId);
     if (!item) return;
+    // Deshabilita los dos botones (Sí y No) de esta misma fila mientras se guarda, para
+    // que no se pueda tocar el otro por error mientras la primera decisión todavía está
+    // en curso — el carril entero se vuelve a pintar apenas termina, así que no hace
+    // falta restaurarlos "a mano" en el caso de éxito.
+    const fila = btn.closest('.hoy-row-sugerencia');
+    const otro = fila ? fila.querySelector(decision === 'si' ? '.hoy-row-no' : '.hoy-row-si') : null;
+    setBtnLoading(btn);
+    if (otro) otro.disabled = true;
     try {
       await apiPost({
         accion: 'confirmar-match',
@@ -1023,6 +1068,8 @@
       await cargarDatosDeHoy();
     } catch (e) {
       toast('No se pudo guardar. Probá de nuevo.');
+      quitarBtnLoading(btn);
+      if (otro) otro.disabled = false;
     }
   }
 
@@ -1156,7 +1203,7 @@
     chequearDniEnNuevoPaciente();
     if (npDuplicadoActual) return; // ya se muestra el cartel "Abrir ficha", no se crea nada
     const btn = document.getElementById('np-guardar');
-    btn.disabled = true;
+    setBtnLoading(btn, 'Creando ficha...');
     try {
       const r = await apiPost({
         accion: 'crear',
@@ -1179,7 +1226,7 @@
         npMsg.classList.remove('hidden');
       }
     } finally {
-      btn.disabled = false;
+      quitarBtnLoading(btn);
     }
   });
 
@@ -1294,7 +1341,7 @@
     `).join('');
 
     tbody.querySelectorAll('.btn-editar-mov').forEach((btn) => btn.addEventListener('click', () => abrirFormMov(Number(btn.dataset.fila), false)));
-    tbody.querySelectorAll('.btn-anular-mov').forEach((btn) => btn.addEventListener('click', () => anularMovimiento(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.btn-anular-mov').forEach((btn) => btn.addEventListener('click', () => anularMovimiento(Number(btn.dataset.fila), btn)));
   }
 
   // ---------- Autosave de campos ----------
@@ -1449,7 +1496,7 @@
       formaPago: movFormaPago.value.trim(),
     };
     const btn = document.getElementById('mov-guardar');
-    btn.disabled = true;
+    setBtnLoading(btn, 'Guardando...');
     try {
       const r = editandoMovFila
         ? await apiPost({ accion: 'movimiento-editar', fila: editandoMovFila, ...payload })
@@ -1465,11 +1512,11 @@
         movMsg.classList.remove('hidden');
       }
     } finally {
-      btn.disabled = false;
+      quitarBtnLoading(btn);
     }
   });
 
-  async function anularMovimiento(fila) {
+  async function anularMovimiento(fila, btn) {
     const ok = await confirmDialog({
       title: 'Anular movimiento',
       message: 'El movimiento queda marcado como anulado (no se borra) y deja de afectar el saldo. ¿Confirmás?',
@@ -1477,13 +1524,19 @@
       danger: true,
     });
     if (!ok) return;
-    const r = await apiPost({ accion: 'movimiento-anular', id: fichaActual.id, fila });
-    if (r.success) {
-      toast('✅ Movimiento anulado');
-      fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-      renderFicha();
-    } else {
-      toast('No se pudo anular el movimiento.');
+    setBtnLoading(btn);
+    try {
+      const r = await apiPost({ accion: 'movimiento-anular', id: fichaActual.id, fila });
+      if (r.success) {
+        toast('✅ Movimiento anulado');
+        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+        renderFicha();
+      } else {
+        toast('No se pudo anular el movimiento.');
+        quitarBtnLoading(btn);
+      }
+    } catch (e) {
+      quitarBtnLoading(btn);
     }
   }
 
@@ -1519,7 +1572,7 @@
       </tr>
     `).join('');
     tbody.querySelectorAll('.btn-editar-pres').forEach((btn) => btn.addEventListener('click', () => abrirFormPres(Number(btn.dataset.fila))));
-    tbody.querySelectorAll('.btn-eliminar-pres').forEach((btn) => btn.addEventListener('click', () => eliminarPrestacion(Number(btn.dataset.fila))));
+    tbody.querySelectorAll('.btn-eliminar-pres').forEach((btn) => btn.addEventListener('click', () => eliminarPrestacion(Number(btn.dataset.fila), btn)));
     tbody.querySelectorAll('.chk-pres-autorizado').forEach((chk) => chk.addEventListener('change', () => toggleAutorizado(Number(chk.dataset.fila), chk.checked, chk)));
   }
 
@@ -1600,7 +1653,7 @@
       autorizado: presAutorizado.checked,
     };
     const btn = document.getElementById('pres-guardar');
-    btn.disabled = true;
+    setBtnLoading(btn, 'Guardando...');
     try {
       const r = editandoPresFila
         ? await apiPost({ accion: 'prestacion-editar', fila: editandoPresFila, ...payload })
@@ -1616,11 +1669,11 @@
         presMsg.classList.remove('hidden');
       }
     } finally {
-      btn.disabled = false;
+      quitarBtnLoading(btn);
     }
   });
 
-  async function eliminarPrestacion(fila) {
+  async function eliminarPrestacion(fila, btn) {
     const ok = await confirmDialog({
       title: 'Eliminar prestación',
       message: 'Se borra esta fila de la tabla de prestaciones. ¿Confirmás?',
@@ -1628,13 +1681,19 @@
       danger: true,
     });
     if (!ok) return;
-    const r = await apiPost({ accion: 'prestacion-eliminar', id: fichaActual.id, fila });
-    if (r.success) {
-      toast('✅ Prestación eliminada');
-      fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-      renderFicha();
-    } else {
-      toast('No se pudo eliminar la prestación.');
+    setBtnLoading(btn);
+    try {
+      const r = await apiPost({ accion: 'prestacion-eliminar', id: fichaActual.id, fila });
+      if (r.success) {
+        toast('✅ Prestación eliminada');
+        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
+        renderFicha();
+      } else {
+        toast('No se pudo eliminar la prestación.');
+        quitarBtnLoading(btn);
+      }
+    } catch (e) {
+      quitarBtnLoading(btn);
     }
   }
 
@@ -1715,24 +1774,29 @@
     sidebarTasks.classList.remove('hidden');
   }
 
-  // Escaneo continuo: cada 2 minutos, mientras haya sesión, se vuelve a pedir la lista
-  // completa (mismo endpoint liviano que ya usa la pantalla principal — no suma ninguna
-  // ruta nueva) y se recalculan los duplicados, así el cartel puede aparecer solo sin que
-  // nadie tenga que salir y volver a entrar a Pacientes. Se salta el ciclo si hay algo
-  // abierto, para no interrumpir (mismo criterio que el auto-refresh de /gestion).
+  // Auto-refresh continuo: cada 60 segundos, mientras haya sesión, se vuelve a pedir la
+  // lista completa y los turnos de hoy (mismos endpoints livianos que ya usa la pantalla
+  // principal — no suma ninguna ruta nueva), se recalculan los duplicados y "Pacientes de
+  // hoy"/"¿Es este paciente?" — así se refleja solo un paciente nuevo, un turno sacado o
+  // cancelado, sin que nadie tenga que salir y volver a entrar. cargarLista() (y el diff
+  // de procesarPacientesDeHoy) ya se encargan de no volver a pintar lo que no cambió. Se
+  // salta el ciclo entero si hay algo abierto — en especial una ficha, para no pisar una
+  // edición en curso ni interrumpir mientras se está escribiendo.
   let duplicadosTimer = null;
   function haySesionOcupadaPacientes() {
     return !panelNuevo.classList.contains('hidden')
       || !vistaDuplicados.classList.contains('hidden')
       || !vistaFusion.classList.contains('hidden')
-      || document.activeElement === searchInput;
+      || !vistaFicha.classList.contains('hidden')
+      || document.activeElement === searchInput
+      || (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.campo);
   }
   function iniciarEscaneoDuplicados() {
     detenerEscaneoDuplicados();
     duplicadosTimer = setInterval(() => {
       if (haySesionOcupadaPacientes()) return;
       cargarLista();
-    }, 120000);
+    }, 60000);
   }
   function detenerEscaneoDuplicados() {
     if (duplicadosTimer) clearInterval(duplicadosTimer);
@@ -1930,7 +1994,7 @@
     if (!ok) return;
 
     const btn = document.getElementById('fusion-confirmar');
-    btn.disabled = true;
+    setBtnLoading(btn, 'Fusionando...');
     try {
       const r = await apiPost({ accion: 'fusionar', idMantener, idEliminar, campos });
       if (r.success) {
@@ -1949,7 +2013,7 @@
         msgEl.classList.remove('hidden');
       }
     } finally {
-      btn.disabled = false;
+      quitarBtnLoading(btn);
     }
   });
 </script>

@@ -655,6 +655,7 @@
       <div id="mc-datos-paciente">
         <div class="field-row">
           <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
+          <div class="field"><label>DNI</label><input type="text" id="mc-dni" inputmode="numeric" placeholder="Sin puntos ni espacios"></div>
         </div>
         <div class="checkbox-row">
           <input type="checkbox" id="mc-nuevo">
@@ -1909,7 +1910,7 @@
     document.getElementById('mc-slots-wrap').classList.add('hidden');
     document.getElementById('mc-form-wrap').classList.add('hidden');
     document.getElementById('mc-datos-paciente').classList.remove('hidden');
-    ['mc-nombre', 'mc-apellido', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
+    ['mc-nombre', 'mc-apellido', 'mc-dni', 'mc-motivo'].forEach((id) => document.getElementById(id).value = '');
     document.getElementById('mc-nuevo').checked = false;
     itiMcTelefono.setNumber('');
     document.getElementById('mc-title').textContent = 'Nuevo turno';
@@ -2066,15 +2067,22 @@
     const nombre = document.getElementById('mc-nombre').value.trim();
     const apellido = document.getElementById('mc-apellido').value.trim();
     const telefonoIngresado = document.getElementById('mc-telefono').value.trim();
+    const dniIngresado = document.getElementById('mc-dni').value.trim();
     const esNuevo = document.getElementById('mc-nuevo').checked;
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!nombre || !motivo || !telefonoIngresado) {
-      setMsg('mc-msg', 'Completá nombre, teléfono y motivo.', 'error');
+    if (!nombre || !motivo || !telefonoIngresado || !dniIngresado) {
+      setMsg('mc-msg', 'Completá nombre, teléfono, DNI y motivo.', 'error');
       return;
     }
     if (!itiMcTelefono.isValidNumber()) {
       setMsg('mc-msg', 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
+      return;
+    }
+    // Se dejan pasar puntos/espacios sueltos por si los tipean, pero se limpian antes de mandar.
+    const dni = dniIngresado.replace(/[.\s]/g, '');
+    if (!/^\d{6,9}$/.test(dni)) {
+      setMsg('mc-msg', 'Ese DNI no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
     const telefono = itiMcTelefono.getNumber();
@@ -2083,7 +2091,7 @@
     fetch('/api/gestion/crear-turno', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, motivo, esNuevo, sobreturno: false }),
+      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, dni, motivo, esNuevo, sobreturno: false }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
