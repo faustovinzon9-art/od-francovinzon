@@ -51,15 +51,6 @@ export default async function handler(req, res) {
       return await healthcheck(req, res);
     }
 
-    // MIGRACIÓN DE UNA SOLA VEZ (2026-08-13) — pasa nombre/apellido/localidad/domicilio/
-    // obra social/plan/tratamiento de MAYÚSCULA TOTAL a Title Case en las fichas ya
-    // cargadas. Autenticada con CRON_SECRET (mismo mecanismo que healthcheck) para no
-    // depender de GESTION_KEY. Se borra este bloque + la función migrarTituloCase del
-    // repo apenas termine de correr — ver tasks.md/changelog.md.
-    if (req.method === 'GET' && req.query.modo === 'migrar-titulo-una-vez') {
-      return await migrarTituloCase(req, res);
-    }
-
     if (req.method === 'GET') {
       if (!isValidGestionKey(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.query.modo === 'listar') return await listar(req, res);
@@ -136,90 +127,6 @@ async function healthcheck(req, res) {
 
   const huboFallo = Object.values(resultados).some((v) => v === 'error');
   res.status(huboFallo ? 500 : 200).json({ ok: !huboFallo, ...resultados, hora: new Date().toISOString() });
-}
-
-// ---------- MIGRACIÓN DE UNA SOLA VEZ (2026-08-13, borrar después de correr) ----------
-// Pasa nombre/apellido/localidad/domicilio/obraSocial/plan/planTratamiento de MAYÚSCULA
-// TOTAL a Title Case en las fichas ya cargadas — mismas 7 columnas que CAMPOS_MAYUSCULAS,
-// mismo aTituloCase() que ahora usa escribirCampoEnSheet(). Idempotente: si un campo ya
-// está en Title Case, no lo toca (aTituloCase(x) === x, no genera "cambio"), así que
-// correrla más de una vez es seguro. Paginada (offset/limit) para no arriesgar el
-// timeout de una función serverless con muchas fichas — se llama repetidas veces hasta
-// que "hasMore" da false. `?dryRun=1` reporta qué cambiaría SIN escribir nada.
-async function migrarTituloCase(req, res) {
-  const secreto = process.env.CRON_SECRET;
-  const auth = req.headers.authorization || '';
-  if (!secreto || auth !== `Bearer ${secreto}`) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-
-  const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
-  const offset = parseInt(req.query.offset || '0', 10);
-  const limit = parseInt(req.query.limit || '15', 10);
-
-  const drive = getPacientesDriveClient();
-  const sheets = getPacientesSheetsClient();
-
-  // listarArchivosPacientes() no garantiza orden estable entre llamadas (Drive files.list
-  // sin orderBy) — para que offset/limit realmente cubran TODAS las fichas a lo largo de
-  // varias llamadas paginadas, se ordena acá por id (estable, único).
-  const archivos = (await listarArchivosPacientes(drive)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const lote = archivos.slice(offset, offset + limit);
-
-  const resultados = [];
-  for (const archivo of lote) {
-    try {
-      const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: `${SHEET_NAME}!C5:C15` }));
-      const c = (data.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
-      while (c.length < 11) c.push('');
-      const [nombre, apellido, dni, , domicilio, localidad, obraSocial, , plan, , planTratamiento] = c;
-      const actuales = { nombre, apellido, domicilio, localidad, obraSocial, plan, planTratamiento };
-
-      const cambios = [];
-      const updates = [];
-      for (const campo of CAMPOS_MAYUSCULAS) {
-        const actual = actuales[campo];
-        if (!actual) continue;
-        const nuevo = aTituloCase(actual);
-        if (nuevo !== actual) {
-          cambios.push({ campo, antes: actual, despues: nuevo });
-          updates.push({ range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`, values: [[nuevo]] });
-        }
-      }
-
-      if (cambios.length && !dryRun) {
-        await conReintentos(() => sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId: archivo.id,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
-        }));
-        const cambioNombre = cambios.find((ch) => ch.campo === 'nombre');
-        const cambioApellido = cambios.find((ch) => ch.campo === 'apellido');
-        if (cambioNombre || cambioApellido) {
-          const nombreFinal = cambioNombre ? cambioNombre.despues : nombre;
-          const apellidoFinal = cambioApellido ? cambioApellido.despues : apellido;
-          await conReintentos(() => drive.files.update({
-            fileId: archivo.id,
-            requestBody: { name: nombreArchivo({ nombre: nombreFinal, apellido: apellidoFinal, dni }) },
-          }));
-        }
-      }
-
-      resultados.push({ id: archivo.id, archivo: archivo.name, cambios: cambios.length, detalle: cambios });
-    } catch (err) {
-      resultados.push({ id: archivo.id, archivo: archivo.name, error: err.message });
-    }
-  }
-
-  res.status(200).json({
-    dryRun,
-    offset,
-    limit,
-    total: archivos.length,
-    procesados: lote.length,
-    hasMore: offset + limit < archivos.length,
-    siguienteOffset: offset + limit,
-    resultados,
-  });
 }
 
 // ---------- OAuth (setup único, ver gestion/conectar-drive.html) ----------
