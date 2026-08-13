@@ -396,6 +396,17 @@ async function getMonitoreo(req, res) {
 // tienen historial retroactivo (Calendar no guarda turnos borrados) — esas dos métricas
 // se alimentan desde ahora en adelante vía ActividadLog (lib/adminConfig.js).
 //
+// Formato argentino: "$" opcional, "." como separador de miles, "," como decimal
+// (ej. "$900.000,00" = 900000). parseFloat solo no alcanza — hay que sacar los
+// puntos de miles ANTES de convertir la coma decimal a punto, si no
+// "900.000,00" -> "900.000.00" -> parseFloat corta en el segundo punto y da 900
+// en vez de 900000 (bug real, encontrado en el dashboard el 2026-08-13).
+function parsearMontoArgentino(texto) {
+  const limpio = String(texto || '').replace(/[^\d,.-]/g, '');
+  const sinMiles = limpio.replace(/\./g, '');
+  return parseFloat(sinMiles.replace(',', '.')) || 0;
+}
+
 // El rango mira `dias` para atrás Y 60 días para adelante (no solo hacia atrás):
 // este es un sistema de reserva de turnos, así que en cualquier momento buena parte
 // (a veces casi toda, en un sitio recién lanzado) de la actividad real vive en turnos
@@ -464,8 +475,13 @@ async function getMetricas(req, res) {
           const rows = fin.values || [];
           const saldoTexto = rows[2]?.[1] || '$0,00';
           const diasSinPagoTexto = rows[5]?.[1] || '';
-          const saldoNum = parseFloat(String(saldoTexto).replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-          const diasNum = parseInt(String(diasSinPagoTexto).replace(/\D/g, ''), 10) || 0;
+          const saldoNum = parsearMontoArgentino(saldoTexto);
+          // La celda de "días sin pago" de la plantilla (=HOY()-últimoPago) devuelve el
+          // serial de HOY (~46000 y pico en 2026) cuando no hay último pago cargado, en
+          // vez de un valor sensato — se descarta cualquier cosa por encima de 10 años
+          // como dato no confiable en vez de mostrar una antigüedad absurda.
+          const diasNumCrudo = parseInt(String(diasSinPagoTexto).replace(/\D/g, ''), 10) || 0;
+          const diasNum = diasNumCrudo > 3650 ? 0 : diasNumCrudo;
           const { nombre, apellido } = parsearNombreArchivo(f.name);
           return { nombre: `${nombre} ${apellido}`.trim(), saldo: saldoNum, dias: diasNum };
         } catch {
