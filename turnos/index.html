@@ -28,9 +28,6 @@
   .brand { text-align: center; margin-bottom: 18px; }
   .brand img { width: 100%; max-width: 280px; height: auto; margin-bottom: 12px; }
   .brand .tagline { font-family: 'Fraunces', Georgia, serif; font-size: 27px; font-weight: 700; color: var(--navy); }
-  .brand .subtitle { color: var(--muted); font-size: 13px; margin-top: 3px; letter-spacing: 0.2px; }
-  .tz-note { background: var(--cream-deep); border-radius: 14px; padding: 11px 14px; font-size: 12.5px; color: var(--navy-soft); text-align: center; margin-bottom: 14px; line-height: 1.4; }
-  .tz-note strong { color: var(--navy); }
   .info-note { background: var(--white); border: 1px solid #EEE8D9; border-radius: 14px; padding: 12px 14px; font-size: 12.5px; color: var(--text); text-align: center; margin-bottom: 12px; line-height: 1.5; }
   .info-note strong { color: var(--navy); }
   .contact-buttons { display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; }
@@ -88,7 +85,12 @@
   @keyframes slotEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   .slot-btn-enter { animation: slotEnter .18s ease both; }
 
-  .slots-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+  /* Más protagonismo al cartel de horarios encontrados (antes muy discreto: título
+     chico gris sobre una tarjeta blanca igual a cualquier otra) — borde dorado y
+     título grande en navy, para que se note de un vistazo que el sistema encontró
+     horarios disponibles ese día. */
+  #slots-card { border: 1.5px solid var(--gold); box-shadow: 0 4px 20px rgba(212, 162, 76, 0.16); }
+  .slots-title { font-size: 17px; color: var(--navy); margin-bottom: 12px; font-weight: 700; font-family: 'Fraunces', Georgia, serif; }
   .slots { display: flex; flex-wrap: wrap; gap: 9px; }
   .slot-btn { padding: 9px 16px; border: 1.5px solid var(--navy-soft); border-radius: var(--radius-pill); background: var(--white); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; }
   .slot-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); box-shadow: 0 3px 10px rgba(30, 58, 95, 0.35); }
@@ -169,6 +171,8 @@
   input:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(212, 162, 76, 0.15); }
 
   .post-actions-row { display: flex; flex-direction: column; gap: 9px; }
+  .guardar-acceso-group { display: flex; flex-direction: column; gap: 4px; }
+  .guardar-acceso-caption { text-align: center; font-size: 11.5px; color: var(--muted); line-height: 1.4; margin: 0; }
   .post-action-btn {
     width: 100%; padding: 12px; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif;
     font-size: 13.5px; font-weight: 600; border: 1.5px solid var(--navy-soft); background: var(--white); color: var(--navy);
@@ -294,15 +298,10 @@
   <div class="brand">
     <img src="../assets/logo-horizontal.png" alt="Franco Vinzón Odontólogo">
     <div class="tagline">Reservá tu turno</div>
-    <div class="subtitle">Ameghino 410, Concepción del Uruguay</div>
-  </div>
-
-  <div class="tz-note">
-    Todos los horarios están fijos en <strong>hora de Argentina (GMT-3)</strong>.
   </div>
 
   <div class="info-note">
-    Esta agenda es para <strong>turnos programados</strong>. Para urgencias o consultas, usá los botones de abajo.
+    Esta agenda es para <strong>turnos programados</strong>. ¿Urgencia o consulta rápida? Usá los botones de abajo.
   </div>
 
   <div class="contact-buttons">
@@ -397,7 +396,10 @@
   <div class="card hidden" id="post-actions-card">
     <div class="post-actions-row">
       <button type="button" class="post-action-btn" id="btn-agregar-calendario">📅 Agregar al calendario</button>
-      <button type="button" class="post-action-btn" id="btn-guardar-acceso">🔗 Guardar acceso a mi turno</button>
+      <div class="guardar-acceso-group">
+        <button type="button" class="post-action-btn" id="btn-guardar-acceso">🔗 Guardar acceso a mi turno</button>
+        <p class="guardar-acceso-caption">Guardalo para poder cancelar o cambiar tu turno cuando quieras.</p>
+      </div>
       <button class="post-action-btn" id="btn-cambiar-turno">Cambiar día y horario</button>
       <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelar turno</button>
     </div>

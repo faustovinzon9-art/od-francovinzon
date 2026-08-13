@@ -18,7 +18,7 @@ import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
   rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
-  normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas,
+  normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas, aTituloCase,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
 // Reintentos puntuales, call site por call site — NUNCA envolver el cliente entero
@@ -49,6 +49,15 @@ export default async function handler(req, res) {
     // de este archivo, ver el comentario del encabezado.
     if (req.method === 'GET' && req.query.modo === 'healthcheck') {
       return await healthcheck(req, res);
+    }
+
+    // MIGRACIÓN DE UNA SOLA VEZ (2026-08-13) — pasa nombre/apellido/localidad/domicilio/
+    // obra social/plan/tratamiento de MAYÚSCULA TOTAL a Title Case en las fichas ya
+    // cargadas. Autenticada con CRON_SECRET (mismo mecanismo que healthcheck) para no
+    // depender de GESTION_KEY. Se borra este bloque + la función migrarTituloCase del
+    // repo apenas termine de correr — ver tasks.md/changelog.md.
+    if (req.method === 'GET' && req.query.modo === 'migrar-titulo-una-vez') {
+      return await migrarTituloCase(req, res);
     }
 
     if (req.method === 'GET') {
@@ -127,6 +136,87 @@ async function healthcheck(req, res) {
 
   const huboFallo = Object.values(resultados).some((v) => v === 'error');
   res.status(huboFallo ? 500 : 200).json({ ok: !huboFallo, ...resultados, hora: new Date().toISOString() });
+}
+
+// ---------- MIGRACIÓN DE UNA SOLA VEZ (2026-08-13, borrar después de correr) ----------
+// Pasa nombre/apellido/localidad/domicilio/obraSocial/plan/planTratamiento de MAYÚSCULA
+// TOTAL a Title Case en las fichas ya cargadas — mismas 7 columnas que CAMPOS_MAYUSCULAS,
+// mismo aTituloCase() que ahora usa escribirCampoEnSheet(). Idempotente: si un campo ya
+// está en Title Case, no lo toca (aTituloCase(x) === x, no genera "cambio"), así que
+// correrla más de una vez es seguro. Paginada (offset/limit) para no arriesgar el
+// timeout de una función serverless con muchas fichas — se llama repetidas veces hasta
+// que "hasMore" da false. `?dryRun=1` reporta qué cambiaría SIN escribir nada.
+async function migrarTituloCase(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
+  const offset = parseInt(req.query.offset || '0', 10);
+  const limit = parseInt(req.query.limit || '15', 10);
+
+  const drive = getPacientesDriveClient();
+  const sheets = getPacientesSheetsClient();
+
+  const archivos = await listarArchivosPacientes(drive);
+  const lote = archivos.slice(offset, offset + limit);
+
+  const resultados = [];
+  for (const archivo of lote) {
+    try {
+      const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: `${SHEET_NAME}!C5:C15` }));
+      const c = (data.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
+      while (c.length < 11) c.push('');
+      const [nombre, apellido, dni, , domicilio, localidad, obraSocial, , plan, , planTratamiento] = c;
+      const actuales = { nombre, apellido, domicilio, localidad, obraSocial, plan, planTratamiento };
+
+      const cambios = [];
+      const updates = [];
+      for (const campo of CAMPOS_MAYUSCULAS) {
+        const actual = actuales[campo];
+        if (!actual) continue;
+        const nuevo = aTituloCase(actual);
+        if (nuevo !== actual) {
+          cambios.push({ campo, antes: actual, despues: nuevo });
+          updates.push({ range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`, values: [[nuevo]] });
+        }
+      }
+
+      if (cambios.length && !dryRun) {
+        await conReintentos(() => sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: archivo.id,
+          requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
+        }));
+        const cambioNombre = cambios.find((ch) => ch.campo === 'nombre');
+        const cambioApellido = cambios.find((ch) => ch.campo === 'apellido');
+        if (cambioNombre || cambioApellido) {
+          const nombreFinal = cambioNombre ? cambioNombre.despues : nombre;
+          const apellidoFinal = cambioApellido ? cambioApellido.despues : apellido;
+          await conReintentos(() => drive.files.update({
+            fileId: archivo.id,
+            requestBody: { name: nombreArchivo({ nombre: nombreFinal, apellido: apellidoFinal, dni }) },
+          }));
+        }
+      }
+
+      resultados.push({ id: archivo.id, archivo: archivo.name, cambios: cambios.length, detalle: cambios });
+    } catch (err) {
+      resultados.push({ id: archivo.id, archivo: archivo.name, error: err.message });
+    }
+  }
+
+  res.status(200).json({
+    dryRun,
+    offset,
+    limit,
+    total: archivos.length,
+    procesados: lote.length,
+    hasMore: offset + limit < archivos.length,
+    siguienteOffset: offset + limit,
+    resultados,
+  });
 }
 
 // ---------- OAuth (setup único, ver gestion/conectar-drive.html) ----------
@@ -385,10 +475,10 @@ async function crearPaciente(req, res) {
     }
   }
 
-  // El nombre de archivo usa la misma versión en mayúsculas que va a quedar en las
+  // El nombre de archivo usa la misma versión en Title Case que va a quedar en las
   // celdas C5/C6 — si no, la lista de /pacientes (que parsea el nombre del archivo)
   // mostraría algo distinto de lo que muestra la ficha abierta (celdas del Sheet).
-  const nombreFinal = nombreArchivo({ nombre: aMayusculas(nombre), apellido: aMayusculas(apellido), dni: campos.dni });
+  const nombreFinal = nombreArchivo({ nombre: aTituloCase(nombre), apellido: aTituloCase(apellido), dni: campos.dni });
   const copia = await conReintentos(() => drive.files.copy({
     fileId: FICHA_TEMPLATE_ID,
     requestBody: { name: nombreFinal, parents: [PACIENTES_FOLDER_ID] },
@@ -412,7 +502,7 @@ async function crearPaciente(req, res) {
   const datos = { ...campos, nombre, apellido };
   const campoACelda = (campo) => ({
     range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`,
-    values: [[CAMPOS_MAYUSCULAS.has(campo) ? aMayusculas(datos[campo]) : datos[campo]]],
+    values: [[CAMPOS_MAYUSCULAS.has(campo) ? aTituloCase(datos[campo]) : datos[campo]]],
   });
   const tieneValor = (campo) => datos[campo] != null && String(datos[campo]).trim() !== '';
   // RAW para teléfono/nº de afiliado (ver escribirCampoEnSheet, mismo motivo: no perder
@@ -461,7 +551,7 @@ const CAMPOS_TEXTO_CRUDO = new Set(['telefono', 'nAfiliado']);
 
 async function escribirCampoEnSheet(id, campo, valor) {
   const sheets = getPacientesSheetsClient();
-  const valorFinal = CAMPOS_MAYUSCULAS.has(campo) ? aMayusculas(valor) : valor;
+  const valorFinal = CAMPOS_MAYUSCULAS.has(campo) ? aTituloCase(valor) : valor;
   await conReintentos(() => sheets.spreadsheets.values.update({
     spreadsheetId: id,
     range: `${SHEET_NAME}!${CAMPO_CELDA[campo]}`,
