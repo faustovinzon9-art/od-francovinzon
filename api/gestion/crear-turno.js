@@ -5,6 +5,7 @@ import {
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
+import { aTituloCase } from '../../lib/pacientesSheet.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -33,7 +34,7 @@ export default async function handler(req, res) {
     const end = new Date(start.getTime() + duration * 60000);
 
     const calendar = getCalendarClient();
-    const title = `${nombre} ${apellido || ''}`.trim();
+    const title = `${aTituloCase(nombre)} ${aTituloCase(apellido) || ''}`.trim();
 
     const { data: existing } = await conReintentos(() => calendar.events.list({
       calendarId,

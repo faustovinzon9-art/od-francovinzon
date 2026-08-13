@@ -350,8 +350,11 @@
   </div>
 
   <div class="card slide-down-reveal hidden" id="form-card">
-    <label>Nombre y apellido</label>
-    <input type="text" id="f-nombre" placeholder="Tu nombre completo">
+    <label>Nombre</label>
+    <input type="text" id="f-nombre" placeholder="Tu nombre">
+
+    <label>Apellido</label>
+    <input type="text" id="f-apellido" placeholder="Tu apellido">
 
     <div class="checkbox-row">
       <input type="checkbox" id="f-nuevo">
@@ -708,7 +711,8 @@
   }
 
   function confirmarTurno() {
-    const nombreCompleto = document.getElementById('f-nombre').value.trim();
+    const nombre = document.getElementById('f-nombre').value.trim();
+    const apellido = document.getElementById('f-apellido').value.trim();
     const esNuevo = document.getElementById('f-nuevo').checked;
     const telefonoIngresado = document.getElementById('f-telefono').value.trim();
     const dniIngresado = document.getElementById('f-dni').value.trim();
@@ -718,8 +722,8 @@
       showFormMsg('Elegí un horario primero.', 'error');
       return;
     }
-    if (!nombreCompleto || !telefonoIngresado || !dniIngresado) {
-      showFormMsg('Completá nombre, teléfono y DNI.', 'error');
+    if (!nombre || !apellido || !telefonoIngresado || !dniIngresado) {
+      showFormMsg('Completá nombre, apellido, teléfono y DNI.', 'error');
       return;
     }
     if (!itiTelefono.isValidNumber()) {
@@ -733,10 +737,6 @@
       return;
     }
     const telefono = itiTelefono.getNumber();
-
-    const partes = nombreCompleto.split(' ');
-    const nombre = partes.shift();
-    const apellido = partes.join(' ') || '';
 
     confirmBtn.disabled = true;
     showFormMsg('Confirmando...', 'loading');

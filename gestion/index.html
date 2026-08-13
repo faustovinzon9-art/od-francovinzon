@@ -1748,6 +1748,14 @@
     return div.innerHTML;
   }
 
+  // Mismo criterio de Title Case que aTituloCase() en lib/pacientesSheet.js — usado
+  // solo para el título optimista del ticket antes de recargar la agenda (el servidor
+  // ya normaliza el summary real de Calendar).
+  function aTituloCase(valor) {
+    if (valor == null) return valor;
+    return String(valor).toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase());
+  }
+
   // ---------- Toasts (solo para acciones importantes, ver decisions.md) ----------
   const toastContainer = document.getElementById('toast-container');
   function toast(mensaje) {
@@ -1881,7 +1889,7 @@
           toast('✅ Turno creado correctamente');
           const itemTicket = {
             id: res.eventId, calendarId: res.calendarId,
-            title: `${nombre} ${apellido}`.trim(), start: `${currentDate}T${hora}:00-03:00`,
+            title: `${aTituloCase(nombre)} ${aTituloCase(apellido)}`.trim(), start: `${currentDate}T${hora}:00-03:00`,
             allDay: false, tipo: 'sobreturno', codigoCorto: res.codigoCorto,
           };
           cargarAgenda().then(() => { resaltarEvento(res.eventId, res.calendarId); ofrecerImprimir(itemTicket); });
@@ -2046,7 +2054,7 @@
             toast('✅ Turno reprogramado correctamente');
             const itemTicket = {
               id: mcMoverContext.eventId, calendarId: mcMoverContext.calendarId,
-              title: `${nombreMover} ${apellidoMover}`.trim(), start: `${mcFecha}T${mcHora}:00-03:00`,
+              title: `${aTituloCase(nombreMover)} ${aTituloCase(apellidoMover)}`.trim(), start: `${mcFecha}T${mcHora}:00-03:00`,
               allDay: false,
             };
             if (currentView === 'busqueda') {
@@ -2071,8 +2079,8 @@
     const esNuevo = document.getElementById('mc-nuevo').checked;
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!nombre || !motivo || !telefonoIngresado || !dniIngresado) {
-      setMsg('mc-msg', 'Completá nombre, teléfono, DNI y motivo.', 'error');
+    if (!nombre || !apellido || !motivo || !telefonoIngresado || !dniIngresado) {
+      setMsg('mc-msg', 'Completá nombre, apellido, teléfono, DNI y motivo.', 'error');
       return;
     }
     if (!itiMcTelefono.isValidNumber()) {
@@ -2104,7 +2112,7 @@
           toast('✅ Turno creado correctamente');
           const itemTicket = {
             id: res.eventId, calendarId: res.calendarId,
-            title: `${nombre} ${apellido}`.trim(), start: `${mcFecha}T${mcHora}:00-03:00`,
+            title: `${aTituloCase(nombre)} ${aTituloCase(apellido)}`.trim(), start: `${mcFecha}T${mcHora}:00-03:00`,
             allDay: false, codigoCorto: res.codigoCorto,
           };
           cargarAgenda().then(() => { resaltarEvento(res.eventId, res.calendarId); ofrecerImprimir(itemTicket); });
@@ -2279,7 +2287,7 @@
           toast('✅ Turno reprogramado correctamente');
           const itemTicket = {
             id: moverContext.eventId, calendarId: moverContext.calendarId,
-            title: `${nombreMover} ${apellidoMover}`.trim(), start: `${nuevaFecha}T${nuevaHora}:00-03:00`,
+            title: `${aTituloCase(nombreMover)} ${aTituloCase(apellidoMover)}`.trim(), start: `${nuevaFecha}T${nuevaHora}:00-03:00`,
             allDay: false, tipo: 'sobreturno',
           };
           if (currentView === 'busqueda') { ejecutarBusqueda(); ofrecerImprimir(itemTicket); }
