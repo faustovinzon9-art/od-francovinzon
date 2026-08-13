@@ -2,6 +2,12 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-13 (decimotercera vuelta) — Nombre/Apellido separados, Title Case en turnos, cards de /pacientes compactas
+
+- `/turnos`: Nombre y Apellido pasan a ser dos campos obligatorios separados (antes un solo "Nombre y apellido"). "Nuevo turno" de `/gestion` ya los tenía separados, faltaba exigir apellido.
+- Nombre/apellido se normalizan a Title Case al guardar, igual que las fichas — se refleja en agenda, ticket, WhatsApp y confirmación.
+- Tarjetas de "Pacientes de hoy"/"¿Es este paciente?" más compactas sin achicar la letra; títulos de esas secciones más grandes.
+
 ## 2026-08-13 (duodécima vuelta) — DNI obligatorio, auto-refresh de /pacientes, loading states, copy de /turnos
 
 Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `fix/dni-refresh-loading-copy`, probada offline y mergeada directo).
