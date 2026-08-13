@@ -483,6 +483,20 @@
   }
   const fmtUTC = (dt) => dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
+  // ---------- Ventana en la que tiene sentido mostrar "Confirmo el turno" ----------
+  // No tiene sentido pedirle a alguien que confirme un turno reservado hoy para dentro
+  // de tres semanas — el botón solo aparece cerca de la fecha real (72hs antes), que es
+  // cuando Ayelen manda el recordatorio por WhatsApp con este mismo link. Mismo patrón
+  // de timezone fijo (America/Argentina/Buenos_Aires, sin DST) que limitesUTC de arriba
+  // — nunca Date/hora local del navegador. Es el mismo link siempre: la aparición
+  // depende únicamente de qué tan cerca está la fecha en el momento en que se abre,
+  // no de por dónde se llegó acá (QR, WhatsApp, o "Guardar acceso a mi turno").
+  const VENTANA_CONFIRMAR_MS = 72 * 60 * 60000;
+  function dentroDeVentanaConfirmar(fechaStr, horaStr) {
+    const { startUTC } = limitesUTC(fechaStr, horaStr);
+    return startUTC.getTime() - Date.now() <= VENTANA_CONFIRMAR_MS;
+  }
+
   function construirICS(fechaStr, horaStr) {
     const { startUTC, endUTC } = limitesUTC(fechaStr, horaStr);
     const uid = `turno-${fechaStr}-${horaStr.replace(':', '')}-${Math.random().toString(36).slice(2)}@odontologofrancovinzon`;
@@ -602,6 +616,7 @@
           // conviene que se re-confirme, y si venía de un sobreturno convertido, el
           // evento nuevo en Calendar arranca sin la línea "Confirmado" de todos modos.
           marcarBotonConfirmado(false);
+          btnConfirmarTurno.classList.toggle('hidden', !dentroDeVentanaConfirmar(fechaSeleccionada, horarioSeleccionado));
           postActionsCard.classList.remove('hidden');
           toast('✅ Turno modificado correctamente');
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -672,6 +687,7 @@
         // (ver el handler de reprogramar-confirm-btn). Ver decisions.md.
         actualizarLinksCalendario();
         marcarBotonConfirmado(!!res.confirmado);
+        btnConfirmarTurno.classList.toggle('hidden', !dentroDeVentanaConfirmar(res.date, res.time));
         postActionsCard.classList.remove('hidden');
       })
       .catch(() => {

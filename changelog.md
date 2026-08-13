@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-13 (décima vuelta) — Fichas (Title Case, tamaños), encabezado de /turnos, subtítulo de compartir, botón Confirmar solo cerca de la fecha
+
+Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `feature/fichas-turnos-mejoras`, probada offline y mergeada directo).
+
+- Fichas: nombre/apellido/localidad/domicilio/obra social/plan/tratamiento ya no fuerzan mayúscula al tipear — se normalizan a Title Case recién al guardar (`aTituloCase()` nuevo, `lib/pacientesSheet.js`). Migración de una sola vez corrida contra producción real (autenticada con `CRON_SECRET`, primero en modo `dryRun`) para pasar las fichas ya cargadas de MAYÚSCULA TOTAL a Title Case — código de la migración borrado del repo después de correrla.
+- Tarjeta "Datos del paciente" más angosta (340px→296px). Letra más grande en nombre/apellido del título, Saldo/estado financiero, y la tabla de movimientos — a pedido específico para que Franco los lea sin esfuerzo.
+- `/turnos`: encabezado sin el texto de horario fijo ni la dirección, redacción más cálida, y la tarjeta de horarios encontrados con borde dorado y título grande para que se note más.
+- Subtítulo chico debajo de "Guardar acceso a mi turno" explicando para qué sirve.
+- `/turno`: el botón "Confirmo el turno" solo aparece dentro de las 72hs previas al turno (mismo link siempre, timezone Argentina fijo).
+
 ## 2026-08-12 (novena vuelta) — Link corto de gestión de turno (/t/CODIGO) + tono del link en el WhatsApp
 
 Rama `feature/link-corto-turno`. **Sin probar contra Calendar/Vercel real** — este entorno no tiene credenciales de Google ni acceso a la API de Vercel. Ver `tasks.md` para el detalle exacto de qué se verificó de forma aislada (generación/extracción del código) y qué queda pendiente de confirmar en vivo antes de mergear.
