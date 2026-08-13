@@ -395,11 +395,20 @@ async function getMonitoreo(req, res) {
 // "con los datos que ya existen" (ver el pedido). Cancelaciones/reprogramaciones no
 // tienen historial retroactivo (Calendar no guarda turnos borrados) — esas dos métricas
 // se alimentan desde ahora en adelante vía ActividadLog (lib/adminConfig.js).
+//
+// El rango mira `dias` para atrás Y 60 días para adelante (no solo hacia atrás):
+// este es un sistema de reserva de turnos, así que en cualquier momento buena parte
+// (a veces casi toda, en un sitio recién lanzado) de la actividad real vive en turnos
+// ya cargados para fechas futuras, no en el pasado. Un rango solo retroactivo dejaba
+// el dashboard vacío incluso con turnos reales cargados. `DIAS_FUTURO_FIJO` no es
+// configurable desde la UI a propósito, para no sumar otro control — 60 días cubre el
+// horizonte típico de reserva de este consultorio.
+const DIAS_FUTURO_FIJO = 60;
 async function getMetricas(req, res) {
   const dias = Math.min(Number(req.query.dias) || 30, 90);
   const calendar = getCalendarClient();
   const desde = new Date(Date.now() - dias * 24 * 60 * 60000);
-  const hasta = new Date();
+  const hasta = new Date(Date.now() + DIAS_FUTURO_FIJO * 24 * 60 * 60000);
 
   const [principal, sobreturnos] = await Promise.all([
     conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 2500 })),
@@ -479,6 +488,25 @@ async function getMetricas(req, res) {
   topDeudoresMonto.sort((a, b) => b.saldo - a.saldo);
   topDeudoresAntiguedad.sort((a, b) => b.dias - a.dias);
 
+  // Cancelados/reprogramados: Calendar no guarda turnos borrados, así que no hay
+  // forma de calcularlos en vivo como confirmados/nuevos — se cuentan desde
+  // ActividadLog (ver lib/adminConfig.js), que solo tiene datos desde que se agregó
+  // este logging (2026-08-13 en adelante). Se muestran como cantidad, no %: no hay un
+  // denominador común honesto entre "turnos vigentes ahora en Calendar" (arriba) y
+  // "eventos de cancelación ya registrados en el log" (acá).
+  let cancelados = 0, reprogramados = 0;
+  try {
+    const actividad = await leerActividadReciente(500);
+    actividad.forEach((ev) => {
+      const fechaEv = new Date(ev.fecha);
+      if (fechaEv < desde || fechaEv > hasta) return;
+      if (ev.tipo === 'turno_cancelado') cancelados++;
+      else if (ev.tipo === 'turno_reprogramado') reprogramados++;
+    });
+  } catch (err) {
+    console.warn('[admin.js] no se pudo leer cancelados/reprogramados:', err?.message || err);
+  }
+
   res.status(200).json({
     rangoDias: dias,
     volumenPorDia: Object.entries(porDia).sort(([a], [b]) => a.localeCompare(b)).map(([fecha, cantidad]) => ({ fecha, cantidad })),
@@ -488,6 +516,8 @@ async function getMetricas(req, res) {
     porcentajeNuevos: Math.round((nuevos / total) * 100),
     porcentajeRecurrentes: Math.round((recurrentes / total) * 100),
     totalTurnos: eventos.length,
+    cancelados,
+    reprogramados,
     porcentajeConDeuda: totalPacientesConSaldo ? Math.round((conDeuda / totalPacientesConSaldo) * 100) : null,
     topDeudoresMonto: topDeudoresMonto.slice(0, 10),
     topDeudoresAntiguedad: topDeudoresAntiguedad.slice(0, 10),
