@@ -10,5 +10,8 @@
       "source": "/t/:codigo",
       "destination": "/api/reservar?codigo=:codigo"
     }
-  ]
+  ],
+  "functions": {
+    "api/gestion/admin.js": { "maxDuration": 60 }
+  }
 }

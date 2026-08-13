@@ -425,12 +425,15 @@ function parsearMontoArgentino(texto) {
 // configurable desde la UI a propósito, para no sumar otro control — 60 días cubre el
 // horizonte típico de reserva de este consultorio.
 const DIAS_FUTURO_FIJO = 60;
-async function getMetricas(req, res) {
-  const dias = Math.min(Number(req.query.dias) || 30, 90);
+// Turnos/sobreturnos del rango + agregados simples (online vs Ayelen, confirmados,
+// nuevos vs recurrentes) — independiente de deuda/actividad, se corre en paralelo
+// con esas dos (ver getMetricas). Antes corría todo en serie: con muchos pacientes,
+// la suma de Calendar + deuda + actividad pasaba largo el límite de 10s de las
+// funciones serverless en el plan Hobby y el dashboard quedaba colgado sin ningún
+// error visible (encontrado en producción, 2026-08-13). `maxDuration: 60` en
+// vercel.json para este archivo da margen extra además de la paralelización.
+async function calcularTurnos(desde, hasta) {
   const calendar = getCalendarClient();
-  const desde = new Date(Date.now() - dias * 24 * 60 * 60000);
-  const hasta = new Date(Date.now() + DIAS_FUTURO_FIJO * 24 * 60 * 60000);
-
   const [principal, sobreturnos] = await Promise.all([
     conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 2500 })),
     conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 2500 })),
@@ -458,11 +461,14 @@ async function getMetricas(req, res) {
   });
 
   const total = eventos.length || 1;
+  return { eventos, porDia, online, cargadoAyelen, confirmados, nuevos, recurrentes, total };
+}
 
-  // Deuda: recorre las fichas de Pacientes leyendo el saldo — hoja liviana (unas pocas
-  // celdas por ficha), pero son N llamadas a Sheets. Se acota a 200 fichas y se
-  // consulta en lotes chicos secuenciales (mismo criterio que el resto del proyecto
-  // con la cuota de Google, ver CLAUDE.md) para no disparar todo junto.
+// Deuda: recorre las fichas de Pacientes leyendo el saldo — hoja liviana (unas pocas
+// celdas por ficha), pero son N llamadas a Sheets. Se acota a 200 fichas y se
+// consulta en lotes chicos secuenciales (mismo criterio que el resto del proyecto
+// con la cuota de Google, ver CLAUDE.md) para no disparar todo junto.
+async function calcularDeuda() {
   let conDeuda = 0, totalPacientesConSaldo = 0;
   const topDeudoresMonto = [];
   const topDeudoresAntiguedad = [];
@@ -513,13 +519,16 @@ async function getMetricas(req, res) {
 
   topDeudoresMonto.sort((a, b) => b.saldo - a.saldo);
   topDeudoresAntiguedad.sort((a, b) => b.dias - a.dias);
+  return { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad };
+}
 
-  // Cancelados/reprogramados: Calendar no guarda turnos borrados, así que no hay
-  // forma de calcularlos en vivo como confirmados/nuevos — se cuentan desde
-  // ActividadLog (ver lib/adminConfig.js), que solo tiene datos desde que se agregó
-  // este logging (2026-08-13 en adelante). Se muestran como cantidad, no %: no hay un
-  // denominador común honesto entre "turnos vigentes ahora en Calendar" (arriba) y
-  // "eventos de cancelación ya registrados en el log" (acá).
+// Cancelados/reprogramados: Calendar no guarda turnos borrados, así que no hay forma
+// de calcularlos en vivo como confirmados/nuevos — se cuentan desde ActividadLog (ver
+// lib/adminConfig.js), que solo tiene datos desde que se agregó este logging
+// (2026-08-13 en adelante). Se muestran como cantidad, no %: no hay un denominador
+// común honesto entre "turnos vigentes ahora en Calendar" y "eventos de cancelación
+// ya registrados en el log".
+async function calcularCancelacionesYReprogramaciones(desde, hasta) {
   let cancelados = 0, reprogramados = 0;
   try {
     const actividad = await leerActividadReciente(500);
@@ -532,6 +541,23 @@ async function getMetricas(req, res) {
   } catch (err) {
     console.warn('[admin.js] no se pudo leer cancelados/reprogramados:', err?.message || err);
   }
+  return { cancelados, reprogramados };
+}
+
+async function getMetricas(req, res) {
+  const dias = Math.min(Number(req.query.dias) || 30, 90);
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60000);
+  const hasta = new Date(Date.now() + DIAS_FUTURO_FIJO * 24 * 60 * 60000);
+
+  const [
+    { eventos, porDia, online, cargadoAyelen, confirmados, nuevos, recurrentes, total },
+    { conDeuda, totalPacientesConSaldo, topDeudoresMonto, topDeudoresAntiguedad },
+    { cancelados, reprogramados },
+  ] = await Promise.all([
+    calcularTurnos(desde, hasta),
+    calcularDeuda(),
+    calcularCancelacionesYReprogramaciones(desde, hasta),
+  ]);
 
   res.status(200).json({
     rangoDias: dias,

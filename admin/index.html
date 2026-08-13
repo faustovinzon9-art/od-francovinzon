@@ -467,6 +467,15 @@
 
   // ---------- Dashboard ----------
   async function cargarDashboard() {
+    // El cálculo de deuda recorre todas las fichas de /pacientes una por una — con
+    // varias decenas de pacientes puede tardar unos segundos reales, no es un
+    // cuelgue. Mostrar "Cargando..." en vez de dejar todo en blanco mientras se
+    // espera (pedido explícito, 2026-08-13 — antes parecía que no andaba nada).
+    document.getElementById('dash-stats').innerHTML = '<p class="hint">Cargando métricas…</p>';
+    document.getElementById('dash-bars').innerHTML = '';
+    document.querySelector('#dash-deudores-monto tbody').innerHTML = '<tr><td colspan="2">Cargando…</td></tr>';
+    document.querySelector('#dash-deudores-antiguedad tbody').innerHTML = '<tr><td colspan="2">Cargando…</td></tr>';
+    setMsg('dash-msg', '', '');
     try {
       const m = await apiGet('metricas', { dias: 30 });
       document.getElementById('dash-rango').textContent = m.rangoDias;
