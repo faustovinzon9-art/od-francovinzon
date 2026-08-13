@@ -991,7 +991,7 @@
       fetch(`/api/gestion/turnos-dia?date=${hoy}&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/disponibilidad?modo=dia&date=${hoy}`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/api/gestion/buscar?modo=proximo-bloqueo&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { date: null })),
-      fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], reorganizar: [] })),
+      fetch(`/api/gestion/buscar?modo=tareas&key=${encodeURIComponent(gestionKey)}`).then((r) => (r.ok ? r.json() : { sinTelefono: [], sinDni: [], reorganizar: [] })),
     ]).then(([turnosHoy, huecosHoy, proximoBloqueo, tareas]) => {
       const cantidadTurnos = (turnosHoy || []).filter((it) => it.tipo !== 'bloqueo').length;
       const cantidadHuecos = (huecosHoy || []).length;
@@ -1070,7 +1070,14 @@
       .map((t) => ({ ...t, modo: 'agregar-tel', label: 'Agregar teléfono' }))
       .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    const items = [...itemsReorganizar, ...itemsSinTelefono];
+    // El DNI no es obligatorio al crear un turno (ver el pedido) — esta tarea es solo
+    // un recordatorio para completarlo cuando se pueda, mismo estilo neutro que
+    // "Agregar teléfono" (no urgente).
+    const itemsSinDni = (tareas && tareas.sinDni ? tareas.sinDni : [])
+      .map((t) => ({ ...t, modo: 'agregar-dni', label: 'Agregar DNI' }))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    const items = [...itemsReorganizar, ...itemsSinTelefono, ...itemsSinDni];
 
     sidebarTareas = items;
 
@@ -1111,6 +1118,7 @@
   function manejarClickTarea(t) {
     if (!t) return;
     if (t.modo === 'ir-dia') irADia(t.fecha);
+    else if (t.modo === 'agregar-dni') irYEditarDni(t);
     else irYEditarTelefono(t);
   }
 
@@ -1173,6 +1181,24 @@
       const rowEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"]`);
       if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       abrirAgregarTelefonoInline(idx, t.modo);
+    });
+  }
+
+  // Misma idea que irYEditarTelefono(), pero con su propio editor inline (ver el
+  // pedido, 2026-08-13) — el panel de "Editar turno" (✏️) oculta teléfono/DNI al mover
+  // un turno existente (esos campos son solo para "Nuevo turno"), así que reutilizarlo
+  // acá no serviría: hace falta un input inline propio, igual que "Agregar teléfono".
+  function irYEditarDni(t) {
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t.start));
+    currentDate = fechaItem;
+    dateInput.value = currentDate;
+    updateTodayBtn();
+    cambiarVista('dia').then(() => {
+      const idx = agendaItems.findIndex((it) => it.id === t.id && it.calendarId === t.calendarId);
+      if (idx === -1) return;
+      const rowEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"]`);
+      if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      abrirAgregarDniInline(idx);
     });
   }
 
@@ -1591,6 +1617,10 @@
       guardarTelefonoInline(idx, item);
     } else if (action === 'cancelar-tel') {
       cancelarTelefonoInline(idx);
+    } else if (action === 'guardar-dni') {
+      guardarDniInline(idx, item);
+    } else if (action === 'cancelar-dni') {
+      cancelarDniInline(idx);
     } else if (action === 'confirmar-toggle') {
       confirmarToggle(idx, item);
     } else if (action === 'enviar-whatsapp') {
@@ -1700,6 +1730,53 @@
   // de abrir "Agregar/Editar teléfono" (con su número previo, o sin ninguno).
   function cancelarTelefonoInline(idx) {
     inlineTelInstances.delete(idx);
+    renderAgenda();
+  }
+
+  // ---------- Editor inline de DNI ("Agregar DNI", ver el pedido, 2026-08-13) ----------
+  // Mismo patrón que el de teléfono de arriba, pero sin librería de país (es texto
+  // simple) y sin campo "verificado" — endpoint propio, api/gestion/agregar-dni.js.
+  function abrirAgregarDniInline(idx) {
+    const item = agendaItems[idx];
+    const actionsEl = agendaEl.querySelector(`.row[data-row-idx="${idx}"] .row-actions`);
+    if (!actionsEl) return;
+    actionsEl.innerHTML = `
+      <div class="inline-tel-wrap">
+        <input type="text" id="inline-dni-${idx}" inputmode="numeric" placeholder="DNI">
+        <button class="icon-btn trash" data-action="cancelar-dni" data-idx="${idx}" title="Cancelar">✕</button>
+        <button class="icon-btn" data-action="guardar-dni" data-idx="${idx}" title="Guardar">✓</button>
+      </div>
+    `;
+    const input = document.getElementById(`inline-dni-${idx}`);
+    if (!input) return;
+    if (item && item.dni) input.value = item.dni;
+    input.focus();
+    input.select();
+  }
+
+  function guardarDniInline(idx, item) {
+    const input = document.getElementById(`inline-dni-${idx}`);
+    const dni = input ? input.value.trim() : '';
+
+    fetch('/api/gestion/agregar-dni', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, eventId: item.id, calendarId: item.calendarId, dni }),
+    })
+      .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
+      .then((res) => {
+        if (!res.success) return;
+        // Parcheo local: no hace falta volver a pedir el día entero para una fila.
+        agendaItems[idx] = { ...agendaItems[idx], dni: res.dni || '' };
+        renderAgenda();
+        resaltarFila(idx);
+        cargarResumenSidebar(); // la tarea "Agregar DNI" desaparece de la lista si ya se completó
+        toast('✅ Cambios guardados');
+      })
+      .catch((err) => { if (err.message !== 'unauthorized') { /* no-op, se puede reintentar */ } });
+  }
+
+  function cancelarDniInline(idx) {
     renderAgenda();
   }
 
@@ -2376,18 +2453,23 @@
     iti.setNumber(verificado ? `+${telefono}` : telefono);
   }
 
-  function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId, iti) {
+  // `dniId` es opcional (el form de sobreturno, "t-*", no tiene campo de DNI) — solo el
+  // form combinado de crear/editar turno ("mc-*") lo pasa.
+  function wireAutocompletarTelefono(nombreId, apellidoId, telefonoId, iti, dniId) {
     let debounce = null;
     function trigger() {
       clearTimeout(debounce);
       debounce = setTimeout(() => {
         const nombreCompleto = (document.getElementById(nombreId).value + ' ' + document.getElementById(apellidoId).value).trim();
         const telInput = document.getElementById(telefonoId);
+        const dniInput = dniId ? document.getElementById(dniId) : null;
         if (!nombreCompleto || telInput.value.trim()) return;
         fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`)
-          .then((r) => (r.ok ? r.json() : { telefono: null }))
+          .then((r) => (r.ok ? r.json() : { telefono: null, dni: null }))
           .then((data) => {
-            if (data.telefono && !telInput.value.trim()) setNumeroAutocompletado(iti, data.telefono, data.telefonoVerificado);
+            if (!data.telefono || telInput.value.trim()) return;
+            setNumeroAutocompletado(iti, data.telefono, data.telefonoVerificado);
+            autocompletarDni(dniInput, data.telefono, data.dni);
           })
           .catch(() => {});
       }, 500);
@@ -2396,7 +2478,28 @@
     document.getElementById(apellidoId).addEventListener('blur', trigger);
   }
   wireAutocompletarTelefono('t-nombre', 't-apellido', 't-telefono', itiTTelefono);
-  wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono', itiMcTelefono);
+  wireAutocompletarTelefono('mc-nombre', 'mc-apellido', 'mc-telefono', itiMcTelefono, 'mc-dni');
+
+  // Autocompletar DNI (ver el pedido, 2026-08-13): prioridad 1 = DNI de la ficha del
+  // paciente en /pacientes (más confiable, resuelto por teléfono contra
+  // api/gestion/pacientes.js modo=dni-por-telefono); prioridad 2, si no tiene ficha =
+  // `dniTurno`, el DNI que ya vino en la misma respuesta de arriba (turno anterior más
+  // reciente de esa persona, mismo candidato que el teléfono). Si ninguna aparece, el
+  // campo queda vacío para cargarlo a mano — no es obligatorio, y ese turno va a
+  // aparecer solo como "sin DNI" en la lista de tareas del sidebar hasta completarse.
+  function autocompletarDni(dniInput, telefono, dniTurno) {
+    if (!dniInput || dniInput.value.trim()) return;
+    fetch(`/api/gestion/pacientes?modo=dni-por-telefono&telefono=${encodeURIComponent(telefono)}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => (r.ok ? r.json() : { dni: null }))
+      .then((data) => {
+        if (dniInput.value.trim()) return; // por si se tipeó a mano mientras se esperaba
+        const dni = data.dni || dniTurno;
+        if (dni) dniInput.value = dni;
+      })
+      .catch(() => {
+        if (!dniInput.value.trim() && dniTurno) dniInput.value = dniTurno;
+      });
+  }
 
   // ---------- Dropdown de autocompletado de pacientes mientras se escribe ----------
   function wireAutocompletePacientes(nombreId, dropdownId, apellidoId, telefonoId, iti) {

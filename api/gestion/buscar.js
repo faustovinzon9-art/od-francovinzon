@@ -1,6 +1,6 @@
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
-  eventBounds, extraerTelefono, extraerTelefonoVerificado, normalizarTexto,
+  eventBounds, extraerTelefono, extraerTelefonoVerificado, extraerDni, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 
@@ -137,13 +137,17 @@ async function buscarTelefono(req, res) {
         start: eventBounds(ev).start,
         telefono: extraerTelefono(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
+        // DNI del turno anterior más reciente de esa persona (mismo candidato que ya se
+        // usa para el teléfono, ver el pedido) — prioridad 2 del autocompletado de DNI
+        // en /gestion: la ficha (si existe) gana, esto es solo el respaldo.
+        dni: extraerDni(ev.description),
       }))
       .filter((c) => c.telefono)
       .sort((a, b) => b.start - a.start);
 
     res.status(200).json(candidatos.length
-      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado }
-      : { telefono: null });
+      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado, dni: candidatos[0].dni || null }
+      : { telefono: null, dni: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ telefono: null });
@@ -233,8 +237,10 @@ const RANGO_SIN_TELEFONO_DIAS = 14;
 // esos eventos a la Calendar API). Mismo horizonte que ya usa proximo-bloqueo.js.
 const RANGO_REORGANIZAR_DIAS = 120;
 
-// Alimenta la "lista de tareas inteligente" del sidebar de /gestion. Dos categorías,
-// ambas de datos reales, cada una con su propia ventana:
+// Alimenta la "lista de tareas inteligente" del sidebar de /gestion. Tres categorías,
+// todas de datos reales, cada una con su propia ventana (sinDni comparte la ventana
+// corta de sinTelefono — mismo criterio: no tiene sentido recordar un dato faltante de
+// un turno lejano todavía, ver el pedido, 2026-08-13):
 // - reorganizar: cada bloqueo (día completo, bloqueo-dia.js, O rango horario puntual,
 //   bloquear-horario.js — ambos solo en CALENDAR_ID) que TODAVÍA tiene algún turno o
 //   sobreturno superpuesto en su rango — hay que reubicarlos. Una tarea POR BLOQUEO,
@@ -279,6 +285,7 @@ async function tareas(req, res) {
     ];
 
     const sinTelefono = [];
+    const sinDni = [];
     const bloqueos = [];
     const turnos = [];
 
@@ -299,13 +306,23 @@ async function tareas(req, res) {
       const { start, end } = eventBounds(ev);
       turnos.push({ start, end });
 
-      // "Agregar teléfono" solo para turnos dentro de la ventana corta — el turno
-      // en sí ya se agregó a `turnos` arriba con la ventana larga, para que el
-      // cruce con bloqueos lejanos funcione igual.
+      // "Agregar teléfono"/"Agregar DNI" solo para turnos dentro de la ventana corta —
+      // el turno en sí ya se agregó a `turnos` arriba con la ventana larga, para que el
+      // cruce con bloqueos lejanos funcione igual. El DNI no es obligatorio al crear un
+      // turno (ver el pedido) — por eso, si falta, queda como recordatorio acá en vez de
+      // bloquear la carga.
       if (start < limiteSinTelefono) {
         const telefono = extraerTelefono(ev.description);
         if (!telefono) {
           sinTelefono.push({
+            id: ev.id,
+            calendarId,
+            title: ev.summary || '',
+            start: start.toISOString(),
+          });
+        }
+        if (!extraerDni(ev.description)) {
+          sinDni.push({
             id: ev.id,
             calendarId,
             title: ev.summary || '',
@@ -324,11 +341,12 @@ async function tareas(req, res) {
       .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
     sinTelefono.sort((a, b) => new Date(a.start) - new Date(b.start));
+    sinDni.sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    res.status(200).json({ sinTelefono, reorganizar });
+    res.status(200).json({ sinTelefono, sinDni, reorganizar });
   } catch (err) {
     console.error(err);
-    res.status(200).json({ sinTelefono: [], reorganizar: [] });
+    res.status(200).json({ sinTelefono: [], sinDni: [], reorganizar: [] });
   }
 }
 

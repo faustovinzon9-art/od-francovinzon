@@ -91,6 +91,7 @@ export default async function handler(req, res) {
       if (req.query.modo === 'telefono') return await obtenerTelefonoFicha(req, res);
       if (req.query.modo === 'mapeos') return await obtenerMapeos(req, res);
       if (req.query.modo === 'cumpleanos-hoy') return await cumpleanosHoy(req, res);
+      if (req.query.modo === 'dni-por-telefono') return await dniPorTelefono(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
@@ -241,7 +242,14 @@ async function buscarPublico(req, res) {
       const { nombre, apellido, dni } = parsearNombreArchivo(f.name);
       return { id: f.id, nombre, apellido, dni };
     })
-    .filter((p) => normalizarTexto(`${p.nombre} ${p.apellido}`).includes(q) || normalizarDni(p.dni).includes(q.replace(/\D/g, '')))
+    .filter((p) => {
+      // Bug real (2026-08-13): con una búsqueda sin dígitos (ej. "Fa"), `qDigits` queda
+      // vacío y `cualquierString.includes('')` da SIEMPRE true en JS — el OR de abajo
+      // terminaba matcheando TODAS las fichas por la rama de DNI, ignorando el nombre
+      // tipeado. Por eso la rama de DNI solo se evalúa si `qDigits` tiene contenido.
+      const qDigits = q.replace(/\D/g, '');
+      return normalizarTexto(`${p.nombre} ${p.apellido}`).includes(q) || (qDigits && normalizarDni(p.dni).includes(qDigits));
+    })
     .sort((a, b) => `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es'))
     .slice(0, 15);
 
@@ -537,6 +545,61 @@ async function calcularCumpleanosHoy(forzar) {
 async function cumpleanosHoy(req, res) {
   const lista = await calcularCumpleanosHoy(!!req.query.forzar);
   res.status(200).json(lista);
+}
+
+// ---------- DNI por teléfono (autocompletado al crear un turno en /gestion, ver el
+// pedido) ----------
+// Prioridad 1 del autocompletado de DNI: si la persona tiene ficha, ese DNI es más
+// confiable que el que haya quedado escrito en algún turno viejo. Índice
+// teléfono(normalizado, últimos 10 dígitos) -> dni, construido leyendo C7 (dni) + C14
+// (teléfono) de cada ficha — mismo patrón de lotes de 25 y caché en memoria que
+// cumpleanos-hoy más arriba. Solo se indexan fichas que tengan AMBOS datos cargados:
+// si falta el DNI en la ficha no hay nada útil que devolver, y el autocompletado del
+// frontend ya sabe recurrir solo a la prioridad 2 (DNI del turno anterior, ver
+// api/gestion/buscar.js) cuando esto no encuentra nada.
+let cacheDniPorTelefono = null; // { valor: Map, ts }
+const TTL_DNI_TEL_MS = 600000;
+async function construirIndiceDniPorTelefono(forzar) {
+  if (!forzar && cacheDniPorTelefono && Date.now() - cacheDniPorTelefono.ts < TTL_DNI_TEL_MS) return cacheDniPorTelefono.valor;
+
+  const indice = new Map();
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+            spreadsheetId: f.id,
+            ranges: [`${SHEET_NAME}!C7`, `${SHEET_NAME}!C14`],
+          }));
+          const dni = normalizarDni(data.valueRanges?.[0]?.values?.[0]?.[0] || '');
+          const telefono = normalizarTelefonoMapeo(data.valueRanges?.[1]?.values?.[0]?.[0] || '');
+          return { dni, telefono };
+        } catch (err) {
+          console.warn(`[pacientes.js] no se pudo leer dni/teléfono de ${f.name}:`, err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => { if (r && r.dni && r.telefono) indice.set(r.telefono, r.dni); });
+    }
+  } catch (err) {
+    console.warn('[pacientes.js] no se pudo construir el índice dni-por-teléfono:', err?.message || err);
+  }
+
+  cacheDniPorTelefono = { valor: indice, ts: Date.now() };
+  return indice;
+}
+
+async function dniPorTelefono(req, res) {
+  const telefono = normalizarTelefonoMapeo(req.query.telefono || '');
+  if (!telefono) return res.status(200).json({ dni: null });
+  const indice = await construirIndiceDniPorTelefono(false);
+  res.status(200).json({ dni: indice.get(telefono) || null });
 }
 
 // "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
