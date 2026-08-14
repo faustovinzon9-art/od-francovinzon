@@ -1678,8 +1678,13 @@
       movMsg.classList.remove('hidden');
       return;
     }
+    // Capturado sincrónicamente ANTES de cualquier await (ver el fix de iniciarPolling
+    // más abajo, mismo motivo) — así el guardado y el refetch posterior apuntan siempre
+    // a la ficha que estaba abierta cuando se tocó "Guardar", nunca a lo que
+    // `fichaActual` pueda pasar a ser mientras tanto.
+    const idFicha = fichaActual.id;
     const payload = {
-      id: fichaActual.id,
+      id: idFicha,
       fecha: fechaInputASheet(fecha),
       tratamiento: movTratamiento.value.trim(),
       debe: movDebe.value ? Number(movDebe.value) : 0,
@@ -1695,8 +1700,10 @@
       if (r.success) {
         ocultarAnimado(panelMov);
         toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Movimiento guardado');
-        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-        renderFicha();
+        if (fichaActual && fichaActual.id === idFicha) {
+          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
+          renderFicha();
+        }
       } else {
         movMsg.textContent = r.message || 'No se pudo guardar.';
         movMsg.className = 'panel-msg error';
@@ -1708,6 +1715,9 @@
   });
 
   async function anularMovimiento(fila, btn) {
+    // Capturado ANTES del confirmDialog (que espera un click del usuario, tiempo
+    // arbitrario) — mismo motivo que en mov-guardar de arriba.
+    const idFicha = fichaActual.id;
     const ok = await confirmDialog({
       title: 'Anular movimiento',
       message: 'El movimiento queda marcado como anulado (no se borra) y deja de afectar el saldo. ¿Confirmás?',
@@ -1717,11 +1727,13 @@
     if (!ok) return;
     setBtnLoading(btn);
     try {
-      const r = await apiPost({ accion: 'movimiento-anular', id: fichaActual.id, fila });
+      const r = await apiPost({ accion: 'movimiento-anular', id: idFicha, fila });
       if (r.success) {
         toast('✅ Movimiento anulado');
-        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-        renderFicha();
+        if (fichaActual && fichaActual.id === idFicha) {
+          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
+          renderFicha();
+        }
       } else {
         toast('No se pudo anular el movimiento.');
         quitarBtnLoading(btn);
@@ -1982,8 +1994,11 @@
       presMsg.classList.remove('hidden');
       return;
     }
+    // Capturado sincrónicamente ANTES de cualquier await (ver el fix de iniciarPolling
+    // más abajo, mismo motivo: nunca confiar en `fichaActual` después de un await).
+    const idFicha = fichaActual.id;
     const payload = {
-      id: fichaActual.id,
+      id: idFicha,
       fecha: fechaInputASheet(fecha),
       tratamiento: presTratamiento.value.trim(),
       codigo: presCodigo.value.trim(),
@@ -1998,8 +2013,10 @@
       if (r.success) {
         ocultarAnimado(panelPres);
         toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Prestación guardada');
-        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-        renderFicha();
+        if (fichaActual && fichaActual.id === idFicha) {
+          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
+          renderFicha();
+        }
       } else {
         presMsg.textContent = r.message || 'No se pudo guardar.';
         presMsg.className = 'panel-msg error';
@@ -2011,6 +2028,8 @@
   });
 
   async function eliminarPrestacion(fila, btn) {
+    // Capturado ANTES del confirmDialog, mismo motivo que en anularMovimiento.
+    const idFicha = fichaActual.id;
     const ok = await confirmDialog({
       title: 'Eliminar prestación',
       message: 'Se borra esta fila de la tabla de prestaciones. ¿Confirmás?',
@@ -2020,11 +2039,13 @@
     if (!ok) return;
     setBtnLoading(btn);
     try {
-      const r = await apiPost({ accion: 'prestacion-eliminar', id: fichaActual.id, fila });
+      const r = await apiPost({ accion: 'prestacion-eliminar', id: idFicha, fila });
       if (r.success) {
         toast('✅ Prestación eliminada');
-        fichaActual = await apiGet({ modo: 'ficha', id: fichaActual.id });
-        renderFicha();
+        if (fichaActual && fichaActual.id === idFicha) {
+          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
+          renderFicha();
+        }
       } else {
         toast('No se pudo eliminar la prestación.');
         quitarBtnLoading(btn);
@@ -2035,14 +2056,28 @@
   }
 
   // ---------- Polling (Sheets -> Sistema) ----------
+  // BUG CRÍTICO corregido acá (2026-08-14, reportado en producción — ver decisions.md):
+  // clearInterval() en detenerPolling() solo evita que el timer vuelva a disparar, NUNCA
+  // cancela una ejecución del callback que YA arrancó y está a mitad de un await. Si el
+  // tick de esta ficha alcanza a disparar justo cuando el usuario cambia a OTRA ficha
+  // (búsqueda, o crear una nueva — abrirFicha() llama iniciarPolling() de nuevo, pero
+  // eso no aborta el tick viejo en vuelo), ese callback viejo terminaba pisando
+  // `fichaActual` global con los datos de LA FICHA VIEJA (`id`, capturado en el closure)
+  // aunque la pantalla ya mostrara otra — y cualquier guardado posterior (movimiento,
+  // prestación) usaba ese `fichaActual.id` corrompido, escribiendo en la ficha
+  // equivocada. Mismo patrón de guardia que ya usaba autocompletarTelefonoDesdeTurnos()
+  // más arriba para el mismo tipo de carrera: antes de aplicar el resultado, confirmar
+  // que la ficha abierta sigue siendo la misma que arrancó este poll.
   function iniciarPolling(id) {
     detenerPolling();
     pollTimer = setInterval(async () => {
       if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.campo) return; // no interrumpir mientras se escribe
       try {
         const { modifiedTime } = await apiGet({ modo: 'modified', id });
-        if (fichaActual && modifiedTime && modifiedTime !== fichaActual.driveModifiedTime) {
-          fichaActual = await apiGet({ modo: 'ficha', id });
+        if (fichaActual && fichaActual.id === id && modifiedTime && modifiedTime !== fichaActual.driveModifiedTime) {
+          const fichaNueva = await apiGet({ modo: 'ficha', id });
+          if (!fichaActual || fichaActual.id !== id) return; // cambió de ficha mientras esperaba esta segunda llamada
+          fichaActual = fichaNueva;
           renderFicha();
         }
       } catch (e) { /* silencioso */ }

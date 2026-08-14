@@ -85,6 +85,17 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
       return await servirFotoImagen(req, res);
     }
+    // UTILITARIO TEMPORAL (2026-08-14) — auditoría de integridad post-incidente: barre
+    // los movimientos de TODAS las fichas buscando montos atípicos que puedan ser
+    // rastro del bug de fichaActual corrompido (ver iniciarPolling más arriba). No hay
+    // forma 100% determinística de detectar "este movimiento es de otro paciente" (no
+    // existe ningún ID que lo vincule más allá de en qué hoja vive) — esto es un
+    // indicio estadístico (un monto mucho más grande que el resto de esa misma ficha
+    // junta), a revisar a mano, no una prueba. Sin GESTION_KEY por el mismo motivo que
+    // los demás utilitarios temporales — se saca apenas se confirma el resultado.
+    if (req.method === 'GET' && req.query.modo === 'auditoria-integridad-h4k9') {
+      return await auditarIntegridadTemp(req, res);
+    }
     // UTILITARIO TEMPORAL (2026-08-14, ver el pedido) — poblar la planilla "Pacientes
     // consolidados" de una sola vez con todo lo que ya existe (fichas + historial de
     // turnos), para que el autocompletado de /gestion tenga datos desde ya en vez de ir
@@ -278,6 +289,67 @@ async function buscarPublico(req, res) {
 // conveniencia para no tener que buscar a mano, no la fuente de verdad del matching, así
 // que un paciente que no matchee exacto simplemente no aparece en la lista rápida (sigue
 // pudiendo buscarse a mano arriba, sin ningún dato perdido).
+// ---------- UTILITARIO TEMPORAL: auditoría de integridad post-incidente (2026-08-14) ----------
+// Mismo parseo de montos que admin.js (parsearMontoArgentino) — copiado acá en vez de
+// compartido porque es un script de una sola corrida, no vale la pena tocar los exports
+// compartidos bajo apuro.
+function montoArgentinoTemp(texto) {
+  const limpio = String(texto || '').replace(/[^\d,.-]/g, '');
+  const sinMiles = limpio.replace(/\./g, '');
+  return parseFloat(sinMiles.replace(',', '.')) || 0;
+}
+async function auditarIntegridadTemp(req, res) {
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+
+    const sospechosos = [];
+    let fallidos = 0;
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoMovimientos() }));
+          const filas = (data.values || [])
+            .map((row, idx) => ({ fila: 18 + idx, fecha: row[0] || '', tratamiento: row[1] || '', debe: row[2] || '', haber: row[3] || '' }))
+            .filter((m) => m.fecha || m.tratamiento || m.debe || m.haber)
+            .filter((m) => !/^\[ANULADO\]/.test(m.tratamiento));
+          if (filas.length < 2) return null; // no hay con qué comparar dentro de la misma ficha
+
+          const montos = filas.map((m) => Math.max(montoArgentinoTemp(m.debe), montoArgentinoTemp(m.haber)));
+          const total = montos.reduce((a, b) => a + b, 0);
+          const max = Math.max(...montos);
+          const maxIdx = montos.indexOf(max);
+          const restoSuma = total - max;
+          // Señal (no prueba): un solo movimiento pesa 5x o más que la suma de TODOS
+          // los demás de esa misma ficha juntos — la forma típica que tendría un
+          // movimiento de otro paciente colado por el bug ya corregido.
+          if (max > 0 && restoSuma > 0 && max >= restoSuma * 5) {
+            const { nombre, apellido } = parsearNombreArchivo(f.name);
+            return {
+              id: f.id, nombre: `${nombre} ${apellido}`.trim(), fila: filas[maxIdx].fila,
+              fecha: filas[maxIdx].fecha, tratamiento: filas[maxIdx].tratamiento,
+              monto: max, restoDeLaFichaSuma: restoSuma,
+            };
+          }
+          return null;
+        } catch (err) {
+          console.warn(`[pacientes.js] auditoría: no se pudo leer ${f.name}:`, err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => { if (r) sospechosos.push(r); });
+    }
+
+    res.status(200).json({ archivosRevisados: archivos.length, sospechosos });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
+  }
+}
+
 async function hoyPublico(req, res) {
   try {
     const calendar = getCalendarClient();
