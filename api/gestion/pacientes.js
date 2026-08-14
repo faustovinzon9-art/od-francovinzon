@@ -11,8 +11,8 @@ import {
   getPacientesSheetsClient, getPacientesDriveClient, buildAuthUrl, exchangeCodeForTokens,
 } from '../../lib/googleOAuthPacientes.js';
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto,
-  extraerTelefono, extraerDni, isValidGestionKey, getHorariosLibresDia, formatArgDay,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto, extraerTelefono,
+  isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -75,20 +75,14 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'buscar-publico') {
       return await buscarPublico(req, res);
     }
+    if (req.method === 'GET' && req.query.modo === 'hoy-publico') {
+      return await hoyPublico(req, res);
+    }
     if (req.method === 'GET' && req.query.modo === 'fotos') {
       return await listarFotos(req, res);
     }
     if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
       return await servirFotoImagen(req, res);
-    }
-    // UTILITARIO TEMPORAL (2026-08-13, ver el pedido) — backfillear el DNI de turnos ya
-    // creados que no lo tienen, usando el DNI de la ficha del paciente (mismo teléfono,
-    // mismo criterio que dni-por-telefono). Sin GESTION_KEY porque no hay forma de
-    // correrlo con clave a mano en este entorno — se saca del proyecto apenas se
-    // confirma el resultado (ver CLAUDE.md, utilitarios de un solo uso). Por defecto es
-    // un dry-run, no escribe nada (?aplicar=1 para escribir de verdad).
-    if (req.method === 'GET' && req.query.modo === 'backfill-dni-x92k') {
-      return await backfillDniTurnos(req, res);
     }
 
     if (req.method === 'GET') {
@@ -106,6 +100,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && req.body.accion === 'subir-foto') {
       return await subirFoto(req, res);
+    }
+    if (req.method === 'POST' && req.body.accion === 'eliminar-foto') {
+      return await eliminarFoto(req, res);
     }
 
     if (req.method === 'POST') {
@@ -263,6 +260,52 @@ async function buscarPublico(req, res) {
     .slice(0, 15);
 
   res.status(200).json(resultados);
+}
+
+// "Pacientes de hoy" para /mobilephotouploaderodfrancovinzon (ver el pedido, 2026-08-13)
+// — mismo criterio "de hoy" que /pacientes, pero simplificado a propósito: solo el
+// match EXACTO nombre+apellido turno<->ficha (nivel 1/2 de /pacientes), sin la cascada
+// de teléfono/similitud difusa (nivel 3/4/5) que ese panel sí hace — acá es un atajo de
+// conveniencia para no tener que buscar a mano, no la fuente de verdad del matching, así
+// que un paciente que no matchee exacto simplemente no aparece en la lista rápida (sigue
+// pudiendo buscarse a mano arriba, sin ningún dato perdido).
+async function hoyPublico(req, res) {
+  try {
+    const calendar = getCalendarClient();
+    const hoyStr = formatArgDay(new Date());
+    const desde = toArgDate(hoyStr, '00:00');
+    const hasta = new Date(desde.getTime() + 24 * 60 * 60000);
+
+    const [principal, sobreturnos] = await Promise.all([
+      conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 200 })),
+      conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: true, maxResults: 200 })),
+    ]);
+    const eventos = [...(principal.data.items || []), ...(sobreturnos.data.items || [])]
+      .filter((ev) => ev.start.dateTime && !(ev.description || '').includes(BLOCK_MARKER))
+      .sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
+
+    const drive = getPacientesDriveClient();
+    const archivos = await listarArchivosPacientes(drive);
+    const fichas = archivos.map((f) => {
+      const { nombre, apellido } = parsearNombreArchivo(f.name);
+      return { id: f.id, nombre, apellido };
+    });
+
+    const vistos = new Set();
+    const resultado = [];
+    eventos.forEach((ev) => {
+      const nombreTurno = normalizarTexto(ev.summary || '');
+      const ficha = fichas.find((p) => !vistos.has(p.id) && normalizarTexto(`${p.nombre} ${p.apellido}`) === nombreTurno);
+      if (!ficha) return;
+      vistos.add(ficha.id);
+      resultado.push({ id: ficha.id, nombre: ficha.nombre, apellido: ficha.apellido, hora: formatArgTime(new Date(ev.start.dateTime)) });
+    });
+
+    res.status(200).json(resultado);
+  } catch (err) {
+    console.error(err);
+    res.status(200).json([]);
+  }
 }
 
 // Detección de duplicados por DNI (único criterio — ver decisions.md): recorre todas las
@@ -609,74 +652,6 @@ async function dniPorTelefono(req, res) {
   if (!telefono) return res.status(200).json({ dni: null });
   const indice = await construirIndiceDniPorTelefono(false);
   res.status(200).json({ dni: indice.get(telefono) || null });
-}
-
-// ---------- UTILITARIO TEMPORAL: backfill de DNI en turnos existentes (2026-08-13) ----------
-// Recorre los próximos 90 días de CALENDAR_ID + SOBRETURNOS_CALENDAR_ID buscando turnos
-// sin DNI cargado; para cada uno, si el teléfono del turno matchea el teléfono de una
-// ficha (mismo índice que dni-por-telefono), copia el DNI de esa ficha a la description
-// del turno. Nunca pisa un DNI ya cargado (si ya tiene línea "DNI: algo" que no sea "-",
-// ese turno ni se toca). Los que no matcheen quedan igual que estaban — la lista de
-// tareas "Agregar DNI" del sidebar de /gestion ya los va a seguir mostrando, tal como se
-// pidió ("solo los que no tengan dni ni en los turnos ni en las fichas... como tarea
-// pendiente"). Dry-run por defecto: sin ?aplicar=1 solo cuenta y devuelve el detalle, sin
-// escribir nada en Calendar.
-const BACKFILL_DIAS = 90;
-async function backfillDniTurnos(req, res) {
-  const aplicar = req.query.aplicar === '1';
-  try {
-    const calendar = getCalendarClient();
-    const desde = new Date();
-    const hasta = new Date(desde.getTime() + BACKFILL_DIAS * 24 * 60 * 60000);
-
-    let eventos = [];
-    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
-      let pageToken;
-      do {
-        const { data } = await conReintentos(() => calendar.events.list({
-          calendarId, timeMin: desde.toISOString(), timeMax: hasta.toISOString(),
-          singleEvents: true, maxResults: 2500, pageToken,
-        }));
-        eventos = eventos.concat((data.items || []).map((ev) => ({ ev, calendarId })));
-        pageToken = data.nextPageToken;
-      } while (pageToken);
-    }
-    eventos = eventos.filter(({ ev }) => !(ev.description || '').includes(BLOCK_MARKER) && !extraerDni(ev.description));
-
-    const indice = await construirIndiceDniPorTelefono(false);
-
-    let actualizados = 0;
-    let sinMatch = 0;
-    const detalle = [];
-    for (const { ev, calendarId } of eventos) {
-      const tel = normalizarTelefonoMapeo(extraerTelefono(ev.description));
-      const dni = tel ? indice.get(tel) : null;
-      if (!dni) { sinMatch++; continue; }
-
-      detalle.push({ id: ev.id, titulo: ev.summary || '', dni });
-      if (!aplicar) continue;
-
-      const descActual = ev.description || '';
-      const yaTieneLinea = /DNI:\s*[^\n]*/i.test(descActual);
-      const nuevaDescripcion = yaTieneLinea
-        ? descActual.replace(/DNI:\s*[^\n]*/i, `DNI: ${dni}`)
-        : (descActual.replace(/\s+$/, '') ? `${descActual.replace(/\s+$/, '')}\nDNI: ${dni}` : `DNI: ${dni}`);
-      await conReintentos(() => calendar.events.patch({ calendarId, eventId: ev.id, requestBody: { description: nuevaDescripcion } }));
-      actualizados++;
-    }
-
-    res.status(200).json({
-      aplicado: aplicar,
-      turnosSinDniRevisados: eventos.length,
-      matchEncontrado: detalle.length,
-      sinMatch,
-      actualizados,
-      detalle: detalle.slice(0, 100),
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
-  }
 }
 
 // "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
@@ -1197,6 +1172,25 @@ async function subirFoto(req, res) {
     console.error(err);
     await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'subir-foto', error: err });
     res.status(200).json({ success: false, message: 'No se pudo subir la foto. Probá de nuevo.' });
+  }
+}
+
+// Borrar una foto vieja/repetida (ver el pedido, 2026-08-13) — SIN clave, mismo nivel
+// de exposición ya aceptado para toda esta página: el fotoId es un ID de Drive (largo,
+// no adivinable), así que la única forma de borrar una foto puntual es ya tenerla
+// cargada en pantalla (acá o en /pacientes, que reusa este mismo endpoint). No hay
+// papelera propia ni falta hace — son fotos de trabajo, no fichas.
+async function eliminarFoto(req, res) {
+  const { fotoId } = req.body;
+  if (!fotoId) return res.status(400).json({ success: false, message: 'Falta fotoId.' });
+  try {
+    const drive = getPacientesDriveClient();
+    await conReintentos(() => drive.files.delete({ fileId: fotoId }));
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'eliminar-foto', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo borrar la foto. Probá de nuevo.' });
   }
 }
 

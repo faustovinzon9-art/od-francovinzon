@@ -15,55 +15,92 @@
     --white: #FFFFFF; --text: #2A2A2A; --muted: #8A8578; --bad: #C1443A; --ok: #4F9A3C;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  /* Letra grande en toda la página a propósito (Franco usa lupa, ver el pedido,
+     2026-08-13) — base 18px en vez del 14px de siempre, y cada elemento de acá abajo
+     escalado en la misma proporción. */
+  body { background: var(--cream); color: var(--text); font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; }
   h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--navy); margin: 0; }
   .hidden { display: none !important; }
   button { font-family: inherit; cursor: pointer; }
-  input, textarea { font-family: inherit; font-size: 16px; }
+  input, textarea { font-family: inherit; font-size: 18px; }
 
   #app { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
   .brand { text-align: center; margin-bottom: 18px; }
   .brand img { width: 220px; max-width: 70vw; height: auto; }
-  .brand h1 { font-size: 18px; margin-top: 8px; }
+  .brand h1 { font-size: 23px; margin-top: 8px; }
 
   .card { background: var(--white); border-radius: 16px; padding: 18px; box-shadow: 0 1px 8px rgba(30,58,95,.06); margin-bottom: 16px; }
   .search-box { display: flex; gap: 8px; margin-bottom: 4px; }
-  .search-box input { flex: 1; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--cream); }
+  .search-box input { flex: 1; padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--cream); }
   .search-box input:focus { outline: none; border-color: var(--gold); background: var(--white); }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .hint { color: var(--muted); font-size: 15.5px; margin-top: 8px; }
 
-  .resultado-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  .resultado-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--line); gap: 10px; }
   .resultado-row:last-child { border-bottom: none; }
   .resultado-row .nombre { font-weight: 600; }
-  .resultado-row .dni { color: var(--muted); font-size: 12px; }
-  .resultado-row button { background: var(--navy); color: var(--white); border: none; padding: 7px 14px; border-radius: 100px; font-size: 12.5px; font-weight: 600; }
+  .resultado-row .dni { color: var(--muted); font-size: 15px; margin-top: 2px; }
+  .resultado-row button { background: var(--navy); color: var(--white); border: none; padding: 9px 16px; border-radius: 100px; font-size: 15.5px; font-weight: 600; flex-shrink: 0; }
 
-  .paciente-actual { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-  .paciente-actual .nombre { font-size: 17px; font-weight: 700; color: var(--navy); }
-  .btn-cambiar { background: none; border: none; color: var(--muted); font-size: 12.5px; text-decoration: underline; }
+  .hoy-titulo { font-size: 15.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); margin: 14px 0 4px; font-family: inherit; font-weight: 700; }
+
+  .paciente-actual { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
+  .paciente-actual .nombre { font-size: 22px; font-weight: 700; color: var(--navy); }
+  /* Botón "Cambiar paciente" agrandado a propósito (ver el pedido) — antes era chico y
+     poco visible; ahora tiene texto más grande y área táctil real (padding + fondo). */
+  .btn-cambiar { background: var(--cream); border: 1.5px solid var(--line); color: var(--navy); font-size: 15.5px; font-weight: 600; padding: 10px 14px; border-radius: 10px; flex-shrink: 0; }
 
   .foto-input-label {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     border: 2px dashed var(--line); border-radius: 14px; padding: 28px 16px; text-align: center; color: var(--muted);
   }
   .foto-input-label span.icon { font-size: 32px; }
+  .foto-input-label span.texto { font-size: 16.5px; }
   .foto-input-label input { display: none; }
   .preview-wrap { text-align: center; margin-bottom: 12px; }
   .preview-wrap img { max-width: 100%; max-height: 280px; border-radius: 12px; }
   .field { margin-top: 12px; }
-  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .field label { display: block; font-size: 15.5px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
   .field textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--cream); min-height: 60px; resize: vertical; }
   .field textarea:focus { outline: none; border-color: var(--gold); background: var(--white); }
-  .btn-subir { width: 100%; margin-top: 14px; background: var(--gold); color: var(--white); border: none; padding: 13px; border-radius: 12px; font-weight: 700; font-size: 15px; }
+  .btn-subir { width: 100%; margin-top: 14px; background: var(--gold); color: var(--white); border: none; padding: 14px; border-radius: 12px; font-weight: 700; font-size: 18px; }
   .btn-subir:disabled { opacity: .55; }
-  .msg { font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+  .msg { font-size: 15.5px; margin-top: 10px; min-height: 16px; }
   .msg.error { color: var(--bad); }
   .msg.ok { color: var(--ok); }
 
+  .fotos-titulo { font-size: 18.5px; margin-top: 24px; margin-bottom: 12px; }
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .foto-item { cursor: pointer; }
   .foto-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
-  .foto-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
-  .foto-item .fecha { font-size: 10.5px; color: var(--muted); }
+  .foto-item .desc { font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+  .foto-item .fecha { font-size: 13px; color: var(--muted); }
+
+  /* Visor a pantalla completa (ver el pedido) — se abre al tocar una foto de "Fotos ya
+     subidas". Compartir con Web Share API (mismo patrón que "Guardar acceso a mi
+     turno" en /turnos): si el navegador soporta compartir archivos, comparte la foto
+     misma; si no, comparte/copia el link directo. */
+  .visor-overlay {
+    position: fixed; inset: 0; background: rgba(20,20,20,.94); z-index: 999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px 18px; gap: 16px;
+  }
+  .visor-overlay img { max-width: 100%; max-height: 62vh; border-radius: 10px; object-fit: contain; }
+  .visor-cerrar {
+    position: absolute; top: 18px; right: 18px; background: rgba(255,255,255,.15); color: var(--white);
+    border: none; width: 46px; height: 46px; border-radius: 50%; font-size: 20px; line-height: 1;
+  }
+  .visor-info { color: var(--white); text-align: center; max-width: 92%; font-size: 16.5px; }
+  .visor-fecha { color: rgba(255,255,255,.62); font-size: 14.5px; margin-top: 4px; }
+  .visor-acciones { display: flex; gap: 12px; }
+  .visor-compartir { background: var(--gold); color: var(--white); border: none; padding: 14px 28px; border-radius: 100px; font-weight: 700; font-size: 17px; }
+  .visor-borrar { background: rgba(255,255,255,.12); color: var(--white); border: 1.5px solid rgba(255,255,255,.35); padding: 14px 24px; border-radius: 100px; font-weight: 600; font-size: 16px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: var(--navy); color: var(--white); padding: 12px 22px; border-radius: 100px;
+    font-size: 15.5px; opacity: 0; transition: opacity .2s ease, transform .2s ease; z-index: 1000; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -78,6 +115,10 @@
     <div class="search-box"><input type="text" id="buscar-input" placeholder="Buscar paciente por nombre o DNI..." autocomplete="off"></div>
     <div class="hint">Escribí al menos 2 caracteres.</div>
     <div id="resultados"></div>
+    <div id="hoy-wrap" class="hidden">
+      <div class="hoy-titulo">Pacientes de hoy</div>
+      <div id="hoy-lista"></div>
+    </div>
   </div>
 
   <div class="card hidden" id="card-paciente">
@@ -89,7 +130,7 @@
     <div id="preview-wrap" class="preview-wrap hidden"><img id="preview-img" alt=""></div>
     <label class="foto-input-label" id="foto-input-label">
       <span class="icon">📷</span>
-      <span>Sacar o subir una foto</span>
+      <span class="texto">Sacar o subir una foto</span>
       <input type="file" accept="image/*" capture="environment" id="foto-input">
     </label>
 
@@ -100,9 +141,22 @@
     <button class="btn-subir" id="btn-subir" disabled>Subir foto</button>
     <div class="msg" id="upload-msg"></div>
 
-    <h2 style="font-size:15px; margin-top:24px; margin-bottom:12px;">Fotos ya subidas</h2>
+    <h2 class="fotos-titulo">Fotos ya subidas</h2>
     <div class="fotos-grid" id="fotos-grid"></div>
     <div class="hint hidden" id="fotos-vacio">Todavía no hay fotos de este paciente.</div>
+  </div>
+</div>
+
+<div class="visor-overlay hidden" id="visor-overlay">
+  <button class="visor-cerrar" id="visor-cerrar" aria-label="Cerrar">✕</button>
+  <img id="visor-img" alt="">
+  <div class="visor-info">
+    <div id="visor-desc"></div>
+    <div class="visor-fecha" id="visor-fecha"></div>
+  </div>
+  <div class="visor-acciones">
+    <button class="visor-borrar" id="visor-borrar">🗑 Borrar</button>
+    <button class="visor-compartir" id="visor-compartir">📤 Compartir</button>
   </div>
 </div>
 
@@ -111,6 +165,8 @@
   const cardPaciente = document.getElementById('card-paciente');
   const buscarInput = document.getElementById('buscar-input');
   const resultadosEl = document.getElementById('resultados');
+  const hoyWrap = document.getElementById('hoy-wrap');
+  const hoyListaEl = document.getElementById('hoy-lista');
   const pacienteNombreEl = document.getElementById('paciente-nombre');
   const fotoInput = document.getElementById('foto-input');
   const previewWrap = document.getElementById('preview-wrap');
@@ -120,21 +176,76 @@
   const uploadMsg = document.getElementById('upload-msg');
   const fotosGrid = document.getElementById('fotos-grid');
   const fotosVacio = document.getElementById('fotos-vacio');
+  const visorOverlay = document.getElementById('visor-overlay');
+  const visorImg = document.getElementById('visor-img');
+  const visorDesc = document.getElementById('visor-desc');
+  const visorFecha = document.getElementById('visor-fecha');
 
   let pacienteActual = null;
   let fotoComprimidaBase64 = null;
+  let pacientesHoy = [];
+  let fotosActuales = [];
 
   function setMsg(texto, tipo) {
     uploadMsg.textContent = texto;
     uploadMsg.className = `msg ${tipo || ''}`;
   }
 
+  let toastEl = null;
+  function toast(texto) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = texto;
+    requestAnimationFrame(() => toastEl.classList.add('show'));
+    clearTimeout(toastEl._timer);
+    toastEl._timer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  // ---------- Pacientes de hoy ----------
+  // Atajo para no tener que buscar a mano al paciente que ya está sentado en el
+  // consultorio (ver el pedido, 2026-08-13) — mismo criterio que "Pacientes de hoy" de
+  // /pacientes, pero resuelto server-side sin clave (modo=hoy-publico). Se pinta debajo
+  // del buscador y se oculta apenas se escribe una búsqueda (para no competir con los
+  // resultados de la búsqueda por texto).
+  function renderHoyLista() {
+    hoyListaEl.innerHTML = pacientesHoy.map((p) => `
+      <div class="resultado-row">
+        <div><div class="nombre">${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</div><div class="dni">Turno ${escapeHtml(p.hora)}</div></div>
+        <button type="button" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}">Elegir</button>
+      </div>
+    `).join('');
+    hoyListaEl.querySelectorAll('button[data-id]').forEach((btn) => {
+      btn.addEventListener('click', () => elegirPaciente(btn.dataset.id, btn.dataset.nombre));
+    });
+  }
+
+  async function cargarPacientesHoy() {
+    try {
+      const r = await fetch('/api/gestion/pacientes?modo=hoy-publico');
+      const data = await r.json();
+      pacientesHoy = Array.isArray(data) ? data : [];
+      renderHoyLista();
+      if (buscarInput.value.trim().length < 2) hoyWrap.classList.toggle('hidden', pacientesHoy.length === 0);
+    } catch {
+      // sin conexión: la sección queda oculta, se puede seguir buscando a mano arriba
+    }
+  }
+  cargarPacientesHoy();
+
   // ---------- Buscar paciente ----------
   let buscarTimer = null;
   buscarInput.addEventListener('input', () => {
     clearTimeout(buscarTimer);
     const q = buscarInput.value.trim();
-    if (q.length < 2) { resultadosEl.innerHTML = ''; return; }
+    if (q.length < 2) {
+      resultadosEl.innerHTML = '';
+      hoyWrap.classList.toggle('hidden', pacientesHoy.length === 0);
+      return;
+    }
+    hoyWrap.classList.add('hidden');
     buscarTimer = setTimeout(() => buscarPacientes(q), 300);
   });
 
@@ -174,6 +285,7 @@
     cardBuscar.classList.remove('hidden');
     buscarInput.value = '';
     resultadosEl.innerHTML = '';
+    hoyWrap.classList.toggle('hidden', pacientesHoy.length === 0);
     buscarInput.focus();
   });
 
@@ -255,18 +367,100 @@
     try {
       const r = await fetch(`/api/gestion/pacientes?modo=fotos&id=${pacienteActual.id}`);
       const fotos = await r.json();
+      fotosActuales = fotos;
       fotosVacio.classList.toggle('hidden', fotos.length > 0);
-      fotosGrid.innerHTML = fotos.map((f) => `
-        <div class="foto-item">
+      fotosGrid.innerHTML = fotos.map((f, i) => `
+        <div class="foto-item" data-idx="${i}">
           <img src="/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}" alt="" loading="lazy">
           ${f.descripcion ? `<div class="desc">${escapeHtml(f.descripcion)}</div>` : ''}
           <div class="fecha">${new Date(f.fecha).toLocaleDateString('es-AR')}</div>
         </div>
       `).join('');
+      fotosGrid.querySelectorAll('.foto-item').forEach((el) => {
+        el.addEventListener('click', () => abrirVisor(parseInt(el.dataset.idx, 10)));
+      });
     } catch {
       // sin conexión: se queda con lo que ya había, no rompe la pantalla
     }
   }
+
+  // ---------- Visor a pantalla completa + compartir ----------
+  function abrirVisor(idx) {
+    const f = fotosActuales[idx];
+    if (!f) return;
+    const url = `/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}`;
+    visorImg.src = url;
+    visorDesc.textContent = f.descripcion || '';
+    visorFecha.textContent = new Date(f.fecha).toLocaleDateString('es-AR');
+    visorOverlay.dataset.url = url;
+    visorOverlay.dataset.fotoId = f.id;
+    visorOverlay.classList.remove('hidden');
+  }
+  function cerrarVisor() {
+    visorOverlay.classList.add('hidden');
+    visorImg.src = '';
+  }
+  document.getElementById('visor-cerrar').addEventListener('click', cerrarVisor);
+  visorOverlay.addEventListener('click', (e) => { if (e.target === visorOverlay) cerrarVisor(); });
+
+  // Web Share API — si el navegador soporta compartir archivos (canShare con files),
+  // comparte la foto misma; si solo soporta compartir links (o nada), cae a compartir/
+  // copiar el link directo. Mismo espíritu que "Guardar acceso a mi turno" en /turnos:
+  // nunca se fuerza una sola vía, se usa lo mejor disponible en cada navegador.
+  document.getElementById('visor-compartir').addEventListener('click', async () => {
+    const url = visorOverlay.dataset.url;
+    if (!url) return;
+    try {
+      if (navigator.canShare) {
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const file = new File([blob], 'foto-paciente.jpg', { type: blob.type || 'image/jpeg' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Foto de paciente' });
+          return;
+        }
+      }
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'Foto de paciente', url });
+        return;
+      }
+      await navigator.clipboard.writeText(location.origin + url);
+      toast('Link copiado ✓');
+    } catch (err) {
+      // AbortError = cerró el panel de compartir sin elegir nada, no es un error real
+    }
+  });
+
+  // Borrar una foto vieja (ver el pedido, 2026-08-13) — confirm() nativo alcanza acá:
+  // es una acción destructiva poco frecuente, no hace falta un modal propio para esto.
+  document.getElementById('visor-borrar').addEventListener('click', async () => {
+    const fotoId = visorOverlay.dataset.fotoId;
+    if (!fotoId) return;
+    if (!confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+    const btn = document.getElementById('visor-borrar');
+    btn.disabled = true;
+    btn.textContent = 'Borrando...';
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'eliminar-foto', fotoId }),
+      });
+      const res = await r.json();
+      if (res.success) {
+        cerrarVisor();
+        toast('Foto borrada ✓');
+        cargarFotos();
+      } else {
+        toast(res.message || 'No se pudo borrar la foto.');
+      }
+    } catch {
+      toast('No se pudo borrar la foto. Revisá tu conexión.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🗑 Borrar';
+    }
+  });
 </script>
 </body>
 </html>

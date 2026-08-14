@@ -263,9 +263,25 @@
   .fotos-box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .fotos-box-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--cream); color: var(--navy); font-size: 14px; }
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .foto-item { position: relative; }
   .foto-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
   .foto-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   .foto-item .fecha { font-size: 10.5px; color: var(--muted); }
+  .foto-item .foto-borrar {
+    position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(20,20,20,.6); color: var(--white); border: none; font-size: 12px; line-height: 1;
+  }
+  /* Subir foto directo desde /pacientes (ver el pedido, 2026-08-13) — mismo patrón de
+     compresión en <canvas> que /mobilephotouploaderodfrancovinzon, mismos endpoints. */
+  .fotos-input-label {
+    display: flex; align-items: center; gap: 10px; border: 2px dashed var(--line); border-radius: 12px;
+    padding: 14px; color: var(--muted); cursor: pointer; font-size: 13.5px; margin-bottom: 10px;
+  }
+  .fotos-input-label .icon { font-size: 22px; }
+  .fotos-input-label input { display: none; }
+  .fotos-preview-wrap { text-align: center; margin-bottom: 10px; }
+  .fotos-preview-wrap img { max-width: 100%; max-height: 180px; border-radius: 10px; }
+  .fotos-descripcion-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 9px; margin-bottom: 4px; }
 
   button, .icon-btn, input, select, textarea, .patient-row {
     transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
@@ -612,8 +628,17 @@
       <h3>Fotos del paciente</h3>
       <button type="button" class="fotos-box-close" id="fotos-cerrar">✕</button>
     </div>
-    <div class="fotos-grid" id="fotos-grid"></div>
-    <p class="hint hidden" id="fotos-vacio" style="text-align:center; padding: 20px 0;">Todavía no hay fotos subidas. Se suben desde el celular en /mobilephotouploaderodfrancovinzon.</p>
+    <label class="fotos-input-label" id="fotos-input-label">
+      <span class="icon">📷</span>
+      <span>Sacar o subir una foto</span>
+      <input type="file" accept="image/*" capture="environment" id="fotos-input">
+    </label>
+    <div id="fotos-preview-wrap" class="fotos-preview-wrap hidden"><img id="fotos-preview-img" alt=""></div>
+    <input type="text" id="fotos-descripcion" class="fotos-descripcion-input" placeholder="Descripción (opcional)">
+    <button class="btn-confirm" id="fotos-subir-btn" disabled style="width:100%; margin-top:6px;">Subir foto</button>
+    <div class="panel-msg hidden" id="fotos-upload-msg"></div>
+    <div class="fotos-grid" id="fotos-grid" style="margin-top:16px;"></div>
+    <p class="hint hidden" id="fotos-vacio" style="text-align:center; padding: 20px 0;">Todavía no hay fotos subidas.</p>
   </div>
 </div>
 <div class="confirm-overlay hidden" id="confirm-overlay">
@@ -1717,16 +1742,35 @@
     cambiarVista(vistaFicha, vistaObraSocial);
   });
 
-  // ---------- Fotos del paciente (subidas desde /mobilephotouploaderodfrancovinzon) ----------
-  // Mismos modo=fotos/foto-imagen sin clave que usa esa página — acá igual, aunque
-  // /pacientes sí pide clave para entrar, no hace falta duplicar la lógica de auth
-  // para algo de tan baja sensibilidad (mismo criterio que decidió el usuario para
-  // esa página entera, ver decisions.md).
+  // ---------- Fotos del paciente (ver, subir, borrar — ver el pedido, 2026-08-13) ----------
+  // Mismos modo=fotos/foto-imagen/accion=subir-foto/eliminar-foto sin clave que usa
+  // /mobilephotouploaderodfrancovinzon — acá igual, aunque /pacientes sí pide clave para
+  // entrar, no hace falta duplicar la lógica de auth para algo de tan baja sensibilidad
+  // (mismo criterio que decidió el usuario para esa página entera, ver decisions.md).
   const fotosOverlay = document.getElementById('fotos-overlay');
+  const fotosInput = document.getElementById('fotos-input');
+  const fotosPreviewWrap = document.getElementById('fotos-preview-wrap');
+  const fotosPreviewImg = document.getElementById('fotos-preview-img');
+  const fotosDescripcion = document.getElementById('fotos-descripcion');
+  const fotosSubirBtn = document.getElementById('fotos-subir-btn');
+  const fotosUploadMsg = document.getElementById('fotos-upload-msg');
+  let fotoComprimidaBase64 = null;
+
+  function setFotosMsg(texto, tipo) {
+    fotosUploadMsg.textContent = texto;
+    fotosUploadMsg.className = `panel-msg ${tipo || ''}`;
+    fotosUploadMsg.classList.toggle('hidden', !texto);
+  }
+
   document.getElementById('btn-fotos').addEventListener('click', async () => {
     if (!fichaActual) return;
     fotosOverlay.classList.remove('hidden');
     requestAnimationFrame(() => fotosOverlay.classList.add('show'));
+    resetFormFoto();
+    await cargarFotosFicha();
+  });
+
+  async function cargarFotosFicha() {
     const grid = document.getElementById('fotos-grid');
     const vacio = document.getElementById('fotos-vacio');
     grid.innerHTML = '<p class="hint">Cargando...</p>';
@@ -1738,14 +1782,105 @@
       grid.innerHTML = fotos.map((f) => `
         <div class="foto-item">
           <img src="/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}" alt="" loading="lazy">
+          <button type="button" class="foto-borrar" data-foto-id="${f.id}" title="Borrar foto">✕</button>
           ${f.descripcion ? `<div class="desc">${escapeHtml(f.descripcion)}</div>` : ''}
           <div class="fecha">${new Date(f.fecha).toLocaleDateString('es-AR')}</div>
         </div>
       `).join('');
+      grid.querySelectorAll('.foto-borrar').forEach((btn) => {
+        btn.addEventListener('click', () => borrarFotoFicha(btn.dataset.fotoId));
+      });
     } catch {
       grid.innerHTML = '<p class="hint">No se pudieron cargar las fotos.</p>';
     }
+  }
+
+  async function borrarFotoFicha(fotoId) {
+    if (!confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'eliminar-foto', fotoId }),
+      });
+      const res = await r.json();
+      if (res.success) { toast('Foto borrada'); cargarFotosFicha(); }
+      else toast(res.message || 'No se pudo borrar la foto.');
+    } catch {
+      toast('No se pudo borrar la foto.');
+    }
+  }
+
+  // Mismo patrón de compresión en <canvas> que /mobilephotouploaderodfrancovinzon —
+  // nunca se sube el archivo original de la cámara tal cual (ver decisions.md).
+  const FOTOS_LADO_MAX = 1600;
+  fotosInput.addEventListener('change', () => {
+    const file = fotosInput.files[0];
+    if (!file) return;
+    setFotosMsg('', '');
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > FOTOS_LADO_MAX || height > FOTOS_LADO_MAX) {
+        const escala = FOTOS_LADO_MAX / Math.max(width, height);
+        width = Math.round(width * escala);
+        height = Math.round(height * escala);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      fotoComprimidaBase64 = canvas.toDataURL('image/jpeg', 0.75);
+      fotosPreviewImg.src = fotoComprimidaBase64;
+      fotosPreviewWrap.classList.remove('hidden');
+      fotosSubirBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
   });
+
+  function resetFormFoto() {
+    fotosInput.value = '';
+    fotoComprimidaBase64 = null;
+    fotosDescripcion.value = '';
+    fotosPreviewWrap.classList.add('hidden');
+    fotosSubirBtn.disabled = true;
+    setFotosMsg('', '');
+  }
+
+  fotosSubirBtn.addEventListener('click', async () => {
+    if (!fichaActual || !fotoComprimidaBase64) return;
+    fotosSubirBtn.disabled = true;
+    fotosSubirBtn.textContent = 'Subiendo...';
+    setFotosMsg('', '');
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'subir-foto',
+          pacienteId: fichaActual.id,
+          fotoBase64: fotoComprimidaBase64,
+          descripcion: fotosDescripcion.value.trim(),
+        }),
+      });
+      const res = await r.json();
+      if (res.success) {
+        setFotosMsg('✅ Foto subida.', 'ok');
+        resetFormFoto();
+        cargarFotosFicha();
+      } else {
+        setFotosMsg(res.message || 'No se pudo subir la foto.', 'error');
+        fotosSubirBtn.disabled = false;
+      }
+    } catch {
+      setFotosMsg('No se pudo subir la foto. Revisá tu conexión.', 'error');
+      fotosSubirBtn.disabled = false;
+    } finally {
+      fotosSubirBtn.textContent = 'Subir foto';
+    }
+  });
+
   function cerrarFotos() {
     fotosOverlay.classList.remove('show');
     setTimeout(() => fotosOverlay.classList.add('hidden'), 180);
