@@ -91,7 +91,9 @@
   }
   .visor-info { color: var(--white); text-align: center; max-width: 92%; font-size: 16.5px; }
   .visor-fecha { color: rgba(255,255,255,.62); font-size: 14.5px; margin-top: 4px; }
+  .visor-acciones { display: flex; gap: 12px; }
   .visor-compartir { background: var(--gold); color: var(--white); border: none; padding: 14px 28px; border-radius: 100px; font-weight: 700; font-size: 17px; }
+  .visor-borrar { background: rgba(255,255,255,.12); color: var(--white); border: 1.5px solid rgba(255,255,255,.35); padding: 14px 24px; border-radius: 100px; font-weight: 600; font-size: 16px; }
 
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
@@ -152,7 +154,10 @@
     <div id="visor-desc"></div>
     <div class="visor-fecha" id="visor-fecha"></div>
   </div>
-  <button class="visor-compartir" id="visor-compartir">📤 Compartir</button>
+  <div class="visor-acciones">
+    <button class="visor-borrar" id="visor-borrar">🗑 Borrar</button>
+    <button class="visor-compartir" id="visor-compartir">📤 Compartir</button>
+  </div>
 </div>
 
 <script>
@@ -388,6 +393,7 @@
     visorDesc.textContent = f.descripcion || '';
     visorFecha.textContent = new Date(f.fecha).toLocaleDateString('es-AR');
     visorOverlay.dataset.url = url;
+    visorOverlay.dataset.fotoId = f.id;
     visorOverlay.classList.remove('hidden');
   }
   function cerrarVisor() {
@@ -422,6 +428,37 @@
       toast('Link copiado ✓');
     } catch (err) {
       // AbortError = cerró el panel de compartir sin elegir nada, no es un error real
+    }
+  });
+
+  // Borrar una foto vieja (ver el pedido, 2026-08-13) — confirm() nativo alcanza acá:
+  // es una acción destructiva poco frecuente, no hace falta un modal propio para esto.
+  document.getElementById('visor-borrar').addEventListener('click', async () => {
+    const fotoId = visorOverlay.dataset.fotoId;
+    if (!fotoId) return;
+    if (!confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+    const btn = document.getElementById('visor-borrar');
+    btn.disabled = true;
+    btn.textContent = 'Borrando...';
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'eliminar-foto', fotoId }),
+      });
+      const res = await r.json();
+      if (res.success) {
+        cerrarVisor();
+        toast('Foto borrada ✓');
+        cargarFotos();
+      } else {
+        toast(res.message || 'No se pudo borrar la foto.');
+      }
+    } catch {
+      toast('No se pudo borrar la foto. Revisá tu conexión.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🗑 Borrar';
     }
   });
 </script>

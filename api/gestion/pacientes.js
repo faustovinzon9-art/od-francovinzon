@@ -101,6 +101,9 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && req.body.accion === 'subir-foto') {
       return await subirFoto(req, res);
     }
+    if (req.method === 'POST' && req.body.accion === 'eliminar-foto') {
+      return await eliminarFoto(req, res);
+    }
 
     if (req.method === 'POST') {
       if (!claveValida(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -1169,6 +1172,25 @@ async function subirFoto(req, res) {
     console.error(err);
     await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'subir-foto', error: err });
     res.status(200).json({ success: false, message: 'No se pudo subir la foto. Probá de nuevo.' });
+  }
+}
+
+// Borrar una foto vieja/repetida (ver el pedido, 2026-08-13) — SIN clave, mismo nivel
+// de exposición ya aceptado para toda esta página: el fotoId es un ID de Drive (largo,
+// no adivinable), así que la única forma de borrar una foto puntual es ya tenerla
+// cargada en pantalla (acá o en /pacientes, que reusa este mismo endpoint). No hay
+// papelera propia ni falta hace — son fotos de trabajo, no fichas.
+async function eliminarFoto(req, res) {
+  const { fotoId } = req.body;
+  if (!fotoId) return res.status(400).json({ success: false, message: 'Falta fotoId.' });
+  try {
+    const drive = getPacientesDriveClient();
+    await conReintentos(() => drive.files.delete({ fileId: fotoId }));
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'eliminar-foto', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo borrar la foto. Probá de nuevo.' });
   }
 }
 
