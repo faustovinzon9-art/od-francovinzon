@@ -11,8 +11,8 @@ import {
   getPacientesSheetsClient, getPacientesDriveClient, buildAuthUrl, exchangeCodeForTokens,
 } from '../../lib/googleOAuthPacientes.js';
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto,
-  extraerTelefono, extraerDni, isValidGestionKey, getHorariosLibresDia, formatArgDay,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, normalizarTexto, extraerTelefono,
+  isValidGestionKey, getHorariosLibresDia, formatArgDay,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -80,15 +80,6 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
       return await servirFotoImagen(req, res);
-    }
-    // UTILITARIO TEMPORAL (2026-08-13, ver el pedido) — backfillear el DNI de turnos ya
-    // creados que no lo tienen, usando el DNI de la ficha del paciente (mismo teléfono,
-    // mismo criterio que dni-por-telefono). Sin GESTION_KEY porque no hay forma de
-    // correrlo con clave a mano en este entorno — se saca del proyecto apenas se
-    // confirma el resultado (ver CLAUDE.md, utilitarios de un solo uso). Por defecto es
-    // un dry-run, no escribe nada (?aplicar=1 para escribir de verdad).
-    if (req.method === 'GET' && req.query.modo === 'backfill-dni-x92k') {
-      return await backfillDniTurnos(req, res);
     }
 
     if (req.method === 'GET') {
@@ -609,74 +600,6 @@ async function dniPorTelefono(req, res) {
   if (!telefono) return res.status(200).json({ dni: null });
   const indice = await construirIndiceDniPorTelefono(false);
   res.status(200).json({ dni: indice.get(telefono) || null });
-}
-
-// ---------- UTILITARIO TEMPORAL: backfill de DNI en turnos existentes (2026-08-13) ----------
-// Recorre los próximos 90 días de CALENDAR_ID + SOBRETURNOS_CALENDAR_ID buscando turnos
-// sin DNI cargado; para cada uno, si el teléfono del turno matchea el teléfono de una
-// ficha (mismo índice que dni-por-telefono), copia el DNI de esa ficha a la description
-// del turno. Nunca pisa un DNI ya cargado (si ya tiene línea "DNI: algo" que no sea "-",
-// ese turno ni se toca). Los que no matcheen quedan igual que estaban — la lista de
-// tareas "Agregar DNI" del sidebar de /gestion ya los va a seguir mostrando, tal como se
-// pidió ("solo los que no tengan dni ni en los turnos ni en las fichas... como tarea
-// pendiente"). Dry-run por defecto: sin ?aplicar=1 solo cuenta y devuelve el detalle, sin
-// escribir nada en Calendar.
-const BACKFILL_DIAS = 90;
-async function backfillDniTurnos(req, res) {
-  const aplicar = req.query.aplicar === '1';
-  try {
-    const calendar = getCalendarClient();
-    const desde = new Date();
-    const hasta = new Date(desde.getTime() + BACKFILL_DIAS * 24 * 60 * 60000);
-
-    let eventos = [];
-    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
-      let pageToken;
-      do {
-        const { data } = await conReintentos(() => calendar.events.list({
-          calendarId, timeMin: desde.toISOString(), timeMax: hasta.toISOString(),
-          singleEvents: true, maxResults: 2500, pageToken,
-        }));
-        eventos = eventos.concat((data.items || []).map((ev) => ({ ev, calendarId })));
-        pageToken = data.nextPageToken;
-      } while (pageToken);
-    }
-    eventos = eventos.filter(({ ev }) => !(ev.description || '').includes(BLOCK_MARKER) && !extraerDni(ev.description));
-
-    const indice = await construirIndiceDniPorTelefono(false);
-
-    let actualizados = 0;
-    let sinMatch = 0;
-    const detalle = [];
-    for (const { ev, calendarId } of eventos) {
-      const tel = normalizarTelefonoMapeo(extraerTelefono(ev.description));
-      const dni = tel ? indice.get(tel) : null;
-      if (!dni) { sinMatch++; continue; }
-
-      detalle.push({ id: ev.id, titulo: ev.summary || '', dni });
-      if (!aplicar) continue;
-
-      const descActual = ev.description || '';
-      const yaTieneLinea = /DNI:\s*[^\n]*/i.test(descActual);
-      const nuevaDescripcion = yaTieneLinea
-        ? descActual.replace(/DNI:\s*[^\n]*/i, `DNI: ${dni}`)
-        : (descActual.replace(/\s+$/, '') ? `${descActual.replace(/\s+$/, '')}\nDNI: ${dni}` : `DNI: ${dni}`);
-      await conReintentos(() => calendar.events.patch({ calendarId, eventId: ev.id, requestBody: { description: nuevaDescripcion } }));
-      actualizados++;
-    }
-
-    res.status(200).json({
-      aplicado: aplicar,
-      turnosSinDniRevisados: eventos.length,
-      matchEncontrado: detalle.length,
-      sinMatch,
-      actualizados,
-      detalle: detalle.slice(0, 100),
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
-  }
 }
 
 // "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
