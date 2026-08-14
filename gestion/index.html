@@ -2082,17 +2082,20 @@
     const esNuevo = document.getElementById('mc-nuevo').checked;
     const motivo = document.getElementById('mc-motivo').value.trim();
 
-    if (!nombre || !apellido || !motivo || !telefonoIngresado || !dniIngresado) {
-      setMsg('mc-msg', 'Completá nombre, apellido, teléfono, DNI y motivo.', 'error');
+    if (!nombre || !apellido || !motivo || !telefonoIngresado) {
+      setMsg('mc-msg', 'Completá nombre, apellido, teléfono y motivo.', 'error');
       return;
     }
     if (!itiMcTelefono.isValidNumber()) {
       setMsg('mc-msg', 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
-    // Se dejan pasar puntos/espacios sueltos por si los tipean, pero se limpian antes de mandar.
+    // DNI no es obligatorio (ver el pedido, 2026-08-13) — si no se carga, el turno queda
+    // marcado como "sin DNI" en la lista de tareas del sidebar hasta completarlo. Se
+    // dejan pasar puntos/espacios sueltos por si los tipean, pero se limpian antes de
+    // mandar; el formato solo se valida si efectivamente se cargó algo.
     const dni = dniIngresado.replace(/[.\s]/g, '');
-    if (!/^\d{6,9}$/.test(dni)) {
+    if (dni && !/^\d{6,9}$/.test(dni)) {
       setMsg('mc-msg', 'Ese DNI no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
@@ -2490,23 +2493,25 @@
     let data;
     try {
       const r = await fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`);
-      data = r.ok ? await r.json() : { telefono: null, dni: null };
+      data = r.ok ? await r.json() : { telefono: null };
     } catch {
       return;
     }
     if (!data.telefono || yaCompletos()) return;
 
-    // Prioridad 1: DNI de la ficha del paciente (más confiable, resuelto por teléfono
-    // contra api/gestion/pacientes.js). Prioridad 2, si no tiene ficha: `data.dni`, el
-    // DNI del turno anterior más reciente que ya vino en la misma respuesta de arriba.
-    let dniFinal = data.dni || null;
+    // DNI SOLO desde la ficha del paciente en /pacientes (ver el pedido, 2026-08-13 —
+    // se sacó el respaldo con el DNI de un turno anterior: un turno viejo puede tener un
+    // typo, la ficha es la única fuente confiable acá). Sin ficha con ese teléfono,
+    // `dniFinal` queda null y el campo se deja vacío para cargar a mano — no es
+    // obligatorio, ver el chequeo de campos más abajo.
+    let dniFinal = null;
     if (dniInput) {
       try {
         const r2 = await fetch(`/api/gestion/pacientes?modo=dni-por-telefono&telefono=${encodeURIComponent(data.telefono)}&key=${encodeURIComponent(gestionKey)}`);
         const data2 = r2.ok ? await r2.json() : { dni: null };
-        if (data2.dni) dniFinal = data2.dni;
+        dniFinal = data2.dni || null;
       } catch {
-        // sin conexión al índice de fichas: se sigue con el DNI del turno si había uno
+        // sin conexión al índice de fichas: el campo queda vacío, no rompe el resto
       }
     }
     if (yaCompletos()) return; // se completó a mano mientras se esperaba

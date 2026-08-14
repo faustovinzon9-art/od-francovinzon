@@ -137,17 +137,13 @@ async function buscarTelefono(req, res) {
         start: eventBounds(ev).start,
         telefono: extraerTelefono(ev.description),
         telefonoVerificado: extraerTelefonoVerificado(ev.description),
-        // DNI del turno anterior más reciente de esa persona (mismo candidato que ya se
-        // usa para el teléfono, ver el pedido) — prioridad 2 del autocompletado de DNI
-        // en /gestion: la ficha (si existe) gana, esto es solo el respaldo.
-        dni: extraerDni(ev.description),
       }))
       .filter((c) => c.telefono)
       .sort((a, b) => b.start - a.start);
 
     res.status(200).json(candidatos.length
-      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado, dni: candidatos[0].dni || null }
-      : { telefono: null, dni: null });
+      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado }
+      : { telefono: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ telefono: null });
