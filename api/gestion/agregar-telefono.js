@@ -1,5 +1,6 @@
-import { getCalendarClient, isValidGestionKey, telefonoParaWhatsApp } from '../../lib/googleCalendar.js';
+import { getCalendarClient, isValidGestionKey, telefonoParaWhatsApp, extraerDni } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
+import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -63,6 +64,15 @@ export default async function handler(req, res) {
       eventId,
       requestBody: { description: nuevaDescripcion },
     });
+
+    // Best-effort, ver lib/pacientesConsolidados.js — solo si se cargó un teléfono (no
+    // al borrarlo, no hay con qué sincronizar).
+    if (valorGuardar !== '-') {
+      const partesNombre = (ev.summary || '').trim().split(/\s+/);
+      const nombre = partesNombre.shift() || '';
+      const apellido = partesNombre.join(' ');
+      await upsertPacienteConsolidado({ telefono: valorGuardar, nombre, apellido, dni: extraerDni(descActual), origen: 'turno' });
+    }
 
     res.status(200).json({
       success: true,

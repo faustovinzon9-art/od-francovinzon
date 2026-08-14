@@ -1,10 +1,11 @@
 import {
   getCalendarClient, TIME_ZONE, toArgDate, eventBounds, isValidGestionKey, escribirConfirmado,
-  asegurarCodigoCorto, formatArgDay, formatArgTime,
+  escribirConfirmacionSolicitada, asegurarCodigoCorto, formatArgDay, formatArgTime, extraerTelefono, extraerDni,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
 import { logActividad } from '../../lib/adminConfig.js';
+import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
 
 // Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
 // para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
@@ -69,6 +70,17 @@ export default async function handler(req, res) {
       });
     }
 
+    // Marca que Ayelen mandó el "Pedido de confirmación" por WhatsApp (ver el pedido,
+    // 2026-08-14) — sin importar cuánto falte para el turno, habilita el botón "Confirmo
+    // el turno" en /turno (ver VENTANA_CONFIRMAR_MS en turno/index.html y accion=obtener
+    // en api/reservar.js). Idempotente: mandarlo dos veces no rompe nada.
+    if (accion === 'marcar-confirmacion-solicitada') {
+      const { data: original } = await calendar.events.get({ calendarId, eventId });
+      const nuevaDescripcion = escribirConfirmacionSolicitada(original.description || '');
+      await calendar.events.patch({ calendarId, eventId, requestBody: { description: nuevaDescripcion } });
+      return res.status(200).json({ success: true });
+    }
+
     const { nuevaFecha, nuevaHora, motivo, nombre, apellido } = req.body;
 
     const { data: original } = await calendar.events.get({ calendarId, eventId });
@@ -117,6 +129,16 @@ export default async function handler(req, res) {
       detalle: `${requestBody.summary || original.summary || 'paciente'} — pasó a ${nuevaFecha} ${nuevaHora}hs`,
       actor: 'gestión (Ayelen)',
     });
+
+    // Best-effort, ver lib/pacientesConsolidados.js — solo si el nombre cambió de verdad
+    // (requestBody.summary solo se setea en ese caso, ver arriba).
+    if (requestBody.summary) {
+      const desc = original.description || '';
+      const partesNombre = requestBody.summary.split(/\s+/);
+      const nombreSync = partesNombre.shift() || '';
+      const apellidoSync = partesNombre.join(' ');
+      await upsertPacienteConsolidado({ telefono: extraerTelefono(desc), nombre: nombreSync, apellido: apellidoSync, dni: extraerDni(desc), origen: 'turno' });
+    }
 
     res.status(200).json({ success: true, message: `Movido al ${nuevaFecha} a las ${nuevaHora} hs.` });
   } catch (err) {

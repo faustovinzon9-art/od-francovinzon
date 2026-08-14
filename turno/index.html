@@ -687,7 +687,10 @@
         // (ver el handler de reprogramar-confirm-btn). Ver decisions.md.
         actualizarLinksCalendario();
         marcarBotonConfirmado(!!res.confirmado);
-        btnConfirmarTurno.classList.toggle('hidden', !dentroDeVentanaConfirmar(res.date, res.time));
+        // Excepción a la ventana de 72hs (ver el pedido, 2026-08-14): si Ayelen ya mandó
+        // el "Pedido de confirmación" desde /gestion (sin importar cuánto faltaba), el
+        // botón tiene que estar habilitado igual.
+        btnConfirmarTurno.classList.toggle('hidden', !(dentroDeVentanaConfirmar(res.date, res.time) || res.confirmacionSolicitada));
         postActionsCard.classList.remove('hidden');
       })
       .catch(() => {

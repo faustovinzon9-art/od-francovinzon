@@ -715,6 +715,21 @@
   </div>
 </div>
 
+<!-- Popup "¿Qué mensaje mandar?" al tocar el ícono de WhatsApp (ver el pedido,
+     2026-08-14) — dos opciones neutrales, ninguna es una acción destructiva, por eso
+     no reusa confirm-overlay tal cual (ese tiene un botón rojo "danger" que no
+     correspondería acá). -->
+<div class="confirm-overlay hidden" id="wa-choice-overlay">
+  <div class="confirm-box">
+    <h3>¿Qué mensaje mandar?</h3>
+    <p>Elegí qué le llega al paciente por WhatsApp.</p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="wa-choice-detalles">Detalles del turno</button>
+      <button class="btn-confirm" id="wa-choice-confirmacion">Pedido de confirmación</button>
+    </div>
+  </div>
+</div>
+
 <div class="confirm-overlay hidden" id="tasks-modal-overlay">
   <div class="confirm-box tasks-modal-box">
     <div class="tasks-modal-header">
@@ -1428,7 +1443,26 @@
     return digitos;
   }
 
-  async function mensajeRecordatorio(it) {
+  // Días de diferencia contra hoy (negativo = turno ya pasó) — fecha sin hora, para no
+  // confundir "ayer a las 23hs" con "hoy" por husos horarios.
+  function diasDesdeHoyPara(it) {
+    const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(it.start));
+    const hoy = todayStr();
+    const [hy, hm, hd] = hoy.split('-').map(Number);
+    const [fiy, fim, fid] = fechaItem.split('-').map(Number);
+    return Math.round((Date.UTC(fiy, fim - 1, fid) - Date.UTC(hy, hm - 1, hd)) / 86400000);
+  }
+  // Turno pasado Y confirmado -> no vino, ya no tiene sentido preguntarle nada — no
+  // pasa por el popup de elegir mensaje (ver enviarWhatsApp), va directo al mensaje de
+  // inasistencia de abajo.
+  function esInasistencia(it) {
+    return diasDesdeHoyPara(it) < 0 && !!it.confirmado;
+  }
+
+  // `tipoElegido`: 'confirmacion' | 'detalles' — viene del popup de enviarWhatsApp (ver
+  // el pedido, 2026-08-14; reemplaza la lógica automática de "si faltan 4+ días, manda
+  // detalle" que había antes). Ignorado si el turno ya califica como inasistencia.
+  async function mensajeRecordatorio(it, tipoElegido) {
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(it.start));
     const hoy = todayStr();
     const [hy, hm, hd] = hoy.split('-').map(Number);
@@ -1444,24 +1478,18 @@
     const cuandoCap = cuando.charAt(0).toUpperCase() + cuando.slice(1);
     const link = await armarLinkCortoTurno(it);
 
-    // Días de diferencia contra hoy (negativo = turno ya pasó) — mismo criterio de
-    // fecha-sin-hora que "cuando" arriba, para no confundir "ayer a las 23hs" con
-    // "hoy" por husos horarios.
-    const [fiy, fim, fid] = fechaItem.split('-').map(Number);
-    const diasDesdeHoy = Math.round((Date.UTC(fiy, fim - 1, fid) - Date.UTC(hy, hm - 1, hd)) / 86400000);
-
     // Turno pasado Y confirmado -> no vino. Mensaje de inasistencia en vez del de
     // confirmación (que ya no tiene sentido) — pedido explícito, 2026-08-13. Un
     // turno pasado que NUNCA se confirmó no cambia: sigue con el mensaje de abajo.
-    if (diasDesdeHoy < 0 && it.confirmado) {
+    if (esInasistencia(it)) {
       return `¡Hola, ${saludoActual()}!!! Te había quedado un ${tipoTexto} ${cuando} a las ${fmtHora(it.start)}hs, ` +
         `pero no llegaste a venir. Si en algún momento no podés venir a un turno, avisanos con tiempo así lo ` +
         `reorganizamos — cualquier cosa contanos y coordinamos uno nuevo cuando quieras. ¡Te esperamos!`;
     }
 
-    // 4 o más días de anticipación: no tiene sentido pedir que confirme todavía, así
-    // que se manda el detalle + el link permanente sin la línea de "confirmalo".
-    if (diasDesdeHoy >= 4) {
+    // "Detalles del turno" (elegido a mano desde el popup, ver el pedido, 2026-08-14):
+    // fecha/hora + el link permanente, sin pedir que confirme todavía.
+    if (tipoElegido === 'detalles') {
       return `¡Hola, ${saludoActual()}!!! Te paso los datos del ${tipoTexto} que tenés agendado:\n\n` +
         `${nombre}\n` +
         `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
@@ -1469,6 +1497,7 @@
         `Más cerca de la fecha vas a poder confirmar el turno por el mismo link.`;
     }
 
+    // "Pedido de confirmación" (default si no se especifica, ver enviarWhatsApp).
     // Plantilla (2026-08-12, novena vuelta): el saludo, el nombre, la fecha/hora y el
     // cierre son la voz auténtica de Ayelen, sin tocar. Lo único que cambió acá es la
     // línea del link — antes sonaba acartonada ("Es importante que entres a este link
@@ -1631,10 +1660,64 @@
   // Arma el mensaje (async, ver mensajeRecordatorio) recién al tocar el ícono de
   // WhatsApp — antes el link ya estaba en el href de un <a>, armado de antemano al
   // renderizar la fila; ahora hace falta esperar a asegurar el link corto primero.
+  // Popup "¿Qué mensaje mandar?" (ver el pedido, 2026-08-14) — mismo patrón de Promise
+  // que confirmDialog, pero con sus dos botones propios (ninguno es "danger").
+  const waChoiceOverlay = document.getElementById('wa-choice-overlay');
+  function elegirMensajeWhatsApp() {
+    return new Promise((resolve) => {
+      const btnDetalles = document.getElementById('wa-choice-detalles');
+      const btnConfirmacion = document.getElementById('wa-choice-confirmacion');
+      waChoiceOverlay.classList.remove('hidden');
+      requestAnimationFrame(() => waChoiceOverlay.classList.add('show'));
+      function cerrar(resultado) {
+        waChoiceOverlay.classList.remove('show');
+        setTimeout(() => waChoiceOverlay.classList.add('hidden'), 180);
+        btnDetalles.removeEventListener('click', onDetalles);
+        btnConfirmacion.removeEventListener('click', onConfirmacion);
+        waChoiceOverlay.removeEventListener('click', onFondo);
+        resolve(resultado);
+      }
+      function onDetalles() { cerrar('detalles'); }
+      function onConfirmacion() { cerrar('confirmacion'); }
+      // Click en el fondo (afuera de la caja) = cerrar sin elegir, mismo criterio que
+      // el resto de los overlays de esta página (ver ticketModalOverlay/tasksModalOverlay).
+      function onFondo(e) { if (e.target === waChoiceOverlay) cerrar(null); }
+      btnDetalles.addEventListener('click', onDetalles);
+      btnConfirmacion.addEventListener('click', onConfirmacion);
+      waChoiceOverlay.addEventListener('click', onFondo);
+    });
+  }
+
   async function enviarWhatsApp(item) {
     const base = armarLinkWhatsApp(item.telefono);
     if (!base) return;
-    const texto = await mensajeRecordatorio(item);
+
+    // Turno pasado y confirmado -> directo al mensaje de inasistencia, sin preguntar
+    // nada (no tiene sentido elegir "detalles" o "pedido de confirmación" para un
+    // turno que ya pasó, ver esInasistencia()).
+    let tipoElegido = null;
+    if (!esInasistencia(item)) {
+      tipoElegido = await elegirMensajeWhatsApp();
+      if (!tipoElegido) return; // cerró el popup sin elegir (click afuera/Esc)
+      // "Pedido de confirmación" habilita "Confirmo el turno" en /turno sin importar
+      // cuánto falte (ver escribirConfirmacionSolicitada en lib/googleCalendar.js) —
+      // se guarda ANTES de abrir WhatsApp, así queda marcado aunque el mensaje termine
+      // sin mandarse de verdad.
+      if (tipoElegido === 'confirmacion') {
+        try {
+          await fetch('/api/gestion/evento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: gestionKey, accion: 'marcar-confirmacion-solicitada', eventId: item.id, calendarId: item.calendarId }),
+          });
+        } catch {
+          // best-effort: si falla, "Confirmo el turno" sigue rigiéndose solo por la
+          // ventana de 72hs de siempre, no bloquea el envío del WhatsApp
+        }
+      }
+    }
+
+    const texto = await mensajeRecordatorio(item, tipoElegido);
     window.open(`${base}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
   }
 
@@ -2490,31 +2573,21 @@
     const yaCompletos = () => telInput.value.trim() || (dniInput && dniInput.value.trim());
     if (!nombreCompleto || yaCompletos()) return;
 
+    // Una sola consulta contra la planilla "Pacientes consolidados" (ver el pedido,
+    // 2026-08-14) — ya trae teléfono Y DNI juntos, resueltos de antemano (fichas +
+    // historial de turnos ya sincronizados), en vez de dos fetches como antes. El DNI
+    // sale SOLO de una ficha real en /pacientes (nunca de un turno viejo, que podía
+    // tener un typo) — si no hay ficha con ese teléfono, `data.dni` queda null y el
+    // campo se deja vacío para cargar a mano (no es obligatorio).
     let data;
     try {
       const r = await fetch(`/api/gestion/buscar?modo=telefono&nombre=${encodeURIComponent(nombreCompleto)}&key=${encodeURIComponent(gestionKey)}`);
-      data = r.ok ? await r.json() : { telefono: null };
+      data = r.ok ? await r.json() : { telefono: null, dni: null };
     } catch {
       return;
     }
     if (!data.telefono || yaCompletos()) return;
-
-    // DNI SOLO desde la ficha del paciente en /pacientes (ver el pedido, 2026-08-13 —
-    // se sacó el respaldo con el DNI de un turno anterior: un turno viejo puede tener un
-    // typo, la ficha es la única fuente confiable acá). Sin ficha con ese teléfono,
-    // `dniFinal` queda null y el campo se deja vacío para cargar a mano — no es
-    // obligatorio, ver el chequeo de campos más abajo.
-    let dniFinal = null;
-    if (dniInput) {
-      try {
-        const r2 = await fetch(`/api/gestion/pacientes?modo=dni-por-telefono&telefono=${encodeURIComponent(data.telefono)}&key=${encodeURIComponent(gestionKey)}`);
-        const data2 = r2.ok ? await r2.json() : { dni: null };
-        dniFinal = data2.dni || null;
-      } catch {
-        // sin conexión al índice de fichas: el campo queda vacío, no rompe el resto
-      }
-    }
-    if (yaCompletos()) return; // se completó a mano mientras se esperaba
+    const dniFinal = data.dni || null;
 
     // " · " en vez de salto de línea: #confirm-msg es un <p> de texto plano sin
     // white-space:pre-line (lo comparte con otros diálogos de confirmación), así que un

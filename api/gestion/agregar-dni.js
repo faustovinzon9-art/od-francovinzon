@@ -3,8 +3,9 @@
 // hay margen de sobra en el límite de 12 funciones (ver CLAUDE.md), así que un archivo
 // nuevo y chico es más seguro acá que un retrofit del otro. Mismo patrón general:
 // lee la description del evento, parchea (o agrega) la línea "DNI: ...", guarda.
-import { getCalendarClient, isValidGestionKey } from '../../lib/googleCalendar.js';
+import { getCalendarClient, isValidGestionKey, extraerTelefono } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
+import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -44,6 +45,14 @@ export default async function handler(req, res) {
       eventId,
       requestBody: { description: nuevaDescripcion },
     });
+
+    // Best-effort, ver lib/pacientesConsolidados.js — solo si se cargó un DNI de verdad.
+    if (crudo) {
+      const partesNombre = (ev.summary || '').trim().split(/\s+/);
+      const nombre = partesNombre.shift() || '';
+      const apellido = partesNombre.join(' ');
+      await upsertPacienteConsolidado({ telefono: extraerTelefono(descActual), nombre, apellido, dni: crudo, origen: 'turno' });
+    }
 
     res.status(200).json({
       success: true,

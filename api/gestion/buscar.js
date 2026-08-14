@@ -3,6 +3,7 @@ import {
   eventBounds, extraerTelefono, extraerTelefonoVerificado, extraerDni, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
+import { buscarPacienteConsolidadoPorNombre } from '../../lib/pacientesConsolidados.js';
 
 const MESES_RANGO = 6;
 
@@ -100,53 +101,28 @@ export default async function handler(req, res) {
   }
 }
 
+// Autocompletado de teléfono+DNI de /gestion (ver el pedido, 2026-08-14) — antes
+// escaneaba turnos de Calendar por substring de nombre, lo cual fallaba cuando el
+// nombre del turno no coincidía exacto con el de la ficha o cuando el paciente no tenía
+// ningún turno reciente con teléfono cargado. Ahora resuelve contra la planilla
+// "Pacientes consolidados" (lib/pacientesConsolidados.js), fuente única armada con
+// fichas + historial de turnos ya sincronizados de antemano — una sola lectura, sin
+// volver a escanear Calendar en cada tipeo.
 async function buscarTelefono(req, res) {
   try {
     const nombre = (req.query.nombre || '').trim();
-    if (nombre.length < 2) return res.status(200).json({ telefono: null });
+    if (nombre.length < 2) return res.status(200).json({ telefono: null, dni: null });
 
-    const now = new Date();
-    const timeMin = new Date(now);
-    timeMin.setFullYear(timeMin.getFullYear() - 1);
-    const timeMax = new Date(now);
-    timeMax.setMonth(timeMax.getMonth() + 3);
+    const match = await buscarPacienteConsolidadoPorNombre(nombre);
+    if (!match || !match.telefono) return res.status(200).json({ telefono: null, dni: null });
 
-    const calendar = getCalendarClient();
-
-    const [principal, sobreturnos] = await Promise.all([
-      calendar.events.list({
-        calendarId: CALENDAR_ID,
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: true,
-        maxResults: 2500,
-      }),
-      calendar.events.list({
-        calendarId: SOBRETURNOS_CALENDAR_ID,
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: true,
-        maxResults: 2500,
-      }),
-    ]);
-
-    const nombreNorm = normalizarTexto(nombre);
-    const candidatos = [...(principal.data.items || []), ...(sobreturnos.data.items || [])]
-      .filter((ev) => normalizarTexto(ev.summary).includes(nombreNorm))
-      .map((ev) => ({
-        start: eventBounds(ev).start,
-        telefono: extraerTelefono(ev.description),
-        telefonoVerificado: extraerTelefonoVerificado(ev.description),
-      }))
-      .filter((c) => c.telefono)
-      .sort((a, b) => b.start - a.start);
-
-    res.status(200).json(candidatos.length
-      ? { telefono: candidatos[0].telefono, telefonoVerificado: candidatos[0].telefonoVerificado }
-      : { telefono: null });
+    // Nunca "verificado" acá (esa marca es específica de intl-tel-input en /gestion/
+    // /turnos) — se pasa el teléfono tal cual, dejando que la librería lo interprete
+    // con Argentina como país por default, mismo criterio que un número legado.
+    res.status(200).json({ telefono: match.telefono, telefonoVerificado: false, dni: match.dni || null });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ telefono: null });
+    res.status(500).json({ telefono: null, dni: null });
   }
 }
 

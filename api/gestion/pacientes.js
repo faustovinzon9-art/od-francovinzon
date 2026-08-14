@@ -12,7 +12,7 @@ import {
 } from '../../lib/googleOAuthPacientes.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto, extraerTelefono,
-  isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
+  extraerDni, isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -28,6 +28,7 @@ import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
+import { upsertPacienteConsolidado, reemplazarTodasLasFilas } from '../../lib/pacientesConsolidados.js';
 
 // drive.files.create espera un stream legible en media.body, no un Buffer crudo.
 function bufferToStream(buffer) {
@@ -84,6 +85,15 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
       return await servirFotoImagen(req, res);
     }
+    // UTILITARIO TEMPORAL (2026-08-14, ver el pedido) — poblar la planilla "Pacientes
+    // consolidados" de una sola vez con todo lo que ya existe (fichas + historial de
+    // turnos), para que el autocompletado de /gestion tenga datos desde ya en vez de ir
+    // acumulando solo con turnos/fichas nuevas de acá en más. Sin GESTION_KEY por el
+    // mismo motivo que el backfill de DNI anterior (no hay forma de correrlo con clave a
+    // mano en este entorno) — se saca del proyecto apenas se confirma el resultado.
+    if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
+      return await backfillConsolidado(req, res);
+    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -94,7 +104,6 @@ export default async function handler(req, res) {
       if (req.query.modo === 'telefono') return await obtenerTelefonoFicha(req, res);
       if (req.query.modo === 'mapeos') return await obtenerMapeos(req, res);
       if (req.query.modo === 'cumpleanos-hoy') return await cumpleanosHoy(req, res);
-      if (req.query.modo === 'dni-por-telefono') return await dniPorTelefono(req, res);
       return res.status(400).json({ error: 'modo inválido' });
     }
 
@@ -305,6 +314,90 @@ async function hoyPublico(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json([]);
+  }
+}
+
+// ---------- UTILITARIO TEMPORAL: backfill de "Pacientes consolidados" (2026-08-14) ----------
+// Arma TODAS las filas en memoria (fichas + historial de turnos, ficha gana por
+// teléfono) y las escribe de una sola vez con reemplazarTodasLasFilas() — evita el
+// read-por-fila de upsertPacienteConsolidado(), que con cientos/miles de registros
+// hubiera sido lentísimo (O(n²)) para un backfill de una sola vez.
+const BACKFILL_CONSOLIDADO_ANIOS = 3;
+async function backfillConsolidado(req, res) {
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+
+    const porTelefono = new Map(); // telefono normalizado -> fila
+    let fichasFallidas = 0;
+
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+            spreadsheetId: f.id,
+            ranges: [`${SHEET_NAME}!C5:C7`, `${SHEET_NAME}!C14`],
+          }));
+          const [nombre = '', apellido = '', dni = ''] = (data.valueRanges?.[0]?.values || []).map((r) => r[0] || '');
+          const telefono = data.valueRanges?.[1]?.values?.[0]?.[0] || '';
+          return { id: f.id, nombre, apellido, dni, telefono };
+        } catch (err) {
+          console.warn(`[pacientes.js] backfill consolidado: no se pudo leer ${f.name}:`, err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => {
+        if (!r) { fichasFallidas++; return; }
+        const telNorm = normalizarTelefonoMapeo(r.telefono);
+        if (!telNorm) return; // sin teléfono no hay con qué matchear en el autocompletado
+        porTelefono.set(telNorm, {
+          telefono: r.telefono, nombre: r.nombre, apellido: r.apellido, dni: r.dni,
+          fichaId: r.id, origen: 'ficha', actualizado: new Date().toISOString(),
+        });
+      });
+    }
+    const totalFichas = porTelefono.size;
+
+    const calendar = getCalendarClient();
+    const ahora = new Date();
+    const desde = new Date(Date.UTC(ahora.getUTCFullYear() - BACKFILL_CONSOLIDADO_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
+    let eventos = [];
+    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
+      let pageToken;
+      do {
+        const { data } = await conReintentos(() => calendar.events.list({
+          calendarId, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
+          singleEvents: true, maxResults: 2500, pageToken,
+        }));
+        eventos = eventos.concat(data.items || []);
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+    }
+
+    let turnosAgregados = 0;
+    eventos.forEach((ev) => {
+      if ((ev.description || '').includes(BLOCK_MARKER)) return;
+      const telNorm = normalizarTelefonoMapeo(extraerTelefono(ev.description));
+      if (!telNorm || porTelefono.has(telNorm)) return; // ya cubierto por una ficha
+      const partesNombre = (ev.summary || '').trim().split(/\s+/);
+      const nombre = partesNombre.shift() || '';
+      const apellido = partesNombre.join(' ');
+      porTelefono.set(telNorm, {
+        telefono: extraerTelefono(ev.description), nombre, apellido, dni: extraerDni(ev.description),
+        fichaId: '', origen: 'turno', actualizado: new Date().toISOString(),
+      });
+      turnosAgregados++;
+    });
+
+    const totalEscrito = await reemplazarTodasLasFilas([...porTelefono.values()]);
+
+    res.status(200).json({ totalFichas, turnosAgregados, totalEscrito, fichasFallidas, archivosRevisados: archivos.length, eventosRevisados: eventos.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
   }
 }
 
@@ -599,61 +692,6 @@ async function cumpleanosHoy(req, res) {
   res.status(200).json(lista);
 }
 
-// ---------- DNI por teléfono (autocompletado al crear un turno en /gestion, ver el
-// pedido) ----------
-// Prioridad 1 del autocompletado de DNI: si la persona tiene ficha, ese DNI es más
-// confiable que el que haya quedado escrito en algún turno viejo. Índice
-// teléfono(normalizado, últimos 10 dígitos) -> dni, construido leyendo C7 (dni) + C14
-// (teléfono) de cada ficha — mismo patrón de lotes de 25 y caché en memoria que
-// cumpleanos-hoy más arriba. Solo se indexan fichas que tengan AMBOS datos cargados:
-// si falta el DNI en la ficha no hay nada útil que devolver, y el autocompletado del
-// frontend ya sabe recurrir solo a la prioridad 2 (DNI del turno anterior, ver
-// api/gestion/buscar.js) cuando esto no encuentra nada.
-let cacheDniPorTelefono = null; // { valor: Map, ts }
-const TTL_DNI_TEL_MS = 600000;
-async function construirIndiceDniPorTelefono(forzar) {
-  if (!forzar && cacheDniPorTelefono && Date.now() - cacheDniPorTelefono.ts < TTL_DNI_TEL_MS) return cacheDniPorTelefono.valor;
-
-  const indice = new Map();
-  try {
-    const drive = getPacientesDriveClient();
-    const sheets = getPacientesSheetsClient();
-    const archivos = await listarArchivosPacientes(drive);
-
-    const LOTE = 25;
-    for (let i = 0; i < archivos.length; i += LOTE) {
-      const lote = archivos.slice(i, i + LOTE);
-      const resultados = await Promise.all(lote.map(async (f) => {
-        try {
-          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
-            spreadsheetId: f.id,
-            ranges: [`${SHEET_NAME}!C7`, `${SHEET_NAME}!C14`],
-          }));
-          const dni = normalizarDni(data.valueRanges?.[0]?.values?.[0]?.[0] || '');
-          const telefono = normalizarTelefonoMapeo(data.valueRanges?.[1]?.values?.[0]?.[0] || '');
-          return { dni, telefono };
-        } catch (err) {
-          console.warn(`[pacientes.js] no se pudo leer dni/teléfono de ${f.name}:`, err?.message || err);
-          return null;
-        }
-      }));
-      resultados.forEach((r) => { if (r && r.dni && r.telefono) indice.set(r.telefono, r.dni); });
-    }
-  } catch (err) {
-    console.warn('[pacientes.js] no se pudo construir el índice dni-por-teléfono:', err?.message || err);
-  }
-
-  cacheDniPorTelefono = { valor: indice, ts: Date.now() };
-  return indice;
-}
-
-async function dniPorTelefono(req, res) {
-  const telefono = normalizarTelefonoMapeo(req.query.telefono || '');
-  if (!telefono) return res.status(200).json({ dni: null });
-  const indice = await construirIndiceDniPorTelefono(false);
-  res.status(200).json({ dni: indice.get(telefono) || null });
-}
-
 // "Más completo" = más palabras: y a igualdad de palabras, más caracteres. Sin lógica
 // más sofisticada que esa, a propósito (ver el pedido).
 function completitudNombre(nombreCompleto) {
@@ -798,6 +836,13 @@ async function crearPaciente(req, res) {
     }));
   }
 
+  // Best-effort, ver lib/pacientesConsolidados.js (nunca tira) — se espera (await) antes
+  // de responder porque una función serverless puede congelarse apenas se manda la
+  // respuesta, así que un "fire and forget" acá se arriesgaría a cortarse a la mitad.
+  await upsertPacienteConsolidado({
+    telefono: datos.telefono, nombre, apellido, dni: datos.dni, fichaId: id, origen: 'ficha',
+  });
+
   res.status(200).json({ success: true, id, nombre, apellido });
 }
 
@@ -834,11 +879,22 @@ async function escribirCampoEnSheet(id, campo, valor) {
     requestBody: { values: [[valorFinal ?? '']] },
   }));
 
-  if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
+  if (campo === 'nombre' || campo === 'apellido' || campo === 'dni' || campo === 'telefono') {
+    // C14 (teléfono) se lee siempre acá, aunque no haya cambiado, porque
+    // upsertPacienteConsolidado() necesita la identidad completa de la fila (no solo el
+    // campo que se acaba de tocar) para no pisar los otros con vacío por accidente.
     const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C7` }));
     const [nombre = '', apellido = '', dni = ''] = (data.values || []).map((r) => r[0] || '');
-    const drive = getPacientesDriveClient();
-    await conReintentos(() => drive.files.update({ fileId: id, requestBody: { name: nombreArchivo({ nombre, apellido, dni }) } }));
+    let telefono = valorFinal;
+    if (campo !== 'telefono') {
+      const { data: dataTel } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C14` }));
+      telefono = dataTel.values?.[0]?.[0] || '';
+    }
+    if (campo === 'nombre' || campo === 'apellido' || campo === 'dni') {
+      const drive = getPacientesDriveClient();
+      await conReintentos(() => drive.files.update({ fileId: id, requestBody: { name: nombreArchivo({ nombre, apellido, dni }) } }));
+    }
+    await upsertPacienteConsolidado({ telefono, nombre, apellido, dni, fichaId: id, origen: 'ficha' });
   }
 }
 

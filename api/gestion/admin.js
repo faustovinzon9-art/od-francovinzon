@@ -8,12 +8,11 @@ import { isValidGestionKey } from '../../lib/googleCalendar.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, TIME_ZONE, WEEKLY_SCHEDULE,
   SLOT_MINUTES, pad2, toArgDate, eventBounds, formatArgDay, formatArgTime, extraerTelefono, extraerConfirmado,
-  extraerEsNuevoPaciente, extraerDni, getHorariosLibresDia,
+  extraerEsNuevoPaciente, getHorariosLibresDia,
 } from '../../lib/googleCalendar.js';
 import { getPacientesDriveClient, getPacientesSheetsClient } from '../../lib/googleOAuthPacientes.js';
 import {
   PACIENTES_FOLDER_ID, SHEET_NAME, parsearNombreArchivo, rangoMovimientos,
-  normalizarDni, normalizarTelefonoMapeo,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
@@ -21,6 +20,7 @@ import {
   getConfig, setConfig, obtenerHorariosConfig, logActividad,
   leerActividadReciente, leerAlertasRecientes,
 } from '../../lib/adminConfig.js';
+import { listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
 
 // Config de solo-lectura que también necesita /pacientes y /gestion (listas
 // desplegables, radios, plantilla de WhatsApp) — no son datos sensibles, así que
@@ -902,83 +902,33 @@ async function calcularFinanzasPacientes(forzar) {
 }
 
 // ---- (d) Pacientes totales: fichas + turnos sin ficha, sin duplicar ----
-// Mismo criterio "ya establecido en el proyecto" que la hoja de mapeo teléfono-ficha:
-// mismo DNI o mismo teléfono (últimos 10 dígitos) = la misma persona. No se hace el
-// matching difuso por similitud de nombre que usa /pacientes para "¿Es este paciente?"
-// (nivel 4/5) — ese existe para resolver turnos de HOY uno por uno; acá hace falta un
-// criterio barato de aplicar sobre años de turnos históricos.
-// Ventana histórica: 3 años atrás hasta hoy — sin acotar quedaría una consulta a
-// Calendar sin límite superior de volumen (riesgo real de timeout/cuota, ver CLAUDE.md),
-// y no hay ninguna fecha de "arranque del sistema" configurada para usar como límite más
-// ajustado. 3 años es un margen generoso para un consultorio de este tamaño sin arriesgar
-// los 300s de maxDuration con años y años de turnos históricos.
-const HISTORIAL_PACIENTES_ANIOS = 3;
-async function calcularPacientesTotales(calendar, fichasIdentidad) {
-  const dnisFicha = new Set();
-  const telefonosFicha = new Set();
-  fichasIdentidad.forEach((f) => {
-    const dni = normalizarDni(f.dni);
-    const tel = normalizarTelefonoMapeo(f.telefono);
-    if (dni) dnisFicha.add(dni);
-    if (tel) telefonosFicha.add(tel);
-  });
-
-  const ahora = new Date();
-  const desde = new Date(Date.UTC(ahora.getUTCFullYear() - HISTORIAL_PACIENTES_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
-
-  let eventos = [];
+// Ya no escanea Calendar en vivo (ver el pedido, 2026-08-14) — lee directo de la
+// planilla "Pacientes consolidados" (lib/pacientesConsolidados.js), la misma fuente
+// única que ahora usa también el autocompletado de /gestion, mantenida al día con
+// escrituras puntuales en vez de un escaneo completo por request. Mismo criterio de
+// matching "ya establecido en el proyecto" (mismo teléfono) que antes, solo que
+// resuelto de antemano en vez de en cada carga del dashboard.
+async function calcularPacientesTotales() {
+  let filas = [];
   try {
-    const [principal, sobreturnos] = await Promise.all([
-      (async () => {
-        let items = [], pageToken;
-        do {
-          const { data } = await conReintentos(() => calendar.events.list({
-            calendarId: CALENDAR_ID, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
-            singleEvents: true, maxResults: 2500, pageToken,
-          }));
-          items = items.concat(data.items || []);
-          pageToken = data.nextPageToken;
-        } while (pageToken);
-        return items;
-      })(),
-      (async () => {
-        let items = [], pageToken;
-        do {
-          const { data } = await conReintentos(() => calendar.events.list({
-            calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
-            singleEvents: true, maxResults: 2500, pageToken,
-          }));
-          items = items.concat(data.items || []);
-          pageToken = data.nextPageToken;
-        } while (pageToken);
-        return items;
-      })(),
-    ]);
-    eventos = [...principal, ...sobreturnos];
+    filas = await listarPacientesConsolidados();
   } catch (err) {
-    console.warn('[admin.js] no se pudo leer el historial de turnos para pacientes totales:', err?.message || err);
-    return { total: fichasIdentidad.length, totalFichas: fichasIdentidad.length, totalSoloTurno: 0, fichas: fichasIdentidad, soloTurno: [] };
+    console.warn('[admin.js] no se pudo leer la planilla consolidada para pacientes totales:', err?.message || err);
+    return { total: null, totalFichas: null, totalSoloTurno: null, fichas: [], soloTurno: [] };
   }
 
-  const soloTurnoPorClave = new Map();
-  eventos.forEach((ev) => {
-    if ((ev.description || '').includes(BLOCK_MARKER)) return;
-    const dni = normalizarDni(extraerDni(ev.description));
-    const tel = normalizarTelefonoMapeo(extraerTelefono(ev.description));
-    if ((dni && dnisFicha.has(dni)) || (tel && telefonosFicha.has(tel))) return; // ya tiene ficha
-    const clave = dni || tel;
-    if (!clave) return; // sin dni ni teléfono no hay con qué identificarlo de forma única
-    if (!soloTurnoPorClave.has(clave)) {
-      soloTurnoPorClave.set(clave, { nombre: ev.summary || '(sin nombre)', dni: extraerDni(ev.description), telefono: extraerTelefono(ev.description) });
-    }
-  });
+  const fichas = filas
+    .filter((f) => f.fichaId)
+    .map((f) => ({ id: f.fichaId, nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono }));
+  const soloTurno = filas
+    .filter((f) => !f.fichaId)
+    .map((f) => ({ nombre: `${f.nombre} ${f.apellido}`.trim(), dni: f.dni, telefono: f.telefono }));
 
-  const soloTurno = [...soloTurnoPorClave.values()];
   return {
-    total: fichasIdentidad.length + soloTurno.length,
-    totalFichas: fichasIdentidad.length,
+    total: fichas.length + soloTurno.length,
+    totalFichas: fichas.length,
     totalSoloTurno: soloTurno.length,
-    fichas: fichasIdentidad,
+    fichas,
     soloTurno: soloTurno.slice(0, 500),
   };
 }
@@ -1012,7 +962,7 @@ async function getMetricasAvanzadas(req, res) {
     }),
   ]);
 
-  const pacientesTotales = await calcularPacientesTotales(calendar, finanzas.fichasIdentidad || []).catch((err) => {
+  const pacientesTotales = await calcularPacientesTotales().catch((err) => {
     errores.push(`pacientes totales: ${err?.message || err}`);
     return { total: null, totalFichas: null, totalSoloTurno: null, fichas: [], soloTurno: [] };
   });

@@ -7,6 +7,7 @@ import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
 import { obtenerHorariosConfig, logActividad } from '../../lib/adminConfig.js';
+import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -100,6 +101,11 @@ export default async function handler(req, res) {
       detalle: `${title} — ${date} ${time}`,
       actor: 'gestión (Ayelen)',
     });
+
+    // Best-effort, ver lib/pacientesConsolidados.js — si ya hay ficha con este teléfono
+    // esos datos ganan solos (no hace falta chequearlo acá), y no bloquea la respuesta
+    // si la planilla falla.
+    await upsertPacienteConsolidado({ telefono: telNormalizado, nombre: aTituloCase(nombre), apellido: aTituloCase(apellido), dni, origen: 'turno' });
 
     res.status(200).json({
       success: true,

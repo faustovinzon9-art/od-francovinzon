@@ -2,7 +2,7 @@ import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, SLOT_MINUTES, TIME_ZONE,
   toArgDate, eventBounds, crearTurno, formatArgDay, formatArgTime,
   extraerTelefono, extraerMotivo, extraerEsNuevoPaciente, extraerConfirmado, escribirConfirmado,
-  extraerCodigoCorto, asegurarCodigoCorto, extraerDni, extraerEmail,
+  extraerConfirmacionSolicitada, extraerCodigoCorto, asegurarCodigoCorto, extraerDni, extraerEmail,
 } from '../lib/googleCalendar.js';
 import { avisarFallo } from '../lib/alertas.js';
 import { conReintentos } from '../lib/retry.js';
@@ -128,6 +128,7 @@ async function obtenerPropio(req, res) {
       date: formatArgDay(start),
       time: formatArgTime(start),
       confirmado: extraerConfirmado(ev.description || ''),
+      confirmacionSolicitada: extraerConfirmacionSolicitada(ev.description || ''),
       codigoCorto,
     });
   } catch (err) {
