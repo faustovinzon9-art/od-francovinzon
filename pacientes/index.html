@@ -37,9 +37,8 @@
   .topbar img { width: 190px; max-width: 50vw; height: auto; }
   #volver-gestion { margin-left: auto; margin-bottom: 0; }
 
-  /* Barra sticky: siempre visible arriba de todo sin importar el scroll, ADEMÁS del
-     buscador/botón que ya existen más abajo (no los reemplaza, ver el pedido). Mismo
-     estilo que .search-row de siempre para que no se sienta como algo distinto. */
+  /* Barra sticky: único buscador + botón de "Nuevo paciente" de la página, siempre
+     visible arriba de todo sin importar el scroll. */
   .sticky-bar {
     position: sticky; top: 0; z-index: 60; display: flex; gap: 10px; align-items: center;
     background: var(--cream); padding: 10px 0 12px; margin: -20px 0 16px;
@@ -83,14 +82,10 @@
     .ficha-columns { display: grid; grid-template-columns: 296px 1fr; gap: 20px; align-items: start; }
   }
 
-  .search-row {
-    display: flex; gap: 8px; margin-bottom: 16px;
-    position: sticky; top: 0; z-index: 20; background: var(--cream); padding: 10px 0;
-  }
   .search-box { flex: 1; background: var(--white); border-radius: 14px; padding: 4px 4px 4px 14px; display: flex; align-items: center; box-shadow: 0 1px 8px rgba(30,58,95,.06); }
   .search-box input { flex: 1; border: none; background: transparent; padding: 10px 6px; }
   .search-box input:focus { outline: none; }
-  .btn-nuevo { background: var(--gold); color: var(--white); border: none; padding: 0 20px; border-radius: 14px; font-weight: 700; font-size: 14.5px; white-space: nowrap; }
+  .btn-nuevo { background: var(--gold); color: var(--white); border: none; padding: 12px 20px; border-radius: 14px; font-weight: 700; font-size: 14.5px; white-space: nowrap; }
 
   .patient-list { background: var(--white); border-radius: 14px; box-shadow: 0 1px 8px rgba(30,58,95,.06); overflow: hidden; }
   .patient-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
@@ -200,7 +195,7 @@
      que el resto de la lista de pacientes: esto lo usa Ayelen todo el día, de un
      vistazo, y a veces también Franco. */
   .hoy-section { margin-bottom: 16px; }
-  .hoy-section h2 { font-size: 15.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 9px; }
+  .hoy-section h2, .lista-titulo { font-size: 15.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; margin-bottom: 9px; }
   /* 2 columnas, ADEMÁS del orden cronológico fila por fila (izquierda a derecha) —
      el turno más temprano queda arriba-izquierda, el segundo arriba-derecha, el
      tercero abajo-izquierda, etc. CSS grid con grid-auto-flow: row (default) ya
@@ -391,13 +386,6 @@
       <button class="dup-banner-btn" id="dup-banner-btn">Revisar</button>
     </div>
 
-    <div class="search-row">
-      <div class="search-box">
-        <input type="text" id="search-input" placeholder="Buscar por nombre o DNI...">
-      </div>
-      <button class="btn-nuevo" id="btn-nuevo-paciente">+ Nuevo paciente</button>
-    </div>
-
     <div class="panel reveal hidden" id="panel-nuevo">
       <h2>Nuevo paciente</h2>
       <div class="field-row">
@@ -419,6 +407,7 @@
       <div class="panel-msg hidden" id="np-msg"></div>
     </div>
 
+    <h2 class="lista-titulo">Todas las fichas</h2>
     <div class="patient-list" id="patient-list">
       <div class="empty-note">Cargando pacientes…</div>
     </div>
@@ -829,7 +818,7 @@
   }
 
   // ---------- Lista ----------
-  const searchInput = document.getElementById('search-input');
+  const searchInput = document.getElementById('search-input-sticky');
   const patientListEl = document.getElementById('patient-list');
 
   let resaltarIdPendiente = null; // fila a resaltar en el próximo renderLista() (fusión/creación)
@@ -885,13 +874,6 @@
     }
   }
   searchInput.addEventListener('input', renderLista);
-  // Buscador sticky de arriba de todo: espeja el valor en el buscador de siempre y
-  // dispara el mismo renderLista() — un solo filtro, dos puntos de entrada.
-  const searchInputSticky = document.getElementById('search-input-sticky');
-  searchInputSticky.addEventListener('input', () => {
-    searchInput.value = searchInputSticky.value;
-    renderLista();
-  });
 
   function normalizar(str) {
     return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -1282,7 +1264,6 @@
   // Barra sticky de arriba de todo (ADEMÁS del botón/buscador de siempre más abajo,
   // no los reemplaza, ver el pedido) — mismas acciones, solo un segundo punto de
   // entrada para no tener que scrollear.
-  document.getElementById('btn-nuevo-paciente').addEventListener('click', abrirNuevoPaciente);
   document.getElementById('btn-nuevo-paciente-sticky').addEventListener('click', abrirNuevoPaciente);
   document.getElementById('np-cancelar').addEventListener('click', () => ocultarAnimado(panelNuevo));
 
