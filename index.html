@@ -47,6 +47,13 @@
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
         Sacar turno online
       </a>
+      <div class="hero-cta-group hidden" id="turno-whatsapp-block">
+        <span class="hero-cta-heading">¿Querés sacar un turno? Escribinos por WhatsApp</span>
+        <a class="btn btn-whatsapp btn-lg" href="https://wa.me/5403442457764?text=Hola!%20Quiero%20sacar%20un%20turno" target="_blank" rel="noopener">
+          <svg viewBox="0 0 32 32" width="18" height="18" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg>
+          Escribinos por WhatsApp
+        </a>
+      </div>
     </div>
     <a class="urgencia-badge" href="https://wa.me/543442403556" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9 2.4 18a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z"/></svg>
@@ -224,13 +231,17 @@
 
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 <script>
-  // Botón "Sacar turno online": arranca oculto (ver el pedido, 2026-08-14 — mismo
+  // Botón "Sacar turno online" vs. bloque "Escribinos por WhatsApp": arrancan los dos
+  // ocultos (ver el pedido, 2026-08-14 y su actualización del 2026-08-18 — mismo
   // interruptor que /turnos, "reserva online pausada" es el estado real desde el
-  // arranque) y solo se muestra si /api/disponibilidad confirma que está activada.
+  // arranque) y /api/disponibilidad decide cuál de los dos mostrar.
   fetch('/api/disponibilidad?modo=estado')
     .then((r) => r.json())
-    .then((data) => { if (!data.pausada) document.getElementById('btn-turno-online').classList.remove('hidden'); })
-    .catch(() => {}); // sin conexión/error: se queda oculto, mismo criterio fail-safe que /turnos
+    .then((data) => {
+      const id = data.pausada ? 'turno-whatsapp-block' : 'btn-turno-online';
+      document.getElementById(id).classList.remove('hidden');
+    })
+    .catch(() => {}); // sin conexión/error: los dos se quedan ocultos, mismo criterio fail-safe que /turnos
 </script>
 <script>
   (() => {

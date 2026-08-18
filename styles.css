@@ -122,6 +122,11 @@ h1, h2, h3 {
 .hero-cta-group .btn { width: 100%; justify-content: center; }
 .hero-actions > a.btn { align-self: flex-start; }
 .hero-cta-note { font-size: .78rem; color: var(--navy-light); }
+/* Bloque "sacar turno por WhatsApp" cuando la reserva online está pausada (ver
+   index.html) — reemplaza al botón dorado en ese mismo lugar, así que necesita más
+   peso visual que .hero-cta-note (una caption chica no alcanza acá: es la acción
+   principal de la página en ese estado). */
+.hero-cta-heading { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: clamp(1rem, 3.2vw, 1.15rem); color: var(--navy); text-align: center; text-wrap: balance; }
 
 /* Horarios */
 .horarios { padding: 100px 24px; text-align: center; }
