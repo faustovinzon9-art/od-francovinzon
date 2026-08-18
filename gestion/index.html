@@ -397,8 +397,7 @@
   .ticket-fecha { font-size: 12px; color: var(--text); text-transform: capitalize; }
   .ticket-hora { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
   .ticket-wa-note { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin-bottom: 10px; }
-  .ticket-wa-note strong { color: var(--navy); }
-  .ticket-footer { font-size: 9.5px; color: var(--muted); line-height: 1.4; }
+  .ticket-wa-note strong { color: var(--navy); white-space: nowrap; }
 
   /* Solo esto se imprime: se oculta todo lo demás de la página y se posiciona
      #ticket-print en la esquina de la hoja térmica. Área imprimible real ~48mm
@@ -739,7 +738,6 @@
         <div class="ticket-fecha" id="ticket-fecha"></div>
         <div class="ticket-hora" id="ticket-hora"></div>
         <div class="ticket-wa-note" id="ticket-wa-note"></div>
-        <div class="ticket-footer" id="ticket-footer"></div>
       </div>
     </div>
     <div class="panel-actions">
@@ -2354,9 +2352,10 @@
     document.getElementById('ticket-fecha').textContent = fechaLarga;
     document.getElementById('ticket-hora').textContent = item.allDay ? '' : `${fmtHora(item.start)} hs`;
     // Sin QR ni link (ver el pedido, 2026-08-14): el número del consultorio va escrito
-    // directo en el papel para cancelar o cambiar el turno por WhatsApp.
-    document.getElementById('ticket-wa-note').innerHTML = `Para cancelar o cambiar tu turno,<br>escribinos por WhatsApp al <strong>${WHATSAPP_CONSULTORIO_DISPLAY}</strong>`;
-    document.getElementById('ticket-footer').innerHTML = `Consultas: WhatsApp<br>${WHATSAPP_CONSULTORIO_DISPLAY}`;
+    // directo en el papel, una sola vez (antes se repetía acá y en un footer aparte,
+    // ver el pedido, 2026-08-18) — con white-space:nowrap en el número (ver CSS de
+    // .ticket-wa-note strong) para que no corte a la mitad.
+    document.getElementById('ticket-wa-note').innerHTML = `Para cancelar, cambiar tu turno o hacer una consulta,<br>escribinos por WhatsApp al <strong>${WHATSAPP_CONSULTORIO_DISPLAY}</strong>`;
   }
 
   async function abrirTicketPreview(item) {
