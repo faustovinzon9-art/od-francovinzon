@@ -396,9 +396,8 @@
   .ticket-nombre { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 15px; color: var(--navy); margin-bottom: 4px; text-transform: capitalize; }
   .ticket-fecha { font-size: 12px; color: var(--text); text-transform: capitalize; }
   .ticket-hora { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
-  .ticket-qr-label { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
-  .ticket-qr { display: flex; justify-content: center; margin-bottom: 10px; }
-  .ticket-qr img, .ticket-qr canvas { display: block; }
+  .ticket-wa-note { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin-bottom: 10px; }
+  .ticket-wa-note strong { color: var(--navy); }
   .ticket-footer { font-size: 9.5px; color: var(--muted); line-height: 1.4; }
 
   /* Solo esto se imprime: se oculta todo lo demás de la página y se posiciona
@@ -410,9 +409,7 @@
      - Texto/fondos: ya forzados a #000/transparente sin sombra (regla de abajo).
      - Logo (único elemento con semitonos reales, por el antialiasing del PNG):
        filtro de alto contraste que empuja cada píxel a negro puro o blanco puro,
-       sin punto intermedio — ver la regla de la imagen más abajo.
-     - QR: ya se genera con colorDark/colorLight puros (#000000/#ffffff, ver
-       abrirTicketPreview), sin necesitar filtro. */
+       sin punto intermedio — ver la regla de la imagen más abajo. */
   @media print {
     body * { visibility: hidden; }
     #ticket-print, #ticket-print * { visibility: visible; color: #000 !important; background: transparent !important; box-shadow: none !important; text-shadow: none !important; }
@@ -718,21 +715,6 @@
   </div>
 </div>
 
-<!-- Popup "¿Qué mensaje mandar?" al tocar el ícono de WhatsApp (ver el pedido,
-     2026-08-14) — dos opciones neutrales, ninguna es una acción destructiva, por eso
-     no reusa confirm-overlay tal cual (ese tiene un botón rojo "danger" que no
-     correspondería acá). -->
-<div class="confirm-overlay hidden" id="wa-choice-overlay">
-  <div class="confirm-box">
-    <h3>¿Qué mensaje mandar?</h3>
-    <p>Elegí qué le llega al paciente por WhatsApp.</p>
-    <div class="confirm-actions">
-      <button class="btn-cancel" id="wa-choice-detalles">Detalles del turno</button>
-      <button class="btn-confirm" id="wa-choice-confirmacion">Pedido de confirmación</button>
-    </div>
-  </div>
-</div>
-
 <div class="confirm-overlay hidden" id="tasks-modal-overlay">
   <div class="confirm-box tasks-modal-box">
     <div class="tasks-modal-header">
@@ -756,8 +738,7 @@
         <div class="ticket-nombre" id="ticket-nombre"></div>
         <div class="ticket-fecha" id="ticket-fecha"></div>
         <div class="ticket-hora" id="ticket-hora"></div>
-        <div class="ticket-qr-label">Para modificar o cancelar tu turno, escaneá este código:</div>
-        <div class="ticket-qr" id="ticket-qr"></div>
+        <div class="ticket-wa-note" id="ticket-wa-note"></div>
         <div class="ticket-footer" id="ticket-footer"></div>
       </div>
     </div>
@@ -771,7 +752,6 @@
 <audio id="radio-audio" preload="none"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.1.3/dist/js/intlTelInputWithUtils.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
 (function () {
   const TIME_ZONE = 'America/Argentina/Buenos_Aires';
@@ -804,43 +784,6 @@
     if (hora === 24) hora = 0; // algunos motores devuelven "24" para la medianoche con hour12:false
     return hora < 13 ? 'buenos días' : 'buenas tardes'; // corte a las 13hs, a pedido explícito (2026-08-12)
   };
-
-  // Link de "Detalles de tu turno" (/turno) — mismo destino que el QR del ticket
-  // térmico (armarContenidoTicket, más abajo) y del mensaje de WhatsApp de
-  // recordatorio (mensajeRecordatorio) — un solo lugar para no duplicar la
-  // construcción del link entre los dos usos.
-  function armarLinkTurno(item) {
-    const params = new URLSearchParams({ eventId: item.id });
-    if (item.calendarId) params.set('calendarId', item.calendarId);
-    if (item.tipo === 'sobreturno') params.set('tipo', 'sobreturno');
-    return `${location.origin}/turno?${params.toString()}`;
-  }
-
-  // Link corto /t/CODIGO (ver api/reservar.js) — usa el código que ya venga en el item
-  // (turnos nuevos, generado al crear, ver turnos-dia.js) o lo pide al backend recién
-  // acá, al necesitarlo (turnos viejos sin código todavía) — no hay ninguna migración
-  // masiva, se genera "al vuelo" la primera vez que se manda el WhatsApp o se arma el
-  // ticket de ESE turno puntual. Si el pedido falla por lo que sea, cae al link largo
-  // de siempre (armarLinkTurno) en vez de romper el flujo.
-  async function armarLinkCortoTurno(item) {
-    let codigo = item.codigoCorto;
-    if (!codigo) {
-      try {
-        const r = await fetch('/api/gestion/evento', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: gestionKey, accion: 'asegurar-codigo-corto', eventId: item.id, calendarId: item.calendarId }),
-        });
-        if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
-        const data = await r.json();
-        if (data.success && data.codigoCorto) {
-          codigo = data.codigoCorto;
-          item.codigoCorto = codigo; // cachea en el item para no volver a pedirlo esta sesión
-        }
-      } catch (e) { /* cae al link largo abajo */ }
-    }
-    return codigo ? `${location.origin}/t/${codigo}` : armarLinkTurno(item);
-  }
 
   const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
@@ -1462,10 +1405,11 @@
     return diasDesdeHoyPara(it) < 0 && !!it.confirmado;
   }
 
-  // `tipoElegido`: 'confirmacion' | 'detalles' — viene del popup de enviarWhatsApp (ver
-  // el pedido, 2026-08-14; reemplaza la lógica automática de "si faltan 4+ días, manda
-  // detalle" que había antes). Ignorado si el turno ya califica como inasistencia.
-  async function mensajeRecordatorio(it, tipoElegido) {
+  // Un solo mensaje siempre, sin importar cuántos días falten (ver el pedido,
+  // 2026-08-14: se sacó la lógica de "detalles" vs "pedido de confirmación" y el popup
+  // de elegir — ya no hace falta porque el mensaje nunca lleva un link). Ignorado si el
+  // turno ya califica como inasistencia.
+  function mensajeRecordatorio(it) {
     const fechaItem = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(it.start));
     const hoy = todayStr();
     const [hy, hm, hd] = hoy.split('-').map(Number);
@@ -1479,7 +1423,6 @@
     const nombre = it.title || 'paciente';
     const tipoTexto = it.tipo === 'sobreturno' ? 'sobreturno' : 'turno';
     const cuandoCap = cuando.charAt(0).toUpperCase() + cuando.slice(1);
-    const link = await armarLinkCortoTurno(it);
 
     // Turno pasado Y confirmado -> no vino. Mensaje de inasistencia en vez del de
     // confirmación (que ya no tiene sentido) — pedido explícito, 2026-08-13. Un
@@ -1490,27 +1433,10 @@
         `reorganizamos — cualquier cosa contanos y coordinamos uno nuevo cuando quieras. ¡Te esperamos!`;
     }
 
-    // "Detalles del turno" (elegido a mano desde el popup, ver el pedido, 2026-08-14):
-    // fecha/hora + el link permanente, sin pedir que confirme todavía.
-    if (tipoElegido === 'detalles') {
-      return `¡Hola, ${saludoActual()}!!! Te paso los datos del ${tipoTexto} que tenés agendado:\n\n` +
-        `${nombre}\n` +
-        `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
-        `Cualquier cosa que necesites cambiar o consultar, entrá acá:\n${link}\n\n` +
-        `Más cerca de la fecha vas a poder confirmar el turno por el mismo link.`;
-    }
-
-    // "Pedido de confirmación" (default si no se especifica, ver enviarWhatsApp).
-    // Plantilla (2026-08-12, novena vuelta): el saludo, el nombre, la fecha/hora y el
-    // cierre son la voz auténtica de Ayelen, sin tocar. Lo único que cambió acá es la
-    // línea del link — antes sonaba acartonada ("Es importante que entres a este link
-    // para confirmar..."), ahora directa e informal, en su propia línea, con el link
-    // corto (/t/CODIGO, ver api/reservar.js) en vez del link largo con el eventId y el
-    // calendarId codificado.
-    // Sin emoji en esa línea a propósito, aunque el pedido original sugería un 👇: sigue
-    // sin resolverse el bug ya comprobado varias veces (ver decisions.md) de que
-    // wa.me/api.whatsapp.com corrompe cualquier emoji en el parámetro "text" antes de
-    // llegar al chat — se avisa explícitamente, no es un olvido.
+    // Confirmación escrita, sin ningún link (ver el pedido, 2026-08-14): antes este
+    // mensaje llevaba el link corto a /turno para tocar "Confirmo"; ahora se le pide
+    // directamente que responda por el chat. El saludo, el nombre, la fecha/hora y el
+    // cierre son la voz auténtica de Ayelen, sin tocar.
     //
     // Editable desde /admin (api/gestion/admin.js, recurso "textos") — si Fausto nunca
     // configuró nada, whatsappTemplateConfig queda null y el texto de siempre (líneas
@@ -1521,14 +1447,12 @@
         .replaceAll('{{tipo}}', tipoTexto)
         .replaceAll('{{nombre}}', nombre)
         .replaceAll('{{cuando}}', cuandoCap)
-        .replaceAll('{{hora}}', fmtHora(it.start))
-        .replaceAll('{{link}}', link);
+        .replaceAll('{{hora}}', fmtHora(it.start));
     }
     return `¡Hola, ${saludoActual()}!!! Te quería recordar el siguiente ${tipoTexto}:\n\n` +
       `${nombre}\n` +
-      `${cuandoCap} a las ${fmtHora(it.start)}hs\n` +
-      `Tocá este link para confirmarlo:\n${link}\n\n` +
-      `Cualquier cosita que no puedas venir avisar. Te esperamos.`;
+      `${cuandoCap} a las ${fmtHora(it.start)}hs\n\n` +
+      `Confirmame por acá que vas a poder venir. Cualquier cosita que no puedas, avisanos. Te esperamos.`;
   }
 
   function armarLinkWhatsApp(telefonoRaw) {
@@ -1545,10 +1469,9 @@
 
     const botones = [];
     if (waLinkBase) {
-      // Antes era un <a href> armado eager con el mensaje ya codificado — ahora
-      // mensajeRecordatorio() es async (necesita asegurar el link corto, ver
-      // armarLinkCortoTurno), así que el link final se arma recién al click
-      // (enviarWhatsApp(), delegado más abajo), no de antemano al renderizar la fila.
+      // Delegado a enviarWhatsApp() (más abajo) en vez de un <a href> armado eager
+      // al renderizar la fila — así el mensaje puede marcar "confirmación
+      // solicitada" antes de abrir la ventana de WhatsApp.
       botones.push(`<span class="wa-edit-wrap">` +
         `<button type="button" class="icon-btn wa-btn" data-action="enviar-whatsapp" data-idx="${idx}" title="Escribir por WhatsApp"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></button>` +
         `<button type="button" class="wa-edit-pencil" data-action="editar-tel" data-idx="${idx}" title="Editar teléfono">${PENCIL_ICON}</button>` +
@@ -1660,67 +1583,31 @@
     }
   });
 
-  // Arma el mensaje (async, ver mensajeRecordatorio) recién al tocar el ícono de
-  // WhatsApp — antes el link ya estaba en el href de un <a>, armado de antemano al
-  // renderizar la fila; ahora hace falta esperar a asegurar el link corto primero.
-  // Popup "¿Qué mensaje mandar?" (ver el pedido, 2026-08-14) — mismo patrón de Promise
-  // que confirmDialog, pero con sus dos botones propios (ninguno es "danger").
-  const waChoiceOverlay = document.getElementById('wa-choice-overlay');
-  function elegirMensajeWhatsApp() {
-    return new Promise((resolve) => {
-      const btnDetalles = document.getElementById('wa-choice-detalles');
-      const btnConfirmacion = document.getElementById('wa-choice-confirmacion');
-      waChoiceOverlay.classList.remove('hidden');
-      requestAnimationFrame(() => waChoiceOverlay.classList.add('show'));
-      function cerrar(resultado) {
-        waChoiceOverlay.classList.remove('show');
-        setTimeout(() => waChoiceOverlay.classList.add('hidden'), 180);
-        btnDetalles.removeEventListener('click', onDetalles);
-        btnConfirmacion.removeEventListener('click', onConfirmacion);
-        waChoiceOverlay.removeEventListener('click', onFondo);
-        resolve(resultado);
-      }
-      function onDetalles() { cerrar('detalles'); }
-      function onConfirmacion() { cerrar('confirmacion'); }
-      // Click en el fondo (afuera de la caja) = cerrar sin elegir, mismo criterio que
-      // el resto de los overlays de esta página (ver ticketModalOverlay/tasksModalOverlay).
-      function onFondo(e) { if (e.target === waChoiceOverlay) cerrar(null); }
-      btnDetalles.addEventListener('click', onDetalles);
-      btnConfirmacion.addEventListener('click', onConfirmacion);
-      waChoiceOverlay.addEventListener('click', onFondo);
-    });
-  }
-
+  // Un solo mensaje siempre (ver el pedido, 2026-08-14) — ya no hay popup para elegir
+  // qué mandar, porque el mensaje nunca lleva un link que dependa de la fecha.
   async function enviarWhatsApp(item) {
     const base = armarLinkWhatsApp(item.telefono);
     if (!base) return;
 
-    // Turno pasado y confirmado -> directo al mensaje de inasistencia, sin preguntar
-    // nada (no tiene sentido elegir "detalles" o "pedido de confirmación" para un
-    // turno que ya pasó, ver esInasistencia()).
-    let tipoElegido = null;
+    // Todo mensaje que no sea de inasistencia ES un pedido de confirmación escrita —
+    // habilita "Confirmo el turno" en /turno sin importar cuánto falte (ver
+    // escribirConfirmacionSolicitada en lib/googleCalendar.js), aunque ahora ese link
+    // no se mande por WhatsApp: si el paciente ya lo tiene guardado de una visita
+    // anterior, sigue funcionando igual.
     if (!esInasistencia(item)) {
-      tipoElegido = await elegirMensajeWhatsApp();
-      if (!tipoElegido) return; // cerró el popup sin elegir (click afuera/Esc)
-      // "Pedido de confirmación" habilita "Confirmo el turno" en /turno sin importar
-      // cuánto falte (ver escribirConfirmacionSolicitada en lib/googleCalendar.js) —
-      // se guarda ANTES de abrir WhatsApp, así queda marcado aunque el mensaje termine
-      // sin mandarse de verdad.
-      if (tipoElegido === 'confirmacion') {
-        try {
-          await fetch('/api/gestion/evento', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: gestionKey, accion: 'marcar-confirmacion-solicitada', eventId: item.id, calendarId: item.calendarId }),
-          });
-        } catch {
-          // best-effort: si falla, "Confirmo el turno" sigue rigiéndose solo por la
-          // ventana de 72hs de siempre, no bloquea el envío del WhatsApp
-        }
+      try {
+        await fetch('/api/gestion/evento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: gestionKey, accion: 'marcar-confirmacion-solicitada', eventId: item.id, calendarId: item.calendarId }),
+        });
+      } catch {
+        // best-effort: si falla, "Confirmo el turno" sigue rigiéndose solo por la
+        // ventana de 72hs de siempre, no bloquea el envío del WhatsApp
       }
     }
 
-    const texto = await mensajeRecordatorio(item, tipoElegido);
+    const texto = mensajeRecordatorio(item);
     window.open(`${base}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
   }
 
@@ -2460,25 +2347,16 @@
   // Llena #ticket-print con los datos de item — compartido entre la previsualización
   // manual (abrirTicketPreview) y la impresión directa después de crear/mover un
   // turno (imprimirTicketDirecto, ver más abajo), para no duplicar esta lógica.
-  async function armarContenidoTicket(item) {
+  function armarContenidoTicket(item) {
     const fechaLarga = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(item.start));
     document.getElementById('ticket-badge-sobreturno').classList.toggle('hidden', item.tipo !== 'sobreturno');
     document.getElementById('ticket-nombre').textContent = item.title || '(sin título)';
     document.getElementById('ticket-fecha').textContent = fechaLarga;
     document.getElementById('ticket-hora').textContent = item.allDay ? '' : `${fmtHora(item.start)} hs`;
+    // Sin QR ni link (ver el pedido, 2026-08-14): el número del consultorio va escrito
+    // directo en el papel para cancelar o cambiar el turno por WhatsApp.
+    document.getElementById('ticket-wa-note').innerHTML = `Para cancelar o cambiar tu turno,<br>escribinos por WhatsApp al <strong>${WHATSAPP_CONSULTORIO_DISPLAY}</strong>`;
     document.getElementById('ticket-footer').innerHTML = `Consultas: WhatsApp<br>${WHATSAPP_CONSULTORIO_DISPLAY}`;
-
-    // El QR apunta a /turno (página propia, distinta de /turnos) — reusa la misma API
-    // de "obtener/mover/cancelar/confirmar" de api/reservar.js, pero con su propio
-    // diseño y texto ("Detalles de tu turno", no "Reservar turno"). Ver decisions.md.
-    // Ahora usa el link corto /t/CODIGO en vez del link largo — menos denso, más fácil
-    // de leer para un QR (ver armarLinkCortoTurno más arriba).
-    const ticketUrl = await armarLinkCortoTurno(item);
-
-    const qrEl = document.getElementById('ticket-qr');
-    qrEl.innerHTML = '';
-    // eslint-disable-next-line no-new
-    new QRCode(qrEl, { text: ticketUrl, width: 110, height: 110, colorDark: '#000000', colorLight: '#ffffff' });
   }
 
   async function abrirTicketPreview(item) {
@@ -2720,12 +2598,22 @@
   // que se cargue (o si nunca se configuró nada), mensajeRecordatorio() usa el texto
   // de siempre en ese caso.
   let whatsappTemplateConfig = null;
+  // Plantilla vieja con {{link}} (previa al pedido del 2026-08-14) — si alguien entró
+  // a /admin y guardó la sección de textos ANTES de este cambio (aunque sea sin tocar
+  // nada), esta plantilla quedó persistida tal cual en la hoja de Config y seguiría
+  // mandándose con link para siempre. Se detecta por coincidencia exacta y se ignora,
+  // cayendo al texto nuevo sin link — no hace falta tocar la hoja a mano.
+  const WHATSAPP_TEMPLATE_VIEJA_CON_LINK =
+    '¡Hola, {{saludo}}!!! Te quería recordar el siguiente {{tipo}}:\n\n{{nombre}}\n{{cuando}} a las {{hora}}hs\n' +
+    'Tocá este link para confirmarlo:\n{{link}}\n\nCualquier cosita que no puedas venir avisar. Te esperamos.';
   async function cargarTextosConfig() {
     try {
       const r = await fetch(`/api/gestion/admin?recurso=textos&key=${encodeURIComponent(gestionKey)}`);
       if (!r.ok) return;
       const textos = await r.json();
-      if (textos && textos.whatsappTemplate) whatsappTemplateConfig = textos.whatsappTemplate;
+      if (textos && textos.whatsappTemplate && textos.whatsappTemplate !== WHATSAPP_TEMPLATE_VIEJA_CON_LINK) {
+        whatsappTemplateConfig = textos.whatsappTemplate;
+      }
     } catch {
       // sin conexión o sin configurar: sigue usando el texto de siempre
     }

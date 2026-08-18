@@ -17,7 +17,7 @@ import {
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import {
-  getConfig, setConfig, obtenerHorariosConfig, logActividad,
+  getConfig, setConfig, obtenerHorariosConfig, obtenerReservaOnlinePausada, logActividad,
   leerActividadReciente, leerAlertasRecientes,
 } from '../../lib/adminConfig.js';
 import { listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
@@ -58,6 +58,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (recurso === 'horarios') return await getHorarios(req, res);
+      if (recurso === 'reserva-online') return await getReservaOnline(req, res);
       if (recurso === 'textos') return await getTextos(req, res);
       if (recurso === 'listas') return await getListas(req, res);
       if (recurso === 'radios') return await getRadios(req, res);
@@ -79,6 +80,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       if (recurso === 'horarios') return await postHorarios(req, res);
+      if (recurso === 'reserva-online') return await postReservaOnline(req, res);
       if (recurso === 'textos') return await postTextos(req, res);
       if (recurso === 'listas') return await postListas(req, res);
       if (recurso === 'radios') return await postRadios(req, res);
@@ -191,13 +193,34 @@ function nextDayStr(dateStr) {
   return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
 }
 
+// ---------- 1.5 Interruptor de reserva online ----------
+// Default = pausada desde el arranque (obtenerReservaOnlinePausada, lib/adminConfig.js)
+// — no es una demo, es la configuración real desde el día uno. Mientras esté pausada,
+// /turnos y la home dejan de mostrar el flujo de reserva online y muestran un cartel de
+// WhatsApp en su lugar (ver api/disponibilidad.js?modo=estado, que es de donde esas
+// páginas públicas leen este mismo valor sin necesitar ninguna clave). /gestion no se
+// ve afectado: Ayelen y Franco siguen cargando turnos a mano sin restricción nueva.
+async function getReservaOnline(req, res) {
+  const pausada = await obtenerReservaOnlinePausada();
+  res.status(200).json({ pausada });
+}
+
+async function postReservaOnline(req, res) {
+  const { pausada } = req.body;
+  await setConfig('reservaOnlinePausada', !!pausada);
+  await logActividad({ tipo: 'config_reserva_online', detalle: pausada ? 'Reserva online pausada' : 'Reserva online activada', actor: 'admin' });
+  res.status(200).json({ success: true });
+}
+
 // ---------- 2. Textos y plantillas ----------
 
 const TEXTOS_DEFAULT = {
-  // Placeholders: {{saludo}} {{nombre}} {{cuando}} {{hora}} {{tipo}} {{link}}
+  // Placeholders: {{saludo}} {{nombre}} {{cuando}} {{hora}} {{tipo}} — sin {{link}}
+  // desde 2026-08-14: la confirmación pasó a ser escrita (el paciente responde por el
+  // chat), no por un link.
   whatsappTemplate:
-    '¡Hola, {{saludo}}!!! Te quería recordar el siguiente {{tipo}}:\n\n{{nombre}}\n{{cuando}} a las {{hora}}hs\n' +
-    'Tocá este link para confirmarlo:\n{{link}}\n\nCualquier cosita que no puedas venir avisar. Te esperamos.',
+    '¡Hola, {{saludo}}!!! Te quería recordar el siguiente {{tipo}}:\n\n{{nombre}}\n{{cuando}} a las {{hora}}hs\n\n' +
+    'Confirmame por acá que vas a poder venir. Cualquier cosita que no puedas, avisanos. Te esperamos.',
   direccion: 'Ameghino 410, E3260 Concepción del Uruguay, Entre Ríos, Argentina',
   bienvenidaNuevoPaciente: '¡Bienvenido/a! Te esperamos con gusto en tu primera visita.',
 };

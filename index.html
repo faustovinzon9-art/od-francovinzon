@@ -43,7 +43,7 @@
         </a>
         <span class="hero-cta-note">Turnos, consultas y urgencias</span>
       </div>
-      <a class="btn btn-gold btn-lg" href="/turnos" target="_blank" rel="noopener">
+      <a class="btn btn-gold btn-lg hidden" href="/turnos" target="_blank" rel="noopener" id="btn-turno-online">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
         Sacar turno online
       </a>
@@ -223,6 +223,15 @@
 </a>
 
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+<script>
+  // Botón "Sacar turno online": arranca oculto (ver el pedido, 2026-08-14 — mismo
+  // interruptor que /turnos, "reserva online pausada" es el estado real desde el
+  // arranque) y solo se muestra si /api/disponibilidad confirma que está activada.
+  fetch('/api/disponibilidad?modo=estado')
+    .then((r) => r.json())
+    .then((data) => { if (!data.pausada) document.getElementById('btn-turno-online').classList.remove('hidden'); })
+    .catch(() => {}); // sin conexión/error: se queda oculto, mismo criterio fail-safe que /turnos
+</script>
 <script>
   (() => {
     if(window.__bhldScript)return;window.__bhldScript=true;

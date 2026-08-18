@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Detalles de tu turno | Franco Vinzón Odontólogo</title>
-<meta name="description" content="Consultá, modificá o cancelá tu turno en el Consultorio Odontológico Franco Vinzón, Concepción del Uruguay.">
+<meta name="description" content="Consultá y confirmá tu turno en el Consultorio Odontológico Franco Vinzón, Concepción del Uruguay.">
 <meta name="robots" content="noindex">
 <!-- Open Graph — así el link corto /t/CODIGO (que redirige acá) muestra una vista
      previa prolija cuando se comparte por WhatsApp, en vez de una tarjeta gris genérica
      con el dominio de Vercel pelado. -->
 <meta property="og:title" content="Tu turno — Franco Vinzón Odontólogo">
-<meta property="og:description" content="Confirmá, cancelá o reprogramá tu turno.">
+<meta property="og:description" content="Consultá y confirmá tu turno.">
 <meta property="og:image" content="https://od-francovinzon.vercel.app/assets/isologo.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="../assets/isologo.png">
@@ -55,68 +55,11 @@
   .error-card { text-align: center; }
   .error-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 12px 0 18px; }
 
-  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .cal-header .month-label { font-size: 17px; font-weight: 600; text-transform: capitalize; }
-  .cal-nav-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--cream-deep); color: var(--navy); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .cal-nav-btn:disabled { opacity: 0.35; cursor: default; }
-  .weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
-  .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 6px; }
-  .day-cell { display: flex; align-items: center; justify-content: center; padding: 3px 0; }
-  .day-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--disabled); cursor: default; display: flex; align-items: center; justify-content: center; }
-  .day-btn.available { background: var(--navy); color: var(--white); cursor: pointer; box-shadow: 0 2px 7px rgba(30, 58, 95, 0.3); }
-  .day-btn.selected { background: var(--navy); box-shadow: 0 2px 8px rgba(30, 58, 95, 0.4), inset 0 0 0 2px var(--gold); }
-  .day-btn.today { box-shadow: inset 0 0 0 2px var(--gold); }
-  .day-btn.today.available { box-shadow: 0 2px 7px rgba(30, 58, 95, 0.3), inset 0 0 0 2px var(--gold); }
-  .legend { display: flex; gap: 18px; justify-content: center; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .dot.navy { background: var(--navy); }
-  .dot.gray { background: var(--disabled); }
-  .cal-loading { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
-
-  #cal-body { transition: transform .18s ease, opacity .18s ease; }
-  #cal-body.cal-out-left { transform: translateX(-16px); opacity: 0; }
-  #cal-body.cal-out-right { transform: translateX(16px); opacity: 0; }
-  #cal-body.cal-in-left { transition: none; transform: translateX(-16px); opacity: 0; }
-  #cal-body.cal-in-right { transition: none; transform: translateX(16px); opacity: 0; }
-
-  .enter-up { opacity: 0; transform: translateY(14px); transition: opacity .2s ease, transform .2s ease; }
-  .enter-up.card-visible { opacity: 1; transform: translateY(0); }
-
-  @keyframes slotEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-  .slot-btn-enter { animation: slotEnter .18s ease both; }
-
-  .slots-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
-  .slots { display: flex; flex-wrap: wrap; gap: 9px; }
-  .slot-btn { padding: 9px 16px; border: 1.5px solid var(--navy-soft); border-radius: var(--radius-pill); background: var(--white); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; }
-  .slot-btn.selected { background: var(--navy); border-color: var(--navy); color: var(--white); box-shadow: 0 3px 10px rgba(30, 58, 95, 0.35); }
-
-  button.primary { width: 100%; padding: 15px; background: var(--gold); color: var(--white); border: none; border-radius: var(--radius-pill); font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 700; margin-top: 22px; cursor: pointer; box-shadow: 0 3px 12px rgba(212, 162, 76, 0.3); }
-  button.primary:disabled { background: var(--disabled); box-shadow: none; cursor: default; }
-  .msg { margin-top: 14px; font-size: 13.5px; text-align: center; }
-  .msg.ok { color: #1a8f4c; font-weight: 600; }
-  .msg.error { color: #C1443A; font-weight: 600; }
-  .msg.loading { color: var(--muted); }
-
-  .success-card { text-align: center; padding: 30px 20px; }
-  .success-card .check { width: 56px; height: 56px; border-radius: 50%; background: var(--success); color: white; font-size: 28px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
-  .success-card h3 { font-size: 18px; margin-bottom: 8px; }
-  .success-card p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
-  .success-card p.success-highlight { font-size: 17px; font-weight: 700; color: #4F9A3C; line-height: 1.4; }
-  .success-card { opacity: 0; transform: translateY(10px); transition: opacity .22s ease, transform .22s ease; }
-  .success-card.card-visible { opacity: 1; transform: translateY(0); }
-
-  .empty-day { text-align: center; color: var(--muted); font-size: 13.5px; padding: 6px 0 2px; display: block; }
-
-  button, .day-btn, .slot-btn, .card, .post-action-btn {
+  button, .card, .post-action-btn {
     transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
   }
-  button, .day-btn.available, .slot-btn { cursor: pointer; }
-  button:active:not(:disabled), .day-btn.available:active, .slot-btn:active, .post-action-btn:active { transform: scale(0.96); }
-  .day-btn.available:hover { box-shadow: 0 4px 12px rgba(30, 58, 95, 0.4); }
-  .slot-btn:hover { border-color: var(--gold); }
-  button.primary:hover:not(:disabled) { filter: brightness(1.04); box-shadow: 0 5px 16px rgba(30, 58, 95, 0.12); }
-  .cal-nav-btn:hover:not(:disabled) { background: var(--disabled); }
+  button { cursor: pointer; }
+  button:active:not(:disabled), .post-action-btn:active { transform: scale(0.96); }
 
   .post-actions-row { display: flex; flex-direction: column; gap: 9px; }
   .post-action-btn {
@@ -125,19 +68,11 @@
     text-align: center; text-decoration: none; cursor: pointer; box-sizing: border-box;
   }
   .post-action-btn:hover { background: var(--cream-deep); }
-  .post-action-btn.danger { border-color: rgba(193, 68, 55, 0.4); color: #C14437; }
-  .post-action-btn.danger:hover { background: rgba(193, 68, 55, 0.06); }
   .post-action-btn.confirmar { background: var(--success); border-color: var(--success); color: var(--white); }
   .post-action-btn.confirmar:hover { background: var(--success); filter: brightness(1.05); }
   .post-action-btn:disabled { opacity: .65; cursor: default; }
   .post-action-btn:disabled:hover { background: var(--white); }
   .post-action-btn.confirmar:disabled { background: var(--success); filter: none; }
-  .reprogramar-note { font-size: 13px; color: var(--navy-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
-
-  /* Botón de WhatsApp (tarjeta "No estoy seguro") — mismo estilo que /turnos, no
-     definido acá todavía porque esta página nunca lo había necesitado antes. */
-  .contact-btn { display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-pill); padding: 10px 16px; font-size: 13px; font-weight: 600; text-decoration: none; }
-  .contact-btn.whatsapp { background: #25D366; color: white; border: none; box-shadow: 0 4px 16px rgba(37, 211, 102, 0.4); }
 
   #toast-container {
     position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 999;
@@ -149,24 +84,6 @@
     opacity: 0; transform: translateY(-10px); transition: opacity .2s ease, transform .2s ease;
   }
   .toast.show { opacity: 1; transform: translateY(0); }
-
-  .confirm-overlay {
-    position: fixed; inset: 0; background: rgba(30, 58, 95, 0.35); display: flex; align-items: center; justify-content: center;
-    padding: 20px; z-index: 100; opacity: 0; transition: opacity .18s ease;
-  }
-  .confirm-overlay.show { opacity: 1; }
-  .confirm-box {
-    background: var(--white); border-radius: 20px; padding: 24px 22px; max-width: 320px; width: 100%;
-    box-shadow: 0 20px 50px rgba(30,58,95,.25); transform: scale(0.94); transition: transform .18s ease;
-  }
-  .confirm-overlay.show .confirm-box { transform: scale(1); }
-  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; }
-  .confirm-box p { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
-  .confirm-actions { display: flex; gap: 8px; }
-  .confirm-actions button { flex: 1; padding: 11px; border-radius: var(--radius-pill); font-weight: 700; font-size: 13.5px; border: none; }
-  .confirm-actions .btn-cancel { background: var(--cream-deep); color: var(--navy); }
-  .confirm-actions .btn-danger { background: #C14437; color: var(--white); }
-  .confirm-actions button:hover { filter: brightness(1.06); }
 </style>
 </head>
 <body>
@@ -196,74 +113,11 @@
       <button class="post-action-btn confirmar" id="btn-confirmar-turno">✅ Confirmo el turno</button>
       <a class="post-action-btn" id="btn-agregar-apple" href="#">📅 Agregar a Apple Calendar</a>
       <a class="post-action-btn" id="btn-agregar-google" href="#" target="_blank" rel="noopener noreferrer">📅 Agregar a Google Calendar</a>
-      <button class="post-action-btn" id="btn-cambiar-turno">Reprogramo día y horario</button>
-      <button class="post-action-btn" id="btn-no-seguro">No estoy seguro</button>
-      <button class="post-action-btn danger" id="btn-cancelar-turno">Cancelo el turno</button>
     </div>
-  </div>
-
-  <div class="card hidden" id="no-seguro-card">
-    <p class="reprogramar-note">Tal vez sea mejor que reprogrames tu turno para un día que te quede más seguro.</p>
-    <button class="post-action-btn" id="btn-no-seguro-reprogramar">Reprogramar día y horario</button>
-    <p class="reprogramar-note" style="margin-top: 16px;">Si ningún día u horario te sirve, escribinos por WhatsApp — siempre le encontramos la vuelta para conseguirte un lugar.</p>
-    <a class="contact-btn whatsapp" href="https://wa.me/5403442457764" target="_blank" rel="noopener noreferrer">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
-      Escribinos por WhatsApp
-    </a>
-  </div>
-
-  <div class="card hidden" id="calendar-card">
-    <div class="cal-header">
-      <button class="cal-nav-btn" id="prev-month">‹</button>
-      <div class="month-label" id="month-label"></div>
-      <button class="cal-nav-btn" id="next-month">›</button>
-    </div>
-    <div class="weekday-row">
-      <span>D</span><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span>
-    </div>
-    <div id="cal-body"></div>
-    <div class="legend">
-      <span><span class="dot navy"></span> Hay turnos</span>
-      <span><span class="dot gray"></span> Sin disponibilidad</span>
-    </div>
-  </div>
-
-  <div class="card enter-up hidden" id="slots-card">
-    <div class="slots-title" id="slots-title"></div>
-    <div class="slots" id="slots-body"></div>
-  </div>
-
-  <div class="card hidden" id="reprogramar-card">
-    <p class="reprogramar-note" id="reprogramar-note"></p>
-    <button class="primary" id="reprogramar-confirm-btn">Confirmar nuevo horario</button>
-    <div class="msg hidden" id="reprogramar-msg"></div>
-  </div>
-
-  <div class="card success-card hidden" id="success-card">
-    <div class="check">✓</div>
-    <h3 id="success-title">¡Turno reprogramado!</h3>
-    <p id="success-text" class="success-highlight"></p>
-  </div>
-
-  <div class="card success-card hidden" id="cancelado-card">
-    <div class="check" style="background:#C14437;">✕</div>
-    <h3>Turno cancelado</h3>
-    <p>Si te arrepentís, podés reservar un turno nuevo cuando quieras desde /turnos.</p>
   </div>
 </div>
 
 <div id="toast-container" aria-live="polite"></div>
-
-<div class="confirm-overlay hidden" id="confirm-overlay">
-  <div class="confirm-box">
-    <h3>Cancelar turno</h3>
-    <p>¿Estás seguro de que querés cancelar tu turno?</p>
-    <div class="confirm-actions">
-      <button class="btn-cancel" id="confirm-volver-btn">Volver</button>
-      <button class="btn-danger" id="confirm-cancelar-btn">Cancelar turno</button>
-    </div>
-  </div>
-</div>
 
 <script>
 (function () {
@@ -276,40 +130,13 @@
   }).format(new Date());
   const [hoyYear, hoyMonth, hoyDay] = hoyArgStr.split('-').map(Number);
 
-  let viewYear = hoyYear;
-  let viewMonth = hoyMonth;
-  const minYear = hoyYear;
-  const minMonth = hoyMonth;
-
-  let availability = {};
   let fechaSeleccionada = null;
   let horarioSeleccionado = null;
   let ultimoEventId = null;
   let ultimoCalendarId = null;
-  // Si el turno actual es un sobreturno: el selector de "Cambiar día y horario" de
-  // esta página es siempre el calendario/duración normal (30 min) — no existe un
-  // selector de horarios de sobreturno acá — así que reprogramar un sobreturno desde
-  // esta página SIEMPRE lo convierte en turno común. Se avisa en el texto de
-  // confirmación y se apaga esta bandera (y la etiqueta) apenas se confirma. Ver
-  // decisions.md.
-  let esSobreturnoActual = false;
 
-  const monthLabelEl = document.getElementById('month-label');
-  const calBodyEl = document.getElementById('cal-body');
-  const prevBtn = document.getElementById('prev-month');
-  const nextBtn = document.getElementById('next-month');
-  const slotsCard = document.getElementById('slots-card');
-  const slotsTitleEl = document.getElementById('slots-title');
-  const slotsBodyEl = document.getElementById('slots-body');
-  const successCard = document.getElementById('success-card');
-  const successTextEl = document.getElementById('success-text');
   const postActionsCard = document.getElementById('post-actions-card');
-  const noSeguroCard = document.getElementById('no-seguro-card');
   const btnConfirmarTurno = document.getElementById('btn-confirmar-turno');
-  const reprogramarCard = document.getElementById('reprogramar-card');
-  const canceladoCard = document.getElementById('cancelado-card');
-  const confirmOverlay = document.getElementById('confirm-overlay');
-  const calendarCard = document.getElementById('calendar-card');
   const turnoLookupCard = document.getElementById('turno-lookup-card');
   const turnoLookupErrorCard = document.getElementById('turno-lookup-error-card');
 
@@ -326,11 +153,6 @@
     }, 2600);
   }
 
-  function ocultarTodasLasCards() {
-    [slotsCard, successCard, postActionsCard, noSeguroCard, reprogramarCard, canceladoCard, turnoLookupCard, turnoLookupErrorCard]
-      .forEach((c) => c.classList.add('hidden'));
-  }
-
   // ---------- Estado visual del botón "Confirmo el turno" ----------
   function marcarBotonConfirmado(confirmado) {
     btnConfirmarTurno.disabled = confirmado;
@@ -342,135 +164,6 @@
     el.classList.remove('card-visible');
     void el.offsetWidth;
     requestAnimationFrame(() => el.classList.add('card-visible'));
-  }
-
-  prevBtn.addEventListener('click', () => cambiarMes(-1));
-  nextBtn.addEventListener('click', () => cambiarMes(1));
-
-  function slideCalendarGrid(direction, updateFn) {
-    if (!direction) { Promise.resolve(updateFn()); return; }
-    calBodyEl.className = direction > 0 ? 'cal-out-left' : 'cal-out-right';
-    const espera = new Promise((resolve) => setTimeout(resolve, 180));
-    Promise.all([espera, Promise.resolve(updateFn())]).then(() => {
-      calBodyEl.className = direction > 0 ? 'cal-in-right' : 'cal-in-left';
-      void calBodyEl.offsetWidth;
-      calBodyEl.className = '';
-    });
-  }
-
-  function cambiarMes(delta) {
-    const direction = delta > 0 ? 1 : -1;
-    let m = viewMonth + delta;
-    let y = viewYear;
-    if (m > 12) { m = 1; y++; }
-    if (m < 1) { m = 12; y--; }
-    viewYear = y;
-    viewMonth = m;
-    cargarMes(direction);
-  }
-
-  function cargarMes(direction) {
-    fechaSeleccionada = null;
-    horarioSeleccionado = null;
-    slotsCard.classList.add('hidden');
-    reprogramarCard.classList.add('hidden');
-
-    monthLabelEl.textContent = MESES[viewMonth - 1] + ' ' + viewYear;
-    prevBtn.disabled = viewYear === minYear && viewMonth === minMonth;
-
-    const actualizar = () => fetch(`/api/disponibilidad?year=${viewYear}&month=${viewMonth}`)
-      .then((r) => r.json())
-      .then((data) => { availability = data; renderCalendar(); })
-      .catch(() => { calBodyEl.innerHTML = '<div class="cal-loading">No se pudo cargar el calendario.</div>'; });
-
-    if (!direction) {
-      calBodyEl.innerHTML = '<div class="cal-loading">Buscando días disponibles...</div>';
-      actualizar();
-    } else {
-      slideCalendarGrid(direction, actualizar);
-    }
-  }
-
-  function renderCalendar() {
-    const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
-
-    let html = '<div class="days-grid">';
-    for (let i = 0; i < firstDow; i++) html += '<div class="day-cell"></div>';
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const isToday = viewYear === hoyYear && viewMonth === hoyMonth && d === hoyDay;
-      const isAvailable = !!availability[d];
-      const dateStr = `${viewYear}-${pad2(viewMonth)}-${pad2(d)}`;
-      const isSelected = fechaSeleccionada === dateStr;
-      const cls = ['day-btn', isAvailable && 'available', isToday && 'today', isSelected && 'selected'].filter(Boolean).join(' ');
-      html += `<div class="day-cell"><button type="button" class="${cls}" data-day="${d}" ${isAvailable ? '' : 'disabled'}>${d}</button></div>`;
-    }
-    html += '</div>';
-    calBodyEl.innerHTML = html;
-
-    calBodyEl.querySelectorAll('.day-btn.available').forEach((btn) => {
-      btn.addEventListener('click', () => seleccionarDia(parseInt(btn.dataset.day, 10)));
-    });
-  }
-
-  function seleccionarDia(dia) {
-    let direction = 0;
-    if (fechaSeleccionada) {
-      const diaAnterior = parseInt(fechaSeleccionada.split('-')[2], 10);
-      if (diaAnterior !== dia) direction = dia > diaAnterior ? 1 : -1;
-    }
-
-    fechaSeleccionada = `${viewYear}-${pad2(viewMonth)}-${pad2(dia)}`;
-    horarioSeleccionado = null;
-    reprogramarCard.classList.add('hidden');
-
-    slideCalendarGrid(direction, () => renderCalendar());
-
-    slotsTitleEl.textContent = `Horarios para el ${dia} de ${MESES[viewMonth - 1]}`;
-    slotsBodyEl.innerHTML = '<span class="empty-day">Buscando horarios...</span>';
-    mostrarCardAnimada(slotsCard);
-    slotsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    fetch(`/api/disponibilidad?modo=dia&date=${fechaSeleccionada}`)
-      .then((r) => r.json())
-      .then((data) => renderSlots(data, true))
-      .catch(() => { slotsBodyEl.innerHTML = '<span class="empty-day">No se pudieron cargar los horarios.</span>'; });
-  }
-
-  function renderSlots(slots, animar) {
-    if (!slots || slots.length === 0) {
-      slotsBodyEl.innerHTML = '<span class="empty-day">No quedan horarios libres este día.</span>';
-      return;
-    }
-    slotsBodyEl.innerHTML = slots.map((hora, i) => {
-      const cls = 'slot-btn' + (horarioSeleccionado === hora ? ' selected' : '') + (animar ? ' slot-btn-enter' : '');
-      const style = animar ? ` style="animation-delay:${Math.min(i * 18, 200)}ms"` : '';
-      return `<button type="button" class="${cls}"${style} data-hora="${hora}">${hora}</button>`;
-    }).join('');
-
-    slotsBodyEl.querySelectorAll('.slot-btn').forEach((btn) => {
-      btn.addEventListener('click', () => seleccionarHorario(btn.dataset.hora, slots));
-    });
-  }
-
-  function seleccionarHorario(hora, slots) {
-    horarioSeleccionado = hora;
-    renderSlots(slots, false);
-    const [, m, d] = fechaSeleccionada.split('-').map(Number);
-    document.getElementById('reprogramar-note').textContent =
-      `Vas a mover tu turno al ${d} de ${MESES[m - 1]} a las ${horarioSeleccionado} hs.` +
-      (esSobreturnoActual ? ' Al confirmar, va a quedar como turno común (no sobreturno).' : '');
-    showMsg('reprogramar-msg', '', '');
-    mostrarCardAnimada(reprogramarCard);
-    reprogramarCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function showMsg(id, text, type) {
-    const el = document.getElementById(id);
-    el.textContent = text;
-    el.className = 'msg' + (type ? ' ' + type : '');
-    if (!text) el.classList.add('hidden'); else el.classList.remove('hidden');
   }
 
   // ---------- Agregar al calendario del dispositivo (mismo criterio que /turnos) ----------
@@ -539,10 +232,12 @@
     btnAgregarGoogle.href = armarLinkGoogleCalendar(fechaSeleccionada, horarioSeleccionado);
   }
 
-  // ---------- Confirmar / cambiar día-horario / cancelar / "no estoy seguro" ----------
-  // Acción SIEMPRE disponible, incluso el mismo día del turno — a diferencia de mover/
-  // cancelar no hay ninguna restricción de fecha acá (ver decisions.md): confirmar
-  // asistencia el día de hoy sigue siendo útil.
+  // ---------- Confirmar turno ----------
+  // Acción SIEMPRE disponible, incluso el mismo día del turno — no hay ninguna
+  // restricción de fecha acá (ver decisions.md): confirmar asistencia el día de
+  // hoy sigue siendo útil. Cancelar, reprogramar y "no estoy seguro" se sacaron de
+  // esta página (ver el pedido, 2026-08-14) — un paciente que necesite eso escribe
+  // por WhatsApp y Ayelen lo resuelve desde /gestion.
   btnConfirmarTurno.addEventListener('click', () => {
     if (!ultimoEventId || btnConfirmarTurno.disabled) return;
     btnConfirmarTurno.disabled = true;
@@ -567,93 +262,6 @@
       });
   });
 
-  // Mismo flujo (calendario + horarios del turno principal) disparado tanto desde el
-  // botón directo "Reprogramo día y horario" como desde adentro de "No estoy seguro".
-  function abrirReprogramar() {
-    ocultarTodasLasCards();
-    calendarCard.classList.remove('hidden');
-    cargarMes();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-  document.getElementById('btn-cambiar-turno').addEventListener('click', abrirReprogramar);
-
-  document.getElementById('btn-no-seguro').addEventListener('click', () => {
-    mostrarCardAnimada(noSeguroCard);
-    noSeguroCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  document.getElementById('btn-no-seguro-reprogramar').addEventListener('click', abrirReprogramar);
-
-  document.getElementById('reprogramar-confirm-btn').addEventListener('click', () => {
-    if (!fechaSeleccionada || !horarioSeleccionado || !ultimoEventId) return;
-    showMsg('reprogramar-msg', 'Reprogramando...', 'loading');
-    fetch('/api/reservar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // calendarId: de dónde sale el eventId actual — si es el de sobreturnos,
-      // api/reservar.js lo convierte en turno común en vez de solo moverlo (el
-      // selector de horarios de esta página es siempre el normal). Ver decisions.md.
-      body: JSON.stringify({ accion: 'mover', eventId: ultimoEventId, date: fechaSeleccionada, time: horarioSeleccionado, calendarId: ultimoCalendarId }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success) {
-          // Después de reprogramar desde acá, el turno siempre termina siendo un
-          // turno común (aunque haya arrancado como sobreturno) — se actualiza el
-          // estado para que Cancelar/una próxima reprogramación usen el calendario
-          // correcto, y se apaga la etiqueta "Sobreturno".
-          if (res.eventId) ultimoEventId = res.eventId;
-          ultimoCalendarId = null;
-          esSobreturnoActual = false;
-          document.getElementById('lookup-badge-sobreturno').classList.add('hidden');
-          reprogramarCard.classList.add('hidden');
-          calendarCard.classList.add('hidden');
-          successTextEl.textContent = res.message;
-          document.getElementById('success-title').textContent = '¡Turno reprogramado!';
-          mostrarCardAnimada(successCard);
-          actualizarLinksCalendario();
-          // Vuelve a "Confirmo el turno" (habilitado): reprogramar no conserva la
-          // confirmación anterior a propósito — un turno movido a otro día/horario
-          // conviene que se re-confirme, y si venía de un sobreturno convertido, el
-          // evento nuevo en Calendar arranca sin la línea "Confirmado" de todos modos.
-          marcarBotonConfirmado(false);
-          btnConfirmarTurno.classList.toggle('hidden', !dentroDeVentanaConfirmar(fechaSeleccionada, horarioSeleccionado));
-          postActionsCard.classList.remove('hidden');
-          toast('✅ Turno modificado correctamente');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          showMsg('reprogramar-msg', res.message, 'error');
-        }
-      })
-      .catch(() => showMsg('reprogramar-msg', 'Error de red. Probá de nuevo.', 'error'));
-  });
-
-  function mostrarConfirmCancelar(mostrar) {
-    confirmOverlay.classList.toggle('hidden', !mostrar);
-    if (mostrar) requestAnimationFrame(() => confirmOverlay.classList.add('show'));
-    else confirmOverlay.classList.remove('show');
-  }
-  document.getElementById('btn-cancelar-turno').addEventListener('click', () => mostrarConfirmCancelar(true));
-  document.getElementById('confirm-volver-btn').addEventListener('click', () => mostrarConfirmCancelar(false));
-  document.getElementById('confirm-cancelar-btn').addEventListener('click', () => {
-    if (!ultimoEventId) { mostrarConfirmCancelar(false); return; }
-    fetch('/api/reservar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'cancelar', eventId: ultimoEventId, calendarId: ultimoCalendarId }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        mostrarConfirmCancelar(false);
-        if (res.success) {
-          ultimoEventId = null;
-          ocultarTodasLasCards();
-          mostrarCardAnimada(canceladoCard);
-          toast('✅ Turno cancelado correctamente');
-        }
-      })
-      .catch(() => mostrarConfirmCancelar(false));
-  });
-
   // ---------- Punto de entrada: /turno?eventId=... (QR del ticket térmico) ----------
   // Página propia, distinta de la confirmación post-reserva de /turnos: siempre
   // arranca mostrando el turno existente (nunca el calendario de reserva), y
@@ -673,7 +281,6 @@
         }
         ultimoEventId = eventId;
         ultimoCalendarId = calendarId;
-        esSobreturnoActual = esSobreturno;
         fechaSeleccionada = res.date;
         horarioSeleccionado = res.time;
         const [, m, d] = res.date.split('-').map(Number);
@@ -681,10 +288,6 @@
         document.getElementById('lookup-fecha').textContent = `${d} de ${MESES[m - 1]} a las ${res.time} hs.`;
         document.getElementById('lookup-badge-sobreturno').classList.toggle('hidden', !esSobreturno);
         mostrarCardAnimada(turnoLookupCard);
-        // "Cambiar día y horario" siempre visible, incluso para sobreturnos: el
-        // selector de esta página es siempre el calendario/horarios normales (30
-        // min) — para un sobreturno, reprogramar acá lo convierte en turno común
-        // (ver el handler de reprogramar-confirm-btn). Ver decisions.md.
         actualizarLinksCalendario();
         marcarBotonConfirmado(!!res.confirmado);
         // Excepción a la ventana de 72hs (ver el pedido, 2026-08-14): si Ayelen ya mandó
