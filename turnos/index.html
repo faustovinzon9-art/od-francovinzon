@@ -37,6 +37,15 @@
   }
   .no-horario-card p { font-size: 15.5px; font-weight: 600; color: var(--navy); line-height: 1.45; }
   .no-horario-card strong { color: #C14437; }
+
+  /* Reserva online pausada (ver el pedido, 2026-08-14) — mismo "card" que el resto de
+     la página, en vez de calendario muestra un cartel invitando a coordinar por
+     WhatsApp. Ícono redondo grande para que se note que es un estado distinto, no un
+     paso más del flujo normal. */
+  .reserva-pausada-icon { width: 52px; height: 52px; border-radius: 50%; background: rgba(37,211,102,.12); color: #1a8f4c; font-size: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+  .reserva-pausada-card p { text-align: center; font-size: 14.5px; color: var(--text); line-height: 1.55; margin-bottom: 18px; }
+  .reserva-pausada-card strong { color: var(--navy); }
+
   .contact-buttons { display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; }
   .contact-btn { display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-pill); padding: 10px 16px; font-size: 13px; font-weight: 600; text-decoration: none; }
   .contact-btn.whatsapp { background: #25D366; color: white; border: none; box-shadow: 0 4px 16px rgba(37, 211, 102, 0.4); }
@@ -255,6 +264,15 @@
     <p>¿Ningún horario te queda cómodo? <strong>Escribinos por WhatsApp</strong> y le buscamos la vuelta juntos.</p>
   </div>
 
+  <div class="card reserva-pausada-card hidden" id="reserva-pausada-card">
+    <div class="reserva-pausada-icon">🦷</div>
+    <p>Por el momento coordinamos los turnos por WhatsApp.<br>Escribinos al <strong>+54 3442 45-7764</strong> y te ayudamos a encontrar el día y el horario que más te convenga.</p>
+    <a class="contact-btn whatsapp" href="https://wa.me/5403442457764?text=Hola!%20Quiero%20sacar%20un%20turno" target="_blank" rel="noopener noreferrer">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.6 0-3.1-.43-4.4-1.19l-.31-.18-3.01.79.8-2.93-.2-.31A8.19 8.19 0 0 1 3.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2zm4.48-6.13c-.24-.12-1.44-.71-1.67-.8-.22-.08-.38-.12-.55.12-.16.24-.63.8-.77.96-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.33-.76-1.82-.2-.48-.4-.41-.55-.42-.14-.01-.3-.01-.46-.01-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02 0 1.19.87 2.34.99 2.5.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28z"/></svg>
+      Escribinos por WhatsApp
+    </a>
+  </div>
+
   <div class="card" id="calendar-card">
     <div class="cal-header">
       <button class="cal-nav-btn" id="prev-month">‹</button>
@@ -428,6 +446,7 @@
   const confirmBtn = document.getElementById('confirm-btn');
   const postActionsCard = document.getElementById('post-actions-card');
   const sinHorarioNote = document.getElementById('sin-horario-note');
+  const reservaPausadaCard = document.getElementById('reserva-pausada-card');
   const reprogramarCard = document.getElementById('reprogramar-card');
   const canceladoCard = document.getElementById('cancelado-card');
   const successCardNuevo = document.getElementById('success-card-nuevo');
@@ -1055,12 +1074,34 @@
       });
   }
 
+  // Interruptor de reserva online (ver el pedido, 2026-08-14) — solo afecta el flujo
+  // de reserva NUEVA (calendario de abajo). Un turno que ya existe (llegó acá con
+  // ?eventId=, ver mostrarTurnoDesdeUrl) sigue funcionando igual sin importar el
+  // estado del interruptor.
+  async function reservaOnlinePausada() {
+    try {
+      const r = await fetch('/api/disponibilidad?modo=estado');
+      const data = await r.json();
+      return !!data.pausada;
+    } catch (e) {
+      return true; // fail-safe: sin confirmar el estado, mejor no mostrar un flujo que puede estar roto
+    }
+  }
+
   const paramsUrl = new URLSearchParams(location.search);
   const eventIdDesdeUrl = paramsUrl.get('eventId');
   if (eventIdDesdeUrl) {
     mostrarTurnoDesdeUrl(eventIdDesdeUrl, paramsUrl.get('calendarId'), paramsUrl.get('tipo') === 'sobreturno');
   } else {
-    cargarMes();
+    reservaOnlinePausada().then((pausada) => {
+      if (pausada) {
+        calendarCard.classList.add('hidden');
+        sinHorarioNote.classList.add('hidden');
+        reservaPausadaCard.classList.remove('hidden');
+      } else {
+        cargarMes();
+      }
+    });
   }
 })();
 </script>

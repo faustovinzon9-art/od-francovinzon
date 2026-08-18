@@ -76,6 +76,13 @@
   .msg.error { color: var(--bad); }
   .msg.ok { color: var(--ok); }
 
+  .ro-badge {
+    display: inline-block; padding: 6px 14px; border-radius: 100px; font-weight: 700; font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .ro-badge.pausada { background: rgba(193, 68, 55, .12); color: var(--bad); }
+  .ro-badge.activada { background: rgba(79, 154, 60, .12); color: var(--ok); }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -156,6 +163,7 @@
   <div class="layout">
     <div class="nav" id="nav">
       <button data-sec="dashboard" class="active">📊 Dashboard</button>
+      <button data-sec="reserva-online">🌐 Reserva online</button>
       <button data-sec="horarios">🗓️ Horarios y agenda</button>
       <button data-sec="textos">✏️ Textos y plantillas</button>
       <button data-sec="listas">📋 Listas desplegables</button>
@@ -235,6 +243,22 @@
         </div>
       </div>
 
+      <!-- ---------- Reserva online ---------- -->
+      <div class="section hidden" id="sec-reserva-online">
+        <div class="card">
+          <h2>Reserva online</h2>
+          <p class="hint">
+            Mientras esté <strong>pausada</strong>: /turnos deja de mostrar el calendario de reserva y muestra un
+            cartel para coordinar por WhatsApp; el botón de "sacar turno online" de la página principal se oculta.
+            /gestion no se ve afectado — Ayelen y Franco siguen cargando turnos y sobreturnos a mano sin ninguna
+            restricción nueva. Se puede reactivar en cualquier momento desde acá.
+          </p>
+          <p><span id="ro-badge" class="ro-badge">Cargando...</span></p>
+          <button class="btn btn-primary" id="ro-toggle-btn">Cambiar</button>
+          <div class="msg" id="ro-msg"></div>
+        </div>
+      </div>
+
       <!-- ---------- Horarios y agenda ---------- -->
       <div class="section hidden" id="sec-horarios">
         <div class="card">
@@ -268,7 +292,7 @@
       <div class="section hidden" id="sec-textos">
         <div class="card">
           <h2>Plantilla del mensaje de WhatsApp (recordatorio, /gestion)</h2>
-          <p class="hint">Placeholders disponibles: {{saludo}} {{nombre}} {{cuando}} {{hora}} {{tipo}} {{link}}</p>
+          <p class="hint">Placeholders disponibles: {{saludo}} {{nombre}} {{cuando}} {{hora}} {{tipo}}</p>
           <div class="field full"><textarea id="t-whatsapp" style="min-height:140px;"></textarea></div>
           <h2 style="margin-top:18px;">Textos fijos de /turnos</h2>
           <div class="field-row">
@@ -500,6 +524,7 @@
     SECCIONES_CARGADAS.add(sec);
     const loaders = {
       dashboard: () => { cargarDashboard(); cargarDashboardAvanzado(); },
+      'reserva-online': cargarReservaOnline,
       horarios: cargarHorarios, textos: cargarTextos,
       listas: cargarListas, radios: cargarRadios, pacientes: () => {},
       accesos: () => {}, actividad: cargarActividad, monitoreo: cargarMonitoreo,
@@ -705,6 +730,44 @@
   }
   document.getElementById('dash-pacientes-toggle').addEventListener('click', () => {
     document.getElementById('dash-pacientes-wrap').classList.toggle('hidden');
+  });
+
+  // ---------- Reserva online ----------
+  let reservaOnlinePausada = true;
+  function pintarReservaOnline() {
+    const badge = document.getElementById('ro-badge');
+    badge.textContent = reservaOnlinePausada ? '⏸ Pausada' : '✅ Activada';
+    badge.className = `ro-badge ${reservaOnlinePausada ? 'pausada' : 'activada'}`;
+    document.getElementById('ro-toggle-btn').textContent = reservaOnlinePausada ? 'Activar reserva online' : 'Pausar reserva online';
+  }
+  async function cargarReservaOnline() {
+    try {
+      const r = await apiGet('reserva-online');
+      reservaOnlinePausada = !!r.pausada;
+      pintarReservaOnline();
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('ro-msg', 'No se pudo cargar el estado.', 'error');
+    }
+  }
+  document.getElementById('ro-toggle-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ro-toggle-btn');
+    btn.disabled = true;
+    setMsg('ro-msg', '', '');
+    try {
+      const nuevoValor = !reservaOnlinePausada;
+      const res = await apiPost('reserva-online', { pausada: nuevoValor });
+      if (res.success) {
+        reservaOnlinePausada = nuevoValor;
+        pintarReservaOnline();
+        setMsg('ro-msg', reservaOnlinePausada ? 'Reserva online pausada.' : 'Reserva online activada.', 'ok');
+      } else {
+        setMsg('ro-msg', res.error || 'No se pudo guardar.', 'error');
+      }
+    } catch (e) {
+      if (e.message !== 'unauthorized') setMsg('ro-msg', 'Error de red. Probá de nuevo.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // ---------- Horarios y agenda ----------
