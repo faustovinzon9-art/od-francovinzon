@@ -108,6 +108,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'auditar-saldos-k9p2') {
       return await auditarSaldos(req, res);
     }
+    if (req.method === 'GET' && req.query.modo === 'auditar-filas-sin-fecha-k9p2') {
+      return await auditarFilasSinFecha(req, res);
+    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -1587,6 +1590,53 @@ async function auditarSaldos(req, res) {
         errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: r.reason?.message || String(r.reason) });
       }
     });
+  }
+
+  res.status(200).json({ archivosRevisados: archivos.length, sospechosos, errores });
+}
+
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Causa raíz confirmada 2026-08-20 (caso Karen Schneider, ver primeraFilaLibre() en
+// lib/pacientesSheet.js): esa función decide la "primera fila libre" mirando SOLO si la
+// columna Fecha está vacía — una fila con datos reales (ej. un "Saldo inicial" cargado
+// sin fecha) pero sin fecha completada queda marcada como "libre" y el próximo
+// movimiento nuevo la pisa en vez de agregarse al final. Esta auditoría busca el patrón
+// exacto que dispara el bug: cualquier fila de movimientos con Tratamiento/Debe/Haber
+// cargado pero Fecha vacía, en CUALQUIER ficha — cada una es una fila en riesgo de ser
+// sobreescrita (o ya pudo haber sido pisada antes sin que quedara rastro visible hoy).
+// Un solo rango por ficha (más liviano que auditar-saldos-k9p2) + lotes chicos con
+// pausa entre lotes para no volver a pegarle a la cuota de lectura de Sheets.
+async function auditarFilaSinFecha(archivo, sheets) {
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: rangoMovimientos() }));
+  const filas = data.values || [];
+  const enRiesgo = filas
+    .map((row, i) => ({ fila: 18 + i, fecha: row[0] || '', tratamiento: row[1] || '', debe: row[2] || '', haber: row[3] || '' }))
+    .filter((m) => !String(m.fecha).trim() && (m.tratamiento.trim() || parsearMontoArgentinoLocal(m.debe) || parsearMontoArgentinoLocal(m.haber)));
+  if (!enRiesgo.length) return null;
+  return { id: archivo.id, nombreArchivo: archivo.name, filasEnRiesgo: enRiesgo };
+}
+
+async function auditarFilasSinFecha(req, res) {
+  const drive = getPacientesDriveClient();
+  const sheets = getPacientesSheetsClient();
+  const archivos = await listarArchivosPacientes(drive);
+
+  const TAMANO_LOTE = 4;
+  const sospechosos = [];
+  const errores = [];
+  for (let i = 0; i < archivos.length; i += TAMANO_LOTE) {
+    const lote = archivos.slice(i, i + TAMANO_LOTE);
+    const resultados = await Promise.allSettled(lote.map((archivo) => auditarFilaSinFecha(archivo, sheets)));
+    resultados.forEach((r, idx) => {
+      const archivo = lote[idx];
+      if (r.status === 'fulfilled') {
+        if (r.value) sospechosos.push(r.value);
+      } else {
+        errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: r.reason?.message || String(r.reason) });
+      }
+    });
+    if (i + TAMANO_LOTE < archivos.length) await esperar(600);
   }
 
   res.status(200).json({ archivosRevisados: archivos.length, sospechosos, errores });
