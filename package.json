@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.7",
+    "bwip-js": "^4.11.4",
     "googleapis": "^174.0.0",
-    "pdfkit": "^0.15.0",
-    "bwip-js": "^4.5.1"
+    "jsqr": "^1.4.0",
+    "pdfjs-dist": "^6.2.108",
+    "pdfkit": "^0.15.0"
   }
 }

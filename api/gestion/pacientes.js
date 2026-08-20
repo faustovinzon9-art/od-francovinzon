@@ -32,6 +32,7 @@ import crypto from 'node:crypto';
 import { upsertPacienteConsolidado, reemplazarTodasLasFilas } from '../../lib/pacientesConsolidados.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
+import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
 
 // drive.files.create espera un stream legible en media.body, no un Buffer crudo.
 function bufferToStream(buffer) {
@@ -1515,9 +1516,16 @@ async function ocrYParsearReceta(drive, buffer) {
       fields: 'id',
     }));
     docId = creado.data.id;
-    const exportado = await conReintentos(() => drive.files.export({ fileId: docId, mimeType: 'text/plain' }, { responseType: 'text' }));
+    // El OCR de texto (arriba) y la lectura del QR de firma electrónica (acá) leen el
+    // mismo PDF por caminos separados — el OCR nunca "ve" el QR como texto (es una
+    // imagen), así que ese link solo se puede sacar renderizando la página y
+    // decodificando el QR directo del buffer original, ver lib/recetaFirmaQr.js.
+    const [exportado, firmaElectronicaUrl] = await Promise.all([
+      conReintentos(() => drive.files.export({ fileId: docId, mimeType: 'text/plain' }, { responseType: 'text' })),
+      extraerUrlFirmaElectronica(buffer),
+    ]);
 
-    const receta = parsearReceta(exportado.data);
+    const receta = { ...parsearReceta(exportado.data), firmaElectronicaUrl };
     const { automatico, candidatos } = await buscarCoincidenciasPaciente(drive, { paciente: receta.paciente, dni: receta.dni });
 
     return { receta, camposFaltantes: camposFaltantes(receta), matchAutomatico: automatico, candidatos };

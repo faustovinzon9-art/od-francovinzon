@@ -90,7 +90,8 @@
     <p class="hint" style="margin-bottom:6px;">Revisá los datos extraídos del PDF antes de guardar — corregí lo que haga falta. Esto NO reemplaza la receta electrónica original, es solo una versión prolija para compartir.</p>
 
     <div class="field" id="campo-fechaReceta"><label>Fecha de receta</label><input type="text" id="receta-fechaReceta"></div>
-    <div class="field" id="campo-cuir"><label>Código / CUIR</label><input type="text" id="receta-cuir"></div>
+    <div class="field" id="campo-cuir"><label>Código / CUIR (Recetario)</label><input type="text" id="receta-cuir"></div>
+    <div class="field" id="campo-nroAfiliado"><label>Nro Afiliado</label><input type="text" id="receta-nroAfiliado"></div>
 
     <div id="receta-medicamentos"></div>
     <button type="button" class="receta-med-agregar" id="receta-med-agregar">+ Agregar medicamento</button>
@@ -229,10 +230,14 @@
     } else if (!receta.paciente) {
       html += `<div class="receta-warning">No pude leer el nombre del paciente en el PDF. Revisá los datos antes de guardar.</div>`;
     }
+    if ((camposFaltantes || []).includes('firmaElectronicaUrl')) {
+      html += `<div class="receta-warning">No pude leer el QR de firma electrónica del PDF original — la receta linda va a quedar con un espacio para firmar y sellar a mano en su lugar.</div>`;
+    }
     warnings.innerHTML = html;
 
     document.getElementById('receta-fechaReceta').value = receta.fechaReceta || '';
     document.getElementById('receta-cuir').value = receta.cuir || '';
+    document.getElementById('receta-nroAfiliado').value = receta.nroAfiliado || '';
     document.getElementById('receta-posologia').value = receta.posologia || '';
     document.getElementById('receta-profesional-nombre').value = receta.profesional?.nombre || '';
     document.getElementById('receta-profesional-matricula').value = receta.profesional?.matricula || '';
@@ -301,6 +306,11 @@
     const receta = {
       fechaReceta: document.getElementById('receta-fechaReceta').value.trim(),
       cuir: document.getElementById('receta-cuir').value.trim(),
+      nroAfiliado: document.getElementById('receta-nroAfiliado').value.trim(),
+      // No es editable: es un link único de la receta original (ver lib/recetaFirmaQr.js
+      // en el backend) — mostrarlo como texto invitaría a "corregirlo" y dejaría de
+      // escanear al mismo lugar que la receta real.
+      firmaElectronicaUrl: recetaData?.receta?.firmaElectronicaUrl || null,
       posologia: document.getElementById('receta-posologia').value.trim(),
       medicamentos,
       profesional: {
