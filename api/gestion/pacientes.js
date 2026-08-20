@@ -94,6 +94,13 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
       return await backfillConsolidado(req, res);
     }
+    // UTILITARIO TEMPORAL DE UN SOLO USO (2026-08-20, ver el pedido) — restaura el
+    // movimiento perdido de Karen Schneider. Dry-run por defecto, escribe solo con
+    // ?confirmar=si (ver restaurarKarenSchneider). Se saca del proyecto apenas se
+    // confirma el resultado.
+    if (req.method === 'GET' && req.query.modo === 'restaurar-karen-x4m8') {
+      return await restaurarKarenSchneider(req, res);
+    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -1355,5 +1362,43 @@ async function movimientoAnularInterno(id, fila) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
   }));
+}
+
+// ---------- Restauración puntual: Karen Schneider (2026-08-20) ----------
+// Ficha ID fijo (hardcodeado a propósito, no búsqueda por nombre) para no dejar ningún
+// margen de tocar la ficha equivocada. Reusa la MISMA primeraFilaLibre() ya corregida
+// (lib/pacientesSheet.js) para calcular la fila destino — si por lo que sea no da fila
+// 22 (la que se calculó a mano en la investigación), no escribe nada y devuelve la
+// advertencia en vez de arriesgarse. Sin ?confirmar=si es un dry-run de solo lectura.
+// Utilitario de un solo uso, se saca del proyecto apenas se confirma el resultado.
+const KAREN_SCHNEIDER_FICHA_ID = '1lxYxHb7adKLs5wHojydbTfAyxQB2FlfN93csmXKl_iA';
+async function restaurarKarenSchneider(req, res) {
+  const sheets = getPacientesSheetsClient();
+  const id = KAREN_SCHNEIDER_FICHA_ID;
+
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }));
+  const filas = data.values || [];
+  const filaDestino = primeraFilaLibre(filas);
+
+  const movimientosActuales = filas
+    .map((row, i) => ({ fila: 18 + i, fecha: row[0] || '', tratamiento: row[1] || '', debe: row[2] || '', haber: row[3] || '' }))
+    .filter((m) => m.fecha || m.tratamiento || m.debe || m.haber);
+
+  const restauracion = { fecha: '', tratamiento: 'Saldo por brackets esteticos', debe: 1430000, haber: 0, formaPago: '' };
+  const base = { ficha: 'Karen Schneider', id, filaDestino, movimientosActuales, filaARestaurar: { fila: filaDestino, ...restauracion } };
+
+  if (filaDestino !== 22) {
+    return res.status(200).json({ ...base, advertencia: `Se esperaba fila 22, primeraFilaLibre() devolvió ${filaDestino}. NO se ejecuta nada — revisar antes de confirmar.` });
+  }
+
+  if (req.query.confirmar !== 'si') {
+    return res.status(200).json({ ...base, ejecutado: false, nota: 'Dry-run — agregar &confirmar=si para escribir de verdad.' });
+  }
+
+  await escribirMovimientoEnFila(id, filaDestino, restauracion);
+
+  const { data: financieroPost } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!E6:F11` }));
+  const saldoFinal = financieroPost.values?.[2]?.[1] || '';
+  res.status(200).json({ ...base, ejecutado: true, saldoFinal });
 }
 
