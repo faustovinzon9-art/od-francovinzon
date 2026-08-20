@@ -28,8 +28,10 @@ import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import crypto from 'node:crypto';
 import { upsertPacienteConsolidado, reemplazarTodasLasFilas } from '../../lib/pacientesConsolidados.js';
+import { generarPdfReceta } from '../../lib/pdfExport.js';
+import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 
 // drive.files.create espera un stream legible en media.body, no un Buffer crudo.
 function bufferToStream(buffer) {
@@ -86,6 +88,18 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'foto-imagen') {
       return await servirFotoImagen(req, res);
     }
+    // Recetas (mismo nivel de exposición que las fotos de arriba — decisión explícita
+    // del usuario, 2026-08-20: URL no adivinable como única protección, consistente con
+    // el resto de /mobile en vez de sumar un sistema de clave nuevo ahí).
+    if (req.method === 'GET' && req.query.modo === 'recetas') {
+      return await listarRecetas(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'receta-pdf') {
+      return await servirRecetaPdf(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'receta-proceso') {
+      return await obtenerRecetaProceso(req, res);
+    }
     // UTILITARIO TEMPORAL (2026-08-14, ver el pedido) — poblar la planilla "Pacientes
     // consolidados" de una sola vez con todo lo que ya existe (fichas + historial de
     // turnos), para que el autocompletado de /gestion tenga datos desde ya en vez de ir
@@ -114,15 +128,16 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && req.body.accion === 'eliminar-foto') {
       return await eliminarFoto(req, res);
     }
-    // DIAGNÓSTICO TEMPORAL DE UN SOLO USO (2026-08-20, ver el pedido de recetas) — solo
-    // extrae y devuelve el texto crudo de un PDF, sin guardar nada en ninguna ficha, para
-    // confirmar el formato real de texto de MisRX/RCTA antes de escribir el parser
-    // definitivo. Se saca del proyecto apenas se confirma el resultado.
-    if (req.method === 'POST' && req.body.accion === 'test-parse-pdf-r8w1') {
-      return await testParsePdf(req, res);
+    // Recetas — mismo nivel sin clave que subir-foto/eliminar-foto arriba (ver el
+    // comentario de modo=recetas más arriba en este mismo handler).
+    if (req.method === 'POST' && req.body.accion === 'receta-procesar-pdf') {
+      return await procesarRecetaPdf(req, res);
     }
-    if (req.method === 'POST' && req.body.accion === 'test-ocr-pdf-r8w1') {
-      return await testOcrPdf(req, res);
+    if (req.method === 'POST' && req.body.accion === 'receta-guardar') {
+      return await guardarReceta(req, res);
+    }
+    if (req.method === 'POST' && req.body.accion === 'receta-recibir-shortcut') {
+      return await recibirRecetaShortcut(req, res);
     }
 
     if (req.method === 'POST') {
@@ -785,7 +800,16 @@ async function crearPaciente(req, res) {
   if (!nombre || !nombre.trim() || !apellido || !apellido.trim()) {
     return res.status(400).json({ success: false, message: 'Nombre y apellido son obligatorios.' });
   }
+  const resultado = await crearPacienteInterno({ nombre, apellido, campos });
+  res.status(200).json(resultado);
+}
 
+// Lógica de creación, separada de crearPaciente (arriba) para que la pueda llamar
+// también el flujo de recetas (ver más abajo): si una receta llega de un paciente que
+// no tiene ficha todavía, se crea una automáticamente con lo que se pudo leer del PDF
+// (ver el pedido, 2026-08-20) reusando este mismo camino, sin duplicar la lógica de
+// copiar la plantilla / detectar duplicados por DNI / cargar los campos iniciales.
+async function crearPacienteInterno({ nombre, apellido, campos = {} }) {
   const drive = getPacientesDriveClient();
   const sheets = getPacientesSheetsClient();
 
@@ -796,14 +820,14 @@ async function crearPaciente(req, res) {
   if (dniNormalizado) {
     const existente = await buscarPacientePorDni(drive, dniNormalizado);
     if (existente) {
-      return res.status(200).json({
+      return {
         success: false,
         duplicado: true,
         id: existente.id,
         nombre: existente.nombre,
         apellido: existente.apellido,
         message: 'Ya existe una ficha con este DNI.',
-      });
+      };
     }
   }
 
@@ -827,7 +851,7 @@ async function crearPaciente(req, res) {
     if (otraExistente) {
       await conReintentos(() => drive.files.update({ fileId: id, requestBody: { trashed: true } }));
       id = otraExistente.id;
-      return res.status(200).json({ success: true, id, nombre: otraExistente.nombre, apellido: otraExistente.apellido });
+      return { success: true, id, nombre: otraExistente.nombre, apellido: otraExistente.apellido };
     }
   }
 
@@ -862,7 +886,7 @@ async function crearPaciente(req, res) {
     telefono: datos.telefono, nombre, apellido, dni: datos.dni, fichaId: id, origen: 'ficha',
   });
 
-  res.status(200).json({ success: true, id, nombre, apellido });
+  return { success: true, id, nombre, apellido };
 }
 
 async function actualizarCampo(req, res) {
@@ -1417,47 +1441,334 @@ async function movimientoAnularInterno(id, fila) {
   }));
 }
 
-async function testParsePdf(req, res) {
-  const { pdfBase64 } = req.body;
-  if (!pdfBase64) return res.status(400).json({ error: 'Falta pdfBase64.' });
-  try {
-    const buffer = Buffer.from(String(pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
-    const data = await pdfParse(buffer);
-    res.status(200).json({ numpages: data.numpages, text: data.text });
-  } catch (err) {
-    console.error(err);
-    res.status(200).json({ error: err.message, stack: err.stack });
-  }
+// ---------- Recetas (capa de presentación sobre una receta ya emitida en MisRX/RCTA,
+// ver decisions.md) ----------
+// pdf-parse (texto estándar de un PDF) se probó primero y no sirvió: el PDF de MisRX no
+// tiene una capa de texto extraíble (confirmado en producción, 2026-08-20 — pdf-parse
+// encontraba las 2 páginas pero devolvía ~0 texto real). El OCR nativo de Drive sí
+// funciona muy bien acá: subir el PDF convirtiéndolo a Google Doc (mimeType
+// application/vnd.google-apps.document + ocrLanguage) hace que Drive le corra OCR solo
+// — reusa el mismo cliente OAuth ya autorizado para todo /pacientes, sin sumar una
+// librería de OCR pesada a la función serverless. El Google Doc temporal se borra
+// apenas se exporta el texto, no queda rastro en Drive.
+const RECETA_MAX_BYTES = 4 * 1024 * 1024; // mismo margen que las fotos, ver decisions.md
+const RECETAS_FOLDER_NAME = 'Recetas de pacientes (no tocar)';
+
+function tokensNombre(s) {
+  return normalizarTexto(s || '').split(/\s+/).filter(Boolean);
 }
 
-// DIAGNÓSTICO TEMPORAL (2026-08-20) — el PDF de MisRX no tiene texto extraíble estándar
-// (confirmado con testParsePdf: pdf-parse encuentra las 2 páginas pero ~0 texto real).
-// Prueba el OCR nativo de Google Drive en su lugar: subir el PDF convirtiéndolo a Google
-// Doc (mimeType application/vnd.google-apps.document + ocrLanguage) hace que Drive le
-// corra OCR solo — reusa el mismo cliente OAuth ya autorizado para todo /pacientes, sin
-// sumar una librería de OCR pesada a la función serverless. Borra los archivos
-// temporales de Drive apenas termina, no deja rastro.
-async function testOcrPdf(req, res) {
-  const { pdfBase64 } = req.body;
-  if (!pdfBase64) return res.status(400).json({ error: 'Falta pdfBase64.' });
-  const drive = getPacientesDriveClient();
+// Regla del pedido: "si hay una coincidencia clara, asociarla sola; si hay más de una
+// posible coincidencia o ninguna, preguntarle a Franco cuál es". El DNI extraído del PDF
+// es el criterio más confiable (mismo criterio que usa el resto del proyecto para
+// detectar duplicados, ver normalizarDni en pacientesSheet.js) así que se prueba primero
+// y gana solo si matchea una única ficha; el nombre es el respaldo cuando no hay DNI
+// legible o no matcheó ninguna ficha por DNI.
+async function buscarCoincidenciasPaciente(drive, { paciente, dni }) {
+  const archivos = await listarArchivosPacientes(drive);
+  const candidatos = archivos.map((f) => {
+    const { nombre, apellido, dni: dniFicha } = parsearNombreArchivo(f.name);
+    return { id: f.id, nombre, apellido, dni: dniFicha };
+  });
+
+  const dniNorm = dni ? normalizarDni(dni) : '';
+  if (dniNorm) {
+    const porDni = candidatos.filter((p) => normalizarDni(p.dni) === dniNorm);
+    if (porDni.length === 1) return { automatico: porDni[0], candidatos: [] };
+  }
+
+  const tokensReceta = tokensNombre(paciente);
+  if (tokensReceta.length) {
+    const porNombre = candidatos.filter((p) => {
+      const tokensFicha = tokensNombre(`${p.nombre} ${p.apellido}`);
+      return tokensReceta.every((t) => tokensFicha.includes(t)) || tokensFicha.every((t) => tokensReceta.includes(t));
+    });
+    if (porNombre.length === 1) return { automatico: porNombre[0], candidatos: [] };
+    if (porNombre.length > 1) return { automatico: null, candidatos: porNombre.slice(0, 10) };
+  }
+
+  return { automatico: null, candidatos: [] };
+}
+
+// Solo procesa: OCR + parseo + intento de match de paciente. NO guarda nada todavía —
+// eso pasa en guardarReceta, después de que Franco confirmó/corrigió los campos en la
+// vista previa (ver el pedido: supervisión humana obligatoria, nunca guardar directo).
+// Decodifica y valida el PDF entrante — compartido por el flujo de /pacientes
+// (procesarRecetaPdf) y el del Atajo de iOS (recibirRecetaShortcut).
+function decodificarPdfBase64(pdfBase64) {
+  const buffer = Buffer.from(String(pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+  if (!buffer.length) throw new Error('El archivo no es un PDF válido.');
+  if (buffer.length > RECETA_MAX_BYTES) throw new Error('El PDF es demasiado pesado.');
+  return buffer;
+}
+
+// OCR (Drive) + parseo + intento de match de paciente — el núcleo común de
+// procesarRecetaPdf (llamado desde /pacientes, con la ficha ya abierta) y
+// recibirRecetaShortcut (llamado desde el Atajo de iOS, sin ficha de contexto).
+async function ocrYParsearReceta(drive, buffer) {
   let docId;
   try {
-    const buffer = Buffer.from(String(pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
     const creado = await conReintentos(() => drive.files.create({
-      requestBody: { name: `__test-ocr-temp-${Date.now()}`, mimeType: 'application/vnd.google-apps.document' },
+      requestBody: { name: `__receta-ocr-temp-${Date.now()}`, mimeType: 'application/vnd.google-apps.document' },
       media: { mimeType: 'application/pdf', body: bufferToStream(buffer) },
       ocrLanguage: 'es',
       fields: 'id',
     }));
     docId = creado.data.id;
     const exportado = await conReintentos(() => drive.files.export({ fileId: docId, mimeType: 'text/plain' }, { responseType: 'text' }));
-    res.status(200).json({ text: exportado.data });
-  } catch (err) {
-    console.error(err);
-    res.status(200).json({ error: err.message, stack: err.stack });
+
+    const receta = parsearReceta(exportado.data);
+    const { automatico, candidatos } = await buscarCoincidenciasPaciente(drive, { paciente: receta.paciente, dni: receta.dni });
+
+    return { receta, camposFaltantes: camposFaltantes(receta), matchAutomatico: automatico, candidatos };
   } finally {
     if (docId) { try { await drive.files.delete({ fileId: docId }); } catch { /* limpieza best-effort */ } }
+  }
+}
+
+async function procesarRecetaPdf(req, res) {
+  const { pdfBase64 } = req.body;
+  if (!pdfBase64) return res.status(400).json({ success: false, message: 'Falta el PDF.' });
+
+  let buffer;
+  try {
+    buffer = decodificarPdfBase64(pdfBase64);
+  } catch (err) {
+    return res.status(200).json({ success: false, message: err.message });
+  }
+
+  try {
+    const drive = getPacientesDriveClient();
+    const resultado = await ocrYParsearReceta(drive, buffer);
+    res.status(200).json({ success: true, ...resultado });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'receta-procesar-pdf', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo leer el PDF. Probá de nuevo.' });
+  }
+}
+
+async function getOrCreateRecetasFolderId(drive) {
+  const { data } = await conReintentos(() => drive.files.list({
+    q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${RECETAS_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id)',
+  }));
+  if (data.files && data.files.length) return data.files[0].id;
+  const creada = await conReintentos(() => drive.files.create({
+    requestBody: { name: RECETAS_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', parents: [PACIENTES_FOLDER_ID] },
+    fields: 'id',
+  }));
+  return creada.data.id;
+}
+
+async function listarRecetas(req, res) {
+  const pacienteId = req.query.id;
+  if (!pacienteId) return res.status(400).json({ error: 'Falta id.' });
+  try {
+    const drive = getPacientesDriveClient();
+    const folderId = await getOrCreateRecetasFolderId(drive);
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${folderId}' in parents and name contains '${pacienteId}__' and trashed = false`,
+      fields: 'files(id, name, description, createdTime)',
+      orderBy: 'createdTime desc',
+    }));
+    const recetas = (data.files || [])
+      .filter((f) => f.name.startsWith(`${pacienteId}__`)) // "contains" de Drive es difuso, confirmar el prefijo exacto
+      .map((f) => ({ id: f.id, descripcion: f.description || '', fecha: f.createdTime }));
+    res.status(200).json(recetas);
+  } catch (err) {
+    console.error(err);
+    res.status(200).json([]); // nunca romper la vista de recetas por un error de Drive
+  }
+}
+
+async function servirRecetaPdf(req, res) {
+  const recetaId = req.query.recetaId;
+  if (!recetaId) return res.status(400).send('Falta recetaId.');
+  try {
+    const drive = getPacientesDriveClient();
+    const { data } = await conReintentos(() => drive.files.get(
+      { fileId: recetaId, alt: 'media' },
+      { responseType: 'arraybuffer' }
+    ));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.status(200).send(Buffer.from(data));
+  } catch (err) {
+    console.error(err);
+    res.status(404).send('No se pudo cargar la receta.');
+  }
+}
+
+// Genera el PDF final con la marca del consultorio y lo guarda en el historial de la
+// ficha — recién acá queda "confirmada" la receta (después de que Franco la revisó en
+// la vista previa). `receta` viene con los campos ya editados/confirmados del lado del
+// cliente, no necesariamente igual a lo que devolvió procesarRecetaPdf.
+//
+// `pacienteId` viene seteado cuando se llama desde una ficha ya abierta (/pacientes).
+// `crearNuevo` viene en su lugar cuando se llama desde el flujo del Atajo de iOS y no se
+// encontró ninguna ficha parecida (ver el pedido, 2026-08-20): se crea una ficha nueva
+// con lo que se pudo leer del PDF (nombre/apellido/dni) antes de guardar la receta ahí.
+// `codigoProceso`, si viene, borra el borrador temporal de Drive una vez guardado.
+async function guardarReceta(req, res) {
+  const { pacienteId: pacienteIdBody, crearNuevo, receta, codigoProceso } = req.body;
+  if ((!pacienteIdBody && !crearNuevo) || !receta) return res.status(400).json({ success: false, message: 'Faltan datos.' });
+  try {
+    const sheets = getPacientesSheetsClient();
+    const drive = getPacientesDriveClient();
+
+    let pacienteId = pacienteIdBody;
+    let fichaCreada = null;
+    if (!pacienteId && crearNuevo) {
+      const resultadoCreacion = await crearPacienteInterno({
+        nombre: crearNuevo.nombre || '',
+        apellido: crearNuevo.apellido || '',
+        campos: { dni: crearNuevo.dni || '' },
+      });
+      if (!resultadoCreacion.success && !resultadoCreacion.duplicado) {
+        return res.status(200).json({ success: false, message: resultadoCreacion.message || 'No se pudo crear la ficha del paciente.' });
+      }
+      pacienteId = resultadoCreacion.id;
+      fichaCreada = { nombre: resultadoCreacion.nombre, apellido: resultadoCreacion.apellido, yaExistia: !!resultadoCreacion.duplicado };
+    }
+
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: `${SHEET_NAME}!C5:C15` }));
+    const c = (data.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
+    while (c.length < 4) c.push('');
+    const [nombre, apellido, dni, fechaNacimiento] = c;
+
+    const pdfBuffer = await generarPdfReceta({ paciente: { nombre, apellido, dni, fechaNacimiento }, receta });
+
+    const folderId = await getOrCreateRecetasFolderId(drive);
+    const descripcion = [receta.fechaReceta, (receta.medicamentos || []).map((m) => m.descripcion).filter(Boolean).join('; ')]
+      .filter(Boolean).join(' — ').slice(0, 500);
+    const creada = await conReintentos(() => drive.files.create({
+      requestBody: {
+        name: `${pacienteId}__${Date.now()}.pdf`,
+        parents: [folderId],
+        description: descripcion,
+      },
+      media: { mimeType: 'application/pdf', body: bufferToStream(pdfBuffer) },
+      fields: 'id',
+    }));
+
+    if (codigoProceso) await borrarRecetaProceso(drive, codigoProceso);
+
+    res.status(200).json({ success: true, id: creada.data.id, pacienteId, fichaCreada });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'receta-guardar', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo guardar la receta. Probá de nuevo.' });
+  }
+}
+
+// ---------- Recetas "en proceso" (borradores para el Atajo de iOS, ver el pedido,
+// 2026-08-20) ----------
+// iOS/Safari no soporta Web Share Target (confirmado por el usuario — limitación real
+// de Apple, no hay forma de que nuestra app aparezca en el menú de Compartir nativo).
+// En su lugar, un Atajo de iOS manda el PDF acá por POST y recibe una URL de vuelta —
+// como esa URL la abre Safari en una pestaña nueva sin ningún estado compartido con
+// esta función serverless, el resultado del OCR/parseo se guarda unos minutos en Drive
+// (mismo criterio "carpeta (no tocar)" que el resto del proyecto) para que esa página
+// lo pueda leer por su cuenta. Se borra apenas se guarda la receta final, y cualquier
+// borrador de más de 48hs que haya quedado huérfano (Franco no llegó a confirmarlo) se
+// limpia solo, oportunista, la próxima vez que se crea uno nuevo — mismo patrón que la
+// carpeta de respaldos de emergencia (ver getOrCreateBackupFolderId).
+const RECETAS_PROCESO_FOLDER_NAME = 'Recetas en proceso (no tocar)';
+const RECETA_PROCESO_TTL_MS = 48 * 60 * 60 * 1000;
+
+async function getOrCreateRecetasProcesoFolderId(drive) {
+  const { data } = await conReintentos(() => drive.files.list({
+    q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${RECETAS_PROCESO_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id)',
+  }));
+  if (data.files && data.files.length) return data.files[0].id;
+  const creada = await conReintentos(() => drive.files.create({
+    requestBody: { name: RECETAS_PROCESO_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', parents: [PACIENTES_FOLDER_ID] },
+    fields: 'id',
+  }));
+  return creada.data.id;
+}
+
+async function limpiarRecetasProcesoVencidas(drive, folderId) {
+  try {
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: 'files(id, createdTime)',
+    }));
+    const vencidos = (data.files || []).filter((f) => Date.now() - new Date(f.createdTime).getTime() > RECETA_PROCESO_TTL_MS);
+    await Promise.allSettled(vencidos.map((f) => drive.files.delete({ fileId: f.id })));
+  } catch {
+    // limpieza best-effort, nunca debe romper el flujo principal
+  }
+}
+
+async function borrarRecetaProceso(drive, codigo) {
+  try {
+    const folderId = await getOrCreateRecetasProcesoFolderId(drive);
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${folderId}' in parents and name = '${codigo}.json' and trashed = false`,
+      fields: 'files(id)',
+    }));
+    if (data.files && data.files.length) await drive.files.delete({ fileId: data.files[0].id });
+  } catch {
+    // limpieza best-effort
+  }
+}
+
+// Endpoint que llama el Atajo de iOS: recibe el PDF, hace el mismo OCR+parseo+match que
+// procesarRecetaPdf, y en vez de devolver el resultado directo (no hay a quién
+// devolvérselo dentro de la app — el Atajo solo puede abrir una URL) lo guarda como
+// borrador y devuelve la URL de la vista previa para que el Atajo la abra en Safari.
+async function recibirRecetaShortcut(req, res) {
+  const { pdfBase64 } = req.body;
+  if (!pdfBase64) return res.status(400).json({ success: false, message: 'Falta el PDF.' });
+
+  let buffer;
+  try {
+    buffer = decodificarPdfBase64(pdfBase64);
+  } catch (err) {
+    return res.status(200).json({ success: false, message: err.message });
+  }
+
+  try {
+    const drive = getPacientesDriveClient();
+    const resultado = await ocrYParsearReceta(drive, buffer);
+
+    const folderId = await getOrCreateRecetasProcesoFolderId(drive);
+    limpiarRecetasProcesoVencidas(drive, folderId); // no se espera, es limpieza oportunista
+    const codigo = crypto.randomBytes(5).toString('hex');
+    await conReintentos(() => drive.files.create({
+      requestBody: { name: `${codigo}.json`, parents: [folderId] },
+      media: { mimeType: 'application/json', body: bufferToStream(Buffer.from(JSON.stringify(resultado))) },
+      fields: 'id',
+    }));
+
+    res.status(200).json({ success: true, url: `https://od-francovinzon.vercel.app/mobilephotouploaderodfrancovinzon/receta/?codigo=${codigo}` });
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'receta-recibir-shortcut', error: err });
+    res.status(200).json({ success: false, message: 'No se pudo leer el PDF. Probá de nuevo.' });
+  }
+}
+
+async function obtenerRecetaProceso(req, res) {
+  const codigo = req.query.codigo;
+  if (!codigo || !/^[a-f0-9]{10}$/.test(codigo)) return res.status(400).json({ error: 'Código inválido.' });
+  try {
+    const drive = getPacientesDriveClient();
+    const folderId = await getOrCreateRecetasProcesoFolderId(drive);
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${folderId}' in parents and name = '${codigo}.json' and trashed = false`,
+      fields: 'files(id)',
+    }));
+    if (!data.files || !data.files.length) return res.status(404).json({ error: 'No se encontró esa receta (puede que ya haya sido guardada, o que hayan pasado más de 48hs).' });
+    const exportado = await conReintentos(() => drive.files.get({ fileId: data.files[0].id, alt: 'media' }, { responseType: 'text' }));
+    const contenido = typeof exportado.data === 'string' ? JSON.parse(exportado.data) : exportado.data;
+    res.status(200).json({ success: true, codigo, ...contenido });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar la receta.' });
   }
 }
 

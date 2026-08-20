@@ -295,6 +295,25 @@
   .fotos-preview-wrap img { max-width: 100%; max-height: 180px; border-radius: 10px; }
   .fotos-descripcion-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 9px; margin-bottom: 4px; }
 
+  /* Recetas (ver el pedido, 2026-08-20) — capa de presentación sobre una receta ya
+     emitida en MisRX/RCTA, nunca un generador de recetas legales (ver decisions.md). */
+  .receta-box { max-width: 560px; }
+  .receta-lista-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .receta-lista-item:last-child { border-bottom: none; }
+  .receta-lista-item .desc { font-size: 13px; color: var(--text); font-weight: 600; }
+  .receta-lista-item .fecha { font-size: 11.5px; color: var(--muted); }
+  .receta-warning { background: #FCEFD8; border: 1.5px solid var(--gold); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--navy); margin-bottom: 12px; }
+  .receta-warning.grave { background: #FCE4E0; border-color: #C0392B; }
+  .receta-campo label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+  .receta-campo input, .receta-campo textarea { width: 100%; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 8px; font-size: 13.5px; font-family: inherit; }
+  .receta-campo.falta input, .receta-campo.falta textarea { border-color: #C0392B; background: #FCE4E0; }
+  .receta-campo { margin-bottom: 10px; }
+  .receta-falta-nota { font-size: 11px; color: #C0392B; margin-top: 2px; }
+  .receta-med-item { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; position: relative; }
+  .receta-med-quitar { position: absolute; top: 8px; right: 8px; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; }
+  .receta-med-agregar { background: var(--white); color: var(--navy); border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px; width: 100%; font-weight: 600; font-size: 13px; margin-bottom: 14px; }
+  .receta-back { background: none; border: none; color: var(--muted); font-size: 13px; margin-bottom: 10px; cursor: pointer; padding: 0; }
+
   button, .icon-btn, input, select, textarea, .patient-row {
     transition: transform .15s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
   }
@@ -475,6 +494,7 @@
     </div>
     <button class="btn-obra-social" id="btn-obra-social">🏥 Estado de prestación obra social</button>
     <button class="btn-obra-social" id="btn-fotos" style="margin-left:10px;">📷 Fotos</button>
+    <button class="btn-obra-social" id="btn-recetas" style="margin-left:10px;">💊 Recetas</button>
 
     <div class="ficha-columns">
     <div class="ficha-col-left">
@@ -660,6 +680,45 @@
   <div class="visor-acciones">
     <button class="visor-borrar" id="visor-borrar">🗑 Borrar</button>
     <button class="visor-compartir" id="visor-compartir">📤 Compartir</button>
+  </div>
+</div>
+<div class="confirm-overlay hidden" id="recetas-overlay">
+  <div class="fotos-box receta-box">
+    <div class="fotos-box-header">
+      <h3>Recetas</h3>
+      <button type="button" class="fotos-box-close" id="recetas-cerrar">✕</button>
+    </div>
+
+    <div id="recetas-vista-lista">
+      <label class="fotos-input-label" id="receta-input-label">
+        <span class="icon">💊</span>
+        <span id="receta-input-texto">Subir PDF de receta (MisRX/RCTA)</span>
+        <input type="file" accept="application/pdf" id="receta-input">
+      </label>
+      <div class="panel-msg hidden" id="receta-procesando-msg"></div>
+      <div id="recetas-lista"></div>
+      <p class="hint hidden" id="recetas-vacio" style="text-align:center; padding: 20px 0;">Todavía no hay recetas guardadas.</p>
+    </div>
+
+    <div id="recetas-vista-form" class="hidden">
+      <button type="button" class="receta-back" id="receta-volver">← Volver</button>
+      <div id="receta-warnings"></div>
+      <p class="hint" style="margin: -4px 0 12px;">Revisá los datos extraídos del PDF antes de guardar — corregí lo que haga falta. Esto NO reemplaza la receta electrónica original, es solo una versión prolija para compartir.</p>
+
+      <div class="receta-campo" id="campo-fechaReceta"><label>Fecha de receta</label><input type="text" id="receta-fechaReceta"></div>
+      <div class="receta-campo" id="campo-cuir"><label>Código / CUIR</label><input type="text" id="receta-cuir"></div>
+
+      <div id="receta-medicamentos"></div>
+      <button type="button" class="receta-med-agregar" id="receta-med-agregar">+ Agregar medicamento</button>
+
+      <div class="receta-campo"><label>Posología / Notas</label><textarea id="receta-posologia" rows="2"></textarea></div>
+      <div class="receta-campo" id="campo-profesional-nombre"><label>Profesional</label><input type="text" id="receta-profesional-nombre"></div>
+      <div class="receta-campo" id="campo-profesional-matricula"><label>Matrícula</label><input type="text" id="receta-profesional-matricula"></div>
+      <div class="receta-campo"><label>Profesión</label><input type="text" id="receta-profesional-profesion"></div>
+
+      <button class="btn-confirm" id="receta-guardar-btn" style="width:100%; margin-top:6px;">Guardar y compartir</button>
+      <div class="panel-msg hidden" id="receta-guardar-msg"></div>
+    </div>
   </div>
 </div>
 <div class="confirm-overlay hidden" id="confirm-overlay">
@@ -1996,6 +2055,246 @@
   }
   document.getElementById('fotos-cerrar').addEventListener('click', cerrarFotos);
   fotosOverlay.addEventListener('click', (e) => { if (e.target === fotosOverlay) cerrarFotos(); });
+
+  // ---------- Recetas (ver el pedido, 2026-08-20) ----------
+  // Capa de presentación sobre una receta YA emitida en MisRX/RCTA (ver decisions.md):
+  // se sube el PDF, se lee con OCR de Drive (pdf-parse no sirvió con este PDF, ver
+  // api/gestion/pacientes.js), se completa un formulario editable con lo extraído y
+  // SIEMPRE hay que revisar/confirmar a mano antes de guardar — nunca se guarda
+  // directo, por más que la extracción haya salido perfecta (pedido explícito del
+  // usuario: supervisión humana obligatoria dado que es OCR sobre datos médicos).
+  const recetasOverlay = document.getElementById('recetas-overlay');
+  const recetasVistaLista = document.getElementById('recetas-vista-lista');
+  const recetasVistaForm = document.getElementById('recetas-vista-form');
+  const recetaInput = document.getElementById('receta-input');
+  const recetaInputTexto = document.getElementById('receta-input-texto');
+  const recetaProcesandoMsg = document.getElementById('receta-procesando-msg');
+  const recetaMedContainer = document.getElementById('receta-medicamentos');
+  let recetaMedIdx = 0;
+
+  document.getElementById('btn-recetas').addEventListener('click', async () => {
+    if (!fichaActual) return;
+    recetasOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => recetasOverlay.classList.add('show'));
+    mostrarVistaListaRecetas();
+    await cargarRecetasFicha();
+  });
+
+  function mostrarVistaListaRecetas() {
+    recetasVistaLista.classList.remove('hidden');
+    recetasVistaForm.classList.add('hidden');
+    recetaInput.value = '';
+    recetaInputTexto.textContent = 'Subir PDF de receta (MisRX/RCTA)';
+    recetaProcesandoMsg.classList.add('hidden');
+  }
+
+  async function cargarRecetasFicha() {
+    const lista = document.getElementById('recetas-lista');
+    const vacio = document.getElementById('recetas-vacio');
+    lista.innerHTML = '<p class="hint">Cargando...</p>';
+    vacio.classList.add('hidden');
+    try {
+      const r = await fetch(`/api/gestion/pacientes?modo=recetas&id=${fichaActual.id}`);
+      const recetas = await r.json();
+      vacio.classList.toggle('hidden', recetas.length > 0);
+      lista.innerHTML = recetas.map((rc) => `
+        <div class="receta-lista-item" data-id="${rc.id}">
+          <div>
+            <div class="desc">${escapeHtml(rc.descripcion || 'Receta')}</div>
+            <div class="fecha">${new Date(rc.fecha).toLocaleDateString('es-AR')}</div>
+          </div>
+          <span>📤</span>
+        </div>
+      `).join('');
+      lista.querySelectorAll('.receta-lista-item').forEach((el) => {
+        el.addEventListener('click', () => compartirRecetaGuardada(el.dataset.id));
+      });
+    } catch {
+      lista.innerHTML = '<p class="hint">No se pudieron cargar las recetas.</p>';
+    }
+  }
+
+  async function compartirRecetaGuardada(recetaId) {
+    const url = `/api/gestion/pacientes?modo=receta-pdf&recetaId=${recetaId}`;
+    const nombreCompleto = `${fichaActual.campos.nombre} ${fichaActual.campos.apellido}`.trim();
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const file = new File([blob], `Receta - ${nombreCompleto}.pdf`, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: `Receta — ${nombreCompleto}` });
+        return;
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank');
+    } catch (err) {
+      // AbortError = cerró el panel de compartir sin elegir nada, no es un error real
+    }
+  }
+
+  recetaInput.addEventListener('change', async () => {
+    const file = recetaInput.files[0];
+    if (!file || !fichaActual) return;
+    recetaInputTexto.textContent = 'Leyendo PDF...';
+    recetaProcesandoMsg.classList.remove('hidden');
+    recetaProcesandoMsg.className = 'panel-msg';
+    recetaProcesandoMsg.textContent = 'Procesando la receta (puede tardar unos segundos)...';
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const r = await fetch('/api/gestion/pacientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'receta-procesar-pdf', pdfBase64: e.target.result }),
+        });
+        const res = await r.json();
+        if (!res.success) {
+          recetaProcesandoMsg.className = 'panel-msg error';
+          recetaProcesandoMsg.textContent = res.message || 'No se pudo leer el PDF.';
+          recetaInputTexto.textContent = 'Subir PDF de receta (MisRX/RCTA)';
+          return;
+        }
+        abrirFormReceta(res);
+      } catch {
+        recetaProcesandoMsg.className = 'panel-msg error';
+        recetaProcesandoMsg.textContent = 'No se pudo leer el PDF. Revisá tu conexión.';
+        recetaInputTexto.textContent = 'Subir PDF de receta (MisRX/RCTA)';
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function marcarCampo(idCampo, faltante) {
+    const el = document.getElementById(idCampo);
+    if (el) el.classList.toggle('falta', faltante);
+  }
+
+  function abrirFormReceta({ receta, camposFaltantes, matchAutomatico, candidatos }) {
+    recetasVistaLista.classList.add('hidden');
+    recetasVistaForm.classList.remove('hidden');
+
+    const nombreCompleto = `${fichaActual.campos.nombre} ${fichaActual.campos.apellido}`.trim();
+    const warnings = document.getElementById('receta-warnings');
+    let html = '';
+    if (matchAutomatico && matchAutomatico.id !== fichaActual.id) {
+      html += `<div class="receta-warning grave">⚠️ Esta receta parece ser de <strong>${escapeHtml(matchAutomatico.nombre)} ${escapeHtml(matchAutomatico.apellido)}</strong>, no de ${escapeHtml(nombreCompleto)}. Revisá que sea el PDF correcto antes de guardar.</div>`;
+    } else if (candidatos && candidatos.length > 1) {
+      const nombres = candidatos.map((c) => `${c.nombre} ${c.apellido}`).join(', ');
+      html += `<div class="receta-warning">No pude confirmar con certeza a qué paciente pertenece esta receta (podría ser: ${escapeHtml(nombres)}). Revisá que estés en la ficha correcta.</div>`;
+    } else if (!matchAutomatico && receta.paciente) {
+      html += `<div class="receta-warning">No pude confirmar automáticamente que esta receta sea de ${escapeHtml(nombreCompleto)} (el PDF dice "${escapeHtml(receta.paciente)}"). Revisá que estés en la ficha correcta.</div>`;
+    } else if (!receta.paciente) {
+      html += `<div class="receta-warning">No pude leer el nombre del paciente en el PDF. Revisá que sea la receta correcta.</div>`;
+    }
+    warnings.innerHTML = html;
+
+    document.getElementById('receta-fechaReceta').value = receta.fechaReceta || '';
+    document.getElementById('receta-cuir').value = receta.cuir || '';
+    document.getElementById('receta-posologia').value = receta.posologia || '';
+    document.getElementById('receta-profesional-nombre').value = receta.profesional?.nombre || '';
+    document.getElementById('receta-profesional-matricula').value = receta.profesional?.matricula || '';
+    document.getElementById('receta-profesional-profesion').value = receta.profesional?.profesion || '';
+
+    ['fechaReceta', 'cuir', 'profesional.nombre', 'profesional.matricula'].forEach((c) => {
+      marcarCampo(`campo-${c.replace('.', '-')}`, (camposFaltantes || []).includes(c));
+    });
+
+    recetaMedContainer.innerHTML = '';
+    recetaMedIdx = 0;
+    const meds = receta.medicamentos && receta.medicamentos.length ? receta.medicamentos : [{ descripcion: '', cantidad: '', diagnostico: '' }];
+    meds.forEach((m) => agregarFilaMedicamento(m));
+
+    document.getElementById('receta-guardar-msg').classList.add('hidden');
+  }
+
+  function agregarFilaMedicamento(m) {
+    const idx = recetaMedIdx++;
+    const div = document.createElement('div');
+    div.className = 'receta-med-item';
+    div.dataset.idx = idx;
+    div.innerHTML = `
+      <button type="button" class="receta-med-quitar" data-idx="${idx}">✕</button>
+      <div class="receta-campo"><label>Medicamento</label><textarea rows="2" class="receta-med-descripcion">${escapeHtml(m.descripcion || '')}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label style="font-size:11.5px;color:var(--muted);">Cantidad</label><input type="text" class="receta-med-cantidad" value="${escapeHtml(m.cantidad || '')}"></div>
+      </div>
+      <div class="receta-campo"><label>Diagnóstico</label><input type="text" class="receta-med-diagnostico" value="${escapeHtml(m.diagnostico || '')}"></div>
+    `;
+    recetaMedContainer.appendChild(div);
+    div.querySelector('.receta-med-quitar').addEventListener('click', () => div.remove());
+  }
+
+  document.getElementById('receta-med-agregar').addEventListener('click', () => {
+    agregarFilaMedicamento({ descripcion: '', cantidad: '', diagnostico: '' });
+  });
+
+  document.getElementById('receta-volver').addEventListener('click', () => {
+    mostrarVistaListaRecetas();
+  });
+
+  document.getElementById('receta-guardar-btn').addEventListener('click', async () => {
+    if (!fichaActual) return;
+    const medicamentos = Array.from(recetaMedContainer.querySelectorAll('.receta-med-item')).map((div) => ({
+      descripcion: div.querySelector('.receta-med-descripcion').value.trim(),
+      cantidad: div.querySelector('.receta-med-cantidad').value.trim(),
+      diagnostico: div.querySelector('.receta-med-diagnostico').value.trim(),
+    })).filter((m) => m.descripcion);
+
+    const msg = document.getElementById('receta-guardar-msg');
+    if (!medicamentos.length) {
+      msg.className = 'panel-msg error';
+      msg.textContent = 'Agregá al menos un medicamento.';
+      msg.classList.remove('hidden');
+      return;
+    }
+
+    const receta = {
+      fechaReceta: document.getElementById('receta-fechaReceta').value.trim(),
+      cuir: document.getElementById('receta-cuir').value.trim(),
+      posologia: document.getElementById('receta-posologia').value.trim(),
+      medicamentos,
+      profesional: {
+        nombre: document.getElementById('receta-profesional-nombre').value.trim(),
+        matricula: document.getElementById('receta-profesional-matricula').value.trim(),
+        profesion: document.getElementById('receta-profesional-profesion').value.trim(),
+      },
+    };
+
+    const btn = document.getElementById('receta-guardar-btn');
+    setBtnLoading(btn, 'Guardando...');
+    msg.classList.add('hidden');
+    try {
+      const r = await fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'receta-guardar', pacienteId: fichaActual.id, receta }),
+      });
+      const res = await r.json();
+      if (res.success) {
+        toast('Receta guardada ✓');
+        mostrarVistaListaRecetas();
+        await cargarRecetasFicha();
+        compartirRecetaGuardada(res.id);
+      } else {
+        msg.className = 'panel-msg error';
+        msg.textContent = res.message || 'No se pudo guardar la receta.';
+        msg.classList.remove('hidden');
+      }
+    } catch {
+      msg.className = 'panel-msg error';
+      msg.textContent = 'No se pudo guardar la receta. Revisá tu conexión.';
+      msg.classList.remove('hidden');
+    } finally {
+      quitarBtnLoading(btn);
+    }
+  });
+
+  function cerrarRecetas() {
+    recetasOverlay.classList.remove('show');
+    setTimeout(() => recetasOverlay.classList.add('hidden'), 180);
+  }
+  document.getElementById('recetas-cerrar').addEventListener('click', cerrarRecetas);
+  recetasOverlay.addEventListener('click', (e) => { if (e.target === recetasOverlay) cerrarRecetas(); });
 
   function renderPrestaciones() {
     const tbody = document.getElementById('pres-tbody');
