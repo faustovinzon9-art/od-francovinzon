@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "googleapis": "^174.0.0",
-    "pdfkit": "^0.15.0"
+    "pdfkit": "^0.15.0",
+    "bwip-js": "^4.5.1"
   }
 }
