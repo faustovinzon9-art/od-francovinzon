@@ -13,6 +13,9 @@
   ],
   "functions": {
     "api/gestion/admin.js": { "maxDuration": 300 },
-    "api/gestion/pacientes.js": { "maxDuration": 300 }
+    "api/gestion/pacientes.js": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+    }
   }
 }
