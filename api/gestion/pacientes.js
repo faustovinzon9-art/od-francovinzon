@@ -28,6 +28,7 @@ import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { upsertPacienteConsolidado, reemplazarTodasLasFilas } from '../../lib/pacientesConsolidados.js';
 
 // drive.files.create espera un stream legible en media.body, no un Buffer crudo.
@@ -112,6 +113,13 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST' && req.body.accion === 'eliminar-foto') {
       return await eliminarFoto(req, res);
+    }
+    // DIAGNÓSTICO TEMPORAL DE UN SOLO USO (2026-08-20, ver el pedido de recetas) — solo
+    // extrae y devuelve el texto crudo de un PDF, sin guardar nada en ninguna ficha, para
+    // confirmar el formato real de texto de MisRX/RCTA antes de escribir el parser
+    // definitivo. Se saca del proyecto apenas se confirma el resultado.
+    if (req.method === 'POST' && req.body.accion === 'test-parse-pdf-r8w1') {
+      return await testParsePdf(req, res);
     }
 
     if (req.method === 'POST') {
@@ -1404,5 +1412,18 @@ async function movimientoAnularInterno(id, fila) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
   }));
+}
+
+async function testParsePdf(req, res) {
+  const { pdfBase64 } = req.body;
+  if (!pdfBase64) return res.status(400).json({ error: 'Falta pdfBase64.' });
+  try {
+    const buffer = Buffer.from(String(pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+    const data = await pdfParse(buffer);
+    res.status(200).json({ numpages: data.numpages, text: data.text });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ error: err.message, stack: err.stack });
+  }
 }
 
