@@ -537,6 +537,9 @@
       <div class="field-row">
         <div class="field"><label>Fecha</label><input type="date" id="mov-fecha"></div>
       </div>
+      <p class="hidden" id="mov-fecha-hint-historica" style="color: var(--muted); font-size: 12px; margin: -6px 0 4px;">
+        Si no sabés la fecha exacta de una deuda vieja, usá una fecha aproximada (ej. el primer día del mes) — no se puede guardar sin fecha.
+      </p>
       <div class="field-row">
         <div class="field full"><label>Tratamiento / descripción</label><input type="text" id="mov-tratamiento" list="lista-tratamientos"></div>
       </div>
@@ -1607,7 +1610,9 @@
     return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
   function fechaInputASheet(valorInput) {
-    // "2026-07-27" -> "27/07/2026"
+    // "2026-07-27" -> "27/07/2026". Vacío se queda vacío (editar una fila vieja sin
+    // fecha, ver el pedido, 2026-08-20) — si no, quedaba "undefined/undefined/".
+    if (!valorInput) return '';
     const [y, m, d] = valorInput.split('-');
     return `${d}/${m}/${y}`;
   }
@@ -1619,6 +1624,8 @@
     const n = parseFloat(limpio);
     return Number.isFinite(n) && n !== 0 ? n : '';
   }
+
+  const movFechaHintHistorica = document.getElementById('mov-fecha-hint-historica');
 
   function abrirFormMov(fila, historica) {
     editandoMovFila = fila;
@@ -1640,6 +1647,10 @@
       movHaber.value = '';
       movFormaPago.value = '';
     }
+    // Solo se muestra al cargar un movimiento NUEVO desde "Carga histórica" — al editar
+    // una fila vieja ya sin fecha (protegida por el fix de primeraFilaLibre(), ver
+    // decisions.md) no hace falta inventarle ninguna.
+    movFechaHintHistorica.classList.toggle('hidden', !(cargaHistorica && !fila));
     actualizarHintTipo();
     mostrarAnimado(panelMov);
     panelMov.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1647,7 +1658,11 @@
 
   document.getElementById('mov-guardar').addEventListener('click', async () => {
     const fecha = movFecha.value;
-    if (!fecha) {
+    // Fecha obligatoria SOLO para movimientos nuevos (ver el pedido, 2026-08-20 —
+    // endurecimiento tras el incidente de Karen Schneider): editar una fila vieja que ya
+    // estaba sin fecha no debe forzar a inventarle una, esos quedan protegidos por el
+    // fix de primeraFilaLibre() sin necesitar ninguna migración.
+    if (!editandoMovFila && !fecha) {
       movMsg.textContent = 'La fecha es obligatoria.';
       movMsg.className = 'panel-msg error';
       movMsg.classList.remove('hidden');

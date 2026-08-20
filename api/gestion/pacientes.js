@@ -94,6 +94,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
       return await backfillConsolidado(req, res);
     }
+    if (req.method === 'GET' && req.query.modo === 'test-traba-seguridad-p3k7') {
+      return await testTrabaSeguridad(req, res);
+    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -906,6 +909,25 @@ async function escribirCampoEnSheet(id, campo, valor) {
   }
 }
 
+// Traba de seguridad (ver el pedido, 2026-08-20 — endurecimiento tras el incidente de
+// Karen Schneider): justo antes de escribir un movimiento/prestación NUEVO en una fila,
+// confirma que esa fila realmente está vacía en las 4 columnas relevantes — releída
+// fresca del Sheet (no reusa la lectura que sirvió para calcular primeraFilaLibre), para
+// acortar al máximo la ventana entre "decidir dónde escribir" y "escribir de verdad". Si
+// la fila tiene datos, tira un error claro en vez de dejar que se pise en silencio.
+// Pensada como red de seguridad genérica ante CUALQUIER futuro bug de lógica parecido a
+// éste — no asume que la única causa posible sea primeraFilaLibre(). Quien llama a esto
+// NO debe reintentar ciegamente contra la misma fila: repetiría el mismo pisado.
+async function confirmarFilaLibre(sheets, id, fila, esPrestacion) {
+  const rango = esPrestacion ? `${SHEET_NAME}!J${fila}:M${fila}` : `${SHEET_NAME}!B${fila}:E${fila}`;
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rango }));
+  const [col1, col2, col3, col4] = (data.values && data.values[0]) || [];
+  const vacia = !String(col1 || '').trim() && !String(col2 || '').trim() && !col3 && !col4;
+  if (!vacia) {
+    throw new Error(`La fila ${fila} ya tiene datos cargados — no se puede agregar ahí sin pisarlos. Esto no debería pasar nunca; avisale a Fausto.`);
+  }
+}
+
 // ---------- Fusión manual de fichas duplicadas (por DNI, ver decisions.md) ----------
 // El sistema NUNCA decide solo cuál ficha mantener ni cómo resolver un dato
 // contradictorio entre las dos — todo eso ya viene resuelto por la secretaria desde el
@@ -940,6 +962,7 @@ async function fusionarPacientes(req, res) {
     let fila = primeraFilaLibre(destinoMov.values || []);
     for (const row of movimientos) {
       const [fecha, tratamiento, debe, haber, , , formaPago] = row;
+      await confirmarFilaLibre(sheets, idMantener, fila, false);
       await escribirMovimientoEnFila(idMantener, fila, { fecha, tratamiento, debe, haber, formaPago });
       fila += 1;
     }
@@ -953,6 +976,7 @@ async function fusionarPacientes(req, res) {
     let filaP = primeraFilaLibre(destinoPres.values || []);
     for (const row of prestaciones) {
       const [fecha, tratamiento, codigo, autorizado] = row;
+      await confirmarFilaLibre(sheets, idMantener, filaP, true);
       await escribirPrestacionEnFila(idMantener, filaP, { fecha, tratamiento, codigo, autorizado: autorizado === true || autorizado === 'TRUE' });
       filaP += 1;
     }
@@ -966,14 +990,27 @@ async function fusionarPacientes(req, res) {
 
 async function movimientoAgregar(req, res) {
   const { id, fecha, tratamiento, debe, haber, formaPago } = req.body;
-  if (!id || !fecha) return res.status(400).json({ success: false, message: 'Falta fecha.' });
+  // Fecha obligatoria para movimientos NUEVOS (ver el pedido, 2026-08-20) — elimina la
+  // posibilidad de que exista una fila con datos reales pero sin fecha, que fue
+  // justamente el patrón que causó el incidente de Karen Schneider. No aplica a editar
+  // (movimientoEditar) ni a los movimientos viejos ya cargados sin fecha, que quedan
+  // protegidos por el fix de primeraFilaLibre() sin necesitar migración.
+  if (!id || !fecha || !String(fecha).trim()) return res.status(400).json({ success: false, message: 'Falta fecha.' });
+
+  const sheets = getPacientesSheetsClient();
+  let fila;
+  try {
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }));
+    fila = primeraFilaLibre(data.values || []);
+    await confirmarFilaLibre(sheets, id, fila, false);
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-agregar: traba de seguridad', error: err });
+    return res.status(200).json({ success: false, message: err.message });
+  }
 
   try {
-    const sheets = getPacientesSheetsClient();
-    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() }));
-    const fila = primeraFilaLibre(data.values || []);
     await escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago });
-
     res.status(200).json({ success: true, fila });
   } catch (err) {
     console.error(err);
@@ -1056,12 +1093,21 @@ async function movimientoAnular(req, res) {
 
 async function prestacionAgregar(req, res) {
   const { id, fecha, tratamiento, codigo, autorizado } = req.body;
-  if (!id || !fecha) return res.status(400).json({ success: false, message: 'Falta fecha.' });
+  if (!id || !fecha || !String(fecha).trim()) return res.status(400).json({ success: false, message: 'Falta fecha.' });
+
+  const sheets = getPacientesSheetsClient();
+  let fila;
+  try {
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() }));
+    fila = primeraFilaLibre(data.values || []);
+    await confirmarFilaLibre(sheets, id, fila, true);
+  } catch (err) {
+    console.error(err);
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'prestacion-agregar: traba de seguridad', error: err });
+    return res.status(200).json({ success: false, message: err.message });
+  }
 
   try {
-    const sheets = getPacientesSheetsClient();
-    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoPrestacionesObraSocial() }));
-    const fila = primeraFilaLibre(data.values || []);
     await escribirPrestacionEnFila(id, fila, { fecha, tratamiento, codigo, autorizado });
     res.status(200).json({ success: true, fila });
   } catch (err) {
@@ -1322,6 +1368,7 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
       } else if (accion === 'movimiento-agregar') {
         const { data: mov } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoMovimientos() }));
         const fila = primeraFilaLibre(mov.values || []);
+        await confirmarFilaLibre(sheets, pacienteId, fila, false);
         await escribirMovimientoEnFila(pacienteId, fila, payload);
       } else if (accion === 'movimiento-editar') {
         await escribirMovimientoEnFila(pacienteId, payload.fila, payload);
@@ -1330,6 +1377,7 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
       } else if (accion === 'prestacion-agregar') {
         const { data: pres } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoPrestacionesObraSocial() }));
         const fila = primeraFilaLibre(pres.values || []);
+        await confirmarFilaLibre(sheets, pacienteId, fila, true);
         await escribirPrestacionEnFila(pacienteId, fila, payload);
       } else if (accion === 'prestacion-editar') {
         await escribirPrestacionEnFila(pacienteId, payload.fila, payload);
@@ -1339,6 +1387,10 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
       await conReintentos(() => drive.files.delete({ fileId: archivo.id }));
     } catch (err) {
       console.error('No se pudo recuperar un respaldo pendiente, se reintenta en el próximo acceso', err);
+      // Si la traba de seguridad (confirmarFilaLibre) es la que frenó esto, reintentar
+      // en el próximo acceso va a fallar exactamente igual para siempre — vale la pena
+      // que Fausto se entere en vez de que quede reintentando en silencio.
+      await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: `intentarRecuperarRespaldos: ${archivo.name}`, error: err });
     }
   }
 }
@@ -1355,5 +1407,29 @@ async function movimientoAnularInterno(id, fila) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
   }));
+}
+
+// TEST TEMPORAL DE UN SOLO USO (2026-08-20, ver el pedido) — prueba confirmarFilaLibre()
+// contra datos reales de Google Sheets (no solo simulados en JS puro): fila 22 de Karen
+// Schneider tiene datos de verdad (la restauración de este mismo día) y fila 23 está
+// realmente vacía. Solo lectura, no escribe nada. Se saca del proyecto apenas se
+// confirma el resultado.
+async function testTrabaSeguridad(req, res) {
+  const sheets = getPacientesSheetsClient();
+  const id = '1lxYxHb7adKLs5wHojydbTfAyxQB2FlfN93csmXKl_iA'; // Karen Schneider
+  const resultado = {};
+  try {
+    await confirmarFilaLibre(sheets, id, 22, false);
+    resultado.fila22 = 'NO BLOQUEÓ (mal — la fila 22 tiene datos reales)';
+  } catch (err) {
+    resultado.fila22 = `Bloqueado correctamente: ${err.message}`;
+  }
+  try {
+    await confirmarFilaLibre(sheets, id, 23, false);
+    resultado.fila23 = 'OK, no bloqueó (la fila 23 está realmente vacía)';
+  } catch (err) {
+    resultado.fila23 = `NO DEBERÍA HABER BLOQUEADO: ${err.message}`;
+  }
+  res.status(200).json(resultado);
 }
 
