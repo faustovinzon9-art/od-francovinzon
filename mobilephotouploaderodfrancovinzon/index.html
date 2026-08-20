@@ -389,11 +389,15 @@
     const f = fotosActuales[idx];
     if (!f) return;
     const url = `/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}`;
+    const fechaTexto = new Date(f.fecha).toLocaleDateString('es-AR');
     visorImg.src = url;
     visorDesc.textContent = f.descripcion || '';
-    visorFecha.textContent = new Date(f.fecha).toLocaleDateString('es-AR');
+    visorFecha.textContent = fechaTexto;
     visorOverlay.dataset.url = url;
     visorOverlay.dataset.fotoId = f.id;
+    // Texto al compartir (ver el pedido, 2026-08-20): nombre del paciente, fecha y la
+    // descripción que le puso el odontólogo — antes era el genérico "Foto de paciente".
+    visorOverlay.dataset.compartirTexto = `${pacienteActual ? pacienteActual.nombre : ''} — ${fechaTexto}` + (f.descripcion ? `\n${f.descripcion}` : '');
     visorOverlay.classList.remove('hidden');
   }
   function cerrarVisor() {
@@ -410,21 +414,22 @@
   document.getElementById('visor-compartir').addEventListener('click', async () => {
     const url = visorOverlay.dataset.url;
     if (!url) return;
+    const textoCompartir = visorOverlay.dataset.compartirTexto || 'Foto de paciente';
     try {
       if (navigator.canShare) {
         const resp = await fetch(url);
         const blob = await resp.blob();
         const file = new File([blob], 'foto-paciente.jpg', { type: blob.type || 'image/jpeg' });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Foto de paciente' });
+          await navigator.share({ files: [file], text: textoCompartir });
           return;
         }
       }
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title: 'Foto de paciente', url });
+        await navigator.share({ text: textoCompartir, url });
         return;
       }
-      await navigator.clipboard.writeText(location.origin + url);
+      await navigator.clipboard.writeText(`${textoCompartir}\n${location.origin}${url}`);
       toast('Link copiado ✓');
     } catch (err) {
       // AbortError = cerró el panel de compartir sin elegir nada, no es un error real

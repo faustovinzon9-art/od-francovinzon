@@ -439,8 +439,6 @@
     <h1 id="sidebar-greeting">Hola, Ayelen</h1>
     <p id="sidebar-date"></p>
 
-    <button type="button" class="copy-link-btn" id="copy-link-turnos" style="display:block; width:100%; margin-bottom: 8px;">🔗 Copiar link de turnos</button>
-
     <a href="/pacientes" class="copy-link-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom: 14px;">📋 Acceder a fichas</a>
 
     <div class="sidebar-search">
@@ -501,7 +499,6 @@
       </div>
       <button class="mobile-tasks-btn hidden" id="mobile-tasks-btn">Tareas pendientes</button>
     </div>
-    <button type="button" class="copy-link-btn" id="copy-link-turnos-m" style="display:block; width:100%; margin-bottom: 8px;">🔗 Copiar link de turnos</button>
     <a href="/pacientes" class="copy-link-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom: 14px;">📋 Acceder a fichas</a>
     <div class="mobile-summary-stats" id="mobile-summary-stats">
       <span><strong id="sum-turnos-m">–</strong> turnos hoy</span>
@@ -1778,35 +1775,6 @@
       setTimeout(() => el.remove(), 250);
     }, 2600);
   }
-
-  // ---------- Copiar link de turnos (sidebar desktop + resumen mobile) ----------
-  function copiarLinkFallback(url) {
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = url;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      toast(ok ? '✅ Link copiado' : 'No se pudo copiar el link.');
-    } catch (e) {
-      toast('No se pudo copiar el link.');
-    }
-  }
-  function copiarLink(url) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(() => toast('✅ Link copiado')).catch(() => copiarLinkFallback(url));
-    } else {
-      copiarLinkFallback(url);
-    }
-  }
-  const linkTurnos = `${location.origin}/turnos`;
-  ['copy-link-turnos', 'copy-link-turnos-m'].forEach((id) =>
-    document.getElementById(id).addEventListener('click', () => copiarLink(linkTurnos))
-  );
 
   // ---------- Diálogo de confirmación propio (reemplaza confirm() nativo) ----------
   const confirmOverlay = document.getElementById('confirm-overlay');

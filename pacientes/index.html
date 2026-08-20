@@ -257,14 +257,32 @@
   .fotos-box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .fotos-box-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--cream); color: var(--navy); font-size: 14px; }
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .foto-item { position: relative; }
+  .foto-item { position: relative; cursor: pointer; }
   .foto-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
   .foto-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   .foto-item .fecha { font-size: 10.5px; color: var(--muted); }
-  .foto-item .foto-borrar {
-    position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%;
-    background: rgba(20,20,20,.6); color: var(--white); border: none; font-size: 12px; line-height: 1;
+
+  /* Visor a pantalla completa (ver el pedido, 2026-08-20) — mismo diseño que ya usaba
+     /mobilephotouploaderodfrancovinzon, para que sea consistente tocar una foto desde
+     cualquiera de los dos lados: se toca la miniatura, se abre grande, con compartir
+     (Web Share API, mismo criterio que "Guardar acceso a mi turno" en /turnos: si el
+     navegador soporta compartir archivos comparte la foto misma, si no cae a
+     compartir/copiar el link) y borrar (con confirmDialog, no el confirm() nativo). */
+  .visor-overlay {
+    position: fixed; inset: 0; background: rgba(20,20,20,.94); z-index: 999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px 18px; gap: 16px;
   }
+  .visor-overlay img { max-width: 100%; max-height: 62vh; border-radius: 10px; object-fit: contain; }
+  .visor-cerrar {
+    position: absolute; top: 18px; right: 18px; background: rgba(255,255,255,.15); color: var(--white);
+    border: none; width: 46px; height: 46px; border-radius: 50%; font-size: 20px; line-height: 1;
+  }
+  .visor-info { color: var(--white); text-align: center; max-width: 92%; font-size: 16.5px; }
+  .visor-fecha { color: rgba(255,255,255,.62); font-size: 14.5px; margin-top: 4px; }
+  .visor-acciones { display: flex; gap: 12px; }
+  .visor-compartir { background: var(--gold); color: var(--white); border: none; padding: 14px 28px; border-radius: 100px; font-weight: 700; font-size: 17px; }
+  .visor-borrar { background: rgba(255,255,255,.12); color: var(--white); border: 1.5px solid rgba(255,255,255,.35); padding: 14px 24px; border-radius: 100px; font-weight: 600; font-size: 16px; }
   /* Subir foto directo desde /pacientes (ver el pedido, 2026-08-13) — mismo patrón de
      compresión en <canvas> que /mobilephotouploaderodfrancovinzon, mismos endpoints. */
   .fotos-input-label {
@@ -630,6 +648,18 @@
     <div class="panel-msg hidden" id="fotos-upload-msg"></div>
     <div class="fotos-grid" id="fotos-grid" style="margin-top:16px;"></div>
     <p class="hint hidden" id="fotos-vacio" style="text-align:center; padding: 20px 0;">Todavía no hay fotos subidas.</p>
+  </div>
+</div>
+<div class="visor-overlay hidden" id="visor-overlay">
+  <button class="visor-cerrar" id="visor-cerrar" aria-label="Cerrar">✕</button>
+  <img id="visor-img" alt="">
+  <div class="visor-info">
+    <div id="visor-desc"></div>
+    <div class="visor-fecha" id="visor-fecha"></div>
+  </div>
+  <div class="visor-acciones">
+    <button class="visor-borrar" id="visor-borrar">🗑 Borrar</button>
+    <button class="visor-compartir" id="visor-compartir">📤 Compartir</button>
   </div>
 </div>
 <div class="confirm-overlay hidden" id="confirm-overlay">
@@ -1777,6 +1807,8 @@
     await cargarFotosFicha();
   });
 
+  let fotosFichaActuales = [];
+
   async function cargarFotosFicha() {
     const grid = document.getElementById('fotos-grid');
     const vacio = document.getElementById('fotos-vacio');
@@ -1785,25 +1817,88 @@
     try {
       const r = await fetch(`/api/gestion/pacientes?modo=fotos&id=${fichaActual.id}`);
       const fotos = await r.json();
+      fotosFichaActuales = fotos;
       vacio.classList.toggle('hidden', fotos.length > 0);
-      grid.innerHTML = fotos.map((f) => `
-        <div class="foto-item">
+      grid.innerHTML = fotos.map((f, i) => `
+        <div class="foto-item" data-idx="${i}">
           <img src="/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}" alt="" loading="lazy">
-          <button type="button" class="foto-borrar" data-foto-id="${f.id}" title="Borrar foto">✕</button>
           ${f.descripcion ? `<div class="desc">${escapeHtml(f.descripcion)}</div>` : ''}
           <div class="fecha">${new Date(f.fecha).toLocaleDateString('es-AR')}</div>
         </div>
       `).join('');
-      grid.querySelectorAll('.foto-borrar').forEach((btn) => {
-        btn.addEventListener('click', () => borrarFotoFicha(btn.dataset.fotoId));
+      grid.querySelectorAll('.foto-item').forEach((el) => {
+        el.addEventListener('click', () => abrirVisorFoto(fotosFichaActuales[parseInt(el.dataset.idx, 10)]));
       });
     } catch {
       grid.innerHTML = '<p class="hint">No se pudieron cargar las fotos.</p>';
     }
   }
 
-  async function borrarFotoFicha(fotoId) {
-    if (!confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+  // ---------- Visor de foto a pantalla completa (ver el pedido, 2026-08-20) — mismo
+  // patrón que /mobilephotouploaderodfrancovinzon, para que sea consistente entre las
+  // dos superficies desde donde se ven las fotos de una ficha. ----------
+  const visorOverlay = document.getElementById('visor-overlay');
+  const visorImg = document.getElementById('visor-img');
+  const visorDesc = document.getElementById('visor-desc');
+  const visorFecha = document.getElementById('visor-fecha');
+
+  function abrirVisorFoto(f) {
+    if (!f) return;
+    const url = `/api/gestion/pacientes?modo=foto-imagen&fotoId=${f.id}`;
+    const fechaTexto = new Date(f.fecha).toLocaleDateString('es-AR');
+    visorImg.src = url;
+    visorDesc.textContent = f.descripcion || '';
+    visorFecha.textContent = fechaTexto;
+    visorOverlay.dataset.url = url;
+    visorOverlay.dataset.fotoId = f.id;
+    const nombreCompleto = fichaActual ? `${fichaActual.campos.nombre} ${fichaActual.campos.apellido}`.trim() : '';
+    visorOverlay.dataset.compartirTexto = `${nombreCompleto} — ${fechaTexto}` + (f.descripcion ? `\n${f.descripcion}` : '');
+    visorOverlay.classList.remove('hidden');
+  }
+  function cerrarVisorFoto() {
+    visorOverlay.classList.add('hidden');
+    visorImg.src = '';
+  }
+  document.getElementById('visor-cerrar').addEventListener('click', cerrarVisorFoto);
+  visorOverlay.addEventListener('click', (e) => { if (e.target === visorOverlay) cerrarVisorFoto(); });
+
+  document.getElementById('visor-compartir').addEventListener('click', async () => {
+    const url = visorOverlay.dataset.url;
+    if (!url) return;
+    const textoCompartir = visorOverlay.dataset.compartirTexto || 'Foto de paciente';
+    try {
+      if (navigator.canShare) {
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const file = new File([blob], 'foto-paciente.jpg', { type: blob.type || 'image/jpeg' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], text: textoCompartir });
+          return;
+        }
+      }
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ text: textoCompartir, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${textoCompartir}\n${location.origin}${url}`);
+      toast('Link copiado ✓');
+    } catch (err) {
+      // AbortError = cerró el panel de compartir sin elegir nada, no es un error real
+    }
+  });
+
+  document.getElementById('visor-borrar').addEventListener('click', async () => {
+    const fotoId = visorOverlay.dataset.fotoId;
+    if (!fotoId) return;
+    const ok = await confirmDialog({
+      title: 'Borrar foto',
+      message: 'Esta foto se borra para siempre. ¿Confirmás?',
+      confirmLabel: 'Borrar',
+      danger: true,
+    });
+    if (!ok) return;
+    const btn = document.getElementById('visor-borrar');
+    setBtnLoading(btn);
     try {
       const r = await fetch('/api/gestion/pacientes', {
         method: 'POST',
@@ -1811,12 +1906,19 @@
         body: JSON.stringify({ accion: 'eliminar-foto', fotoId }),
       });
       const res = await r.json();
-      if (res.success) { toast('Foto borrada'); cargarFotosFicha(); }
-      else toast(res.message || 'No se pudo borrar la foto.');
+      if (res.success) {
+        cerrarVisorFoto();
+        toast('Foto borrada');
+        cargarFotosFicha();
+      } else {
+        toast(res.message || 'No se pudo borrar la foto.');
+      }
     } catch {
       toast('No se pudo borrar la foto.');
+    } finally {
+      quitarBtnLoading(btn);
     }
-  }
+  });
 
   // Mismo patrón de compresión en <canvas> que /mobilephotouploaderodfrancovinzon —
   // nunca se sube el archivo original de la cámara tal cual (ver decisions.md).
