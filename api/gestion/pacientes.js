@@ -8,7 +8,7 @@
 // ahí mismo. Calendar (autocompletar teléfono desde turnos) sigue usando la cuenta de
 // servicio de siempre (lib/googleCalendar.js), sin cambios.
 import {
-  getPacientesSheetsClient, getPacientesDriveClient, buildAuthUrl, exchangeCodeForTokens,
+  getPacientesSheetsClient, getPacientesDriveClient, getPacientesAuthClient, buildAuthUrl, exchangeCodeForTokens,
 } from '../../lib/googleOAuthPacientes.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto, extraerTelefono,
@@ -93,6 +93,20 @@ export default async function handler(req, res) {
     // mano en este entorno) — se saca del proyecto apenas se confirma el resultado.
     if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
       return await backfillConsolidado(req, res);
+    }
+
+    // UTILITARIOS TEMPORALES DE INVESTIGACIÓN (2026-08-20, ver el pedido — caso Karen
+    // Schneider, sospecha de saldo/movimientos corrompidos). Solo lectura: no escriben
+    // nada en ninguna ficha. Sin GESTION_KEY por el mismo motivo que el backfill de
+    // arriba (no hay forma de correrlos con clave a mano en este entorno) — protegidos
+    // únicamente por el string largo del modo, mismo criterio que auditoria-integridad-h4k9
+    // (ya sacada del proyecto) usó antes para el caso Guillermo Montañana. Se sacan del
+    // proyecto apenas se confirma el resultado.
+    if (req.method === 'GET' && req.query.modo === 'investigar-historial-k9p2') {
+      return await investigarHistorial(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'auditar-saldos-k9p2') {
+      return await auditarSaldos(req, res);
     }
 
     if (req.method === 'GET') {
@@ -1355,4 +1369,210 @@ async function movimientoAnularInterno(id, fila) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
   }));
+}
+
+// ---------- Investigación 2026-08-20: recuperación de historial vía revisiones ----------
+// Caso Karen Schneider — saldo no coincidía con los movimientos esperados. Reconstruye
+// el estado de una ficha en revisiones anteriores de Drive, exportando cada revisión
+// como CSV (la ficha es un Sheet de una sola pestaña, "Hoja 1" — ver
+// lib/pacientesSheet.js — así que el CSV de la revisión trae TODO el contenido relevante
+// sin necesitar parsear xlsx/ods). Parser CSV propio porque no hay ninguna librería de
+// planillas en package.json y esto es un utilitario temporal, no vale la pena sumar una
+// dependencia nueva para esto solo.
+function parsearCSV(texto) {
+  const filas = [];
+  let fila = [];
+  let campo = '';
+  let dentroDeComillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (dentroDeComillas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; } else { dentroDeComillas = false; }
+      } else {
+        campo += c;
+      }
+    } else if (c === '"') {
+      dentroDeComillas = true;
+    } else if (c === ',') {
+      fila.push(campo); campo = '';
+    } else if (c === '\r') {
+      // se ignora, \n hace el salto de fila (maneja \r\n y \n solo)
+    } else if (c === '\n') {
+      fila.push(campo); campo = '';
+      filas.push(fila); fila = [];
+    } else {
+      campo += c;
+    }
+  }
+  if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+  return filas;
+}
+
+// Índices 0-based dentro del array de filas del CSV (fila del Sheet N -> índice N-1) —
+// ver el layout completo documentado en lib/pacientesSheet.js.
+const CSV_FILA_NOMBRE = 4; // C5
+const CSV_FILA_APELLIDO = 5; // C6
+const CSV_FILA_DNI = 6; // C7
+const CSV_FILA_SALDO = 7; // F8 (fila 8, columna F)
+const CSV_COL_SALDO = 5;
+const CSV_FILA_MOV_INICIO = 17; // fila 18 en adelante
+const CSV_COL_FECHA = 1;
+const CSV_COL_TRATAMIENTO = 2;
+const CSV_COL_DEBE = 3;
+const CSV_COL_HABER = 4;
+const CSV_COL_SALDO_FILA = 5;
+const CSV_COL_FORMA_PAGO = 7;
+
+function movimientosDesdeFilasCSV(filas) {
+  return filas.slice(CSV_FILA_MOV_INICIO)
+    .map((row, i) => ({
+      fila: 18 + i,
+      fecha: row[CSV_COL_FECHA] || '',
+      tratamiento: row[CSV_COL_TRATAMIENTO] || '',
+      debe: row[CSV_COL_DEBE] || '',
+      haber: row[CSV_COL_HABER] || '',
+      saldoFormula: row[CSV_COL_SALDO_FILA] || '',
+      formaPago: row[CSV_COL_FORMA_PAGO] || '',
+    }))
+    .filter((m) => m.fecha || m.tratamiento || m.debe || m.haber);
+}
+
+async function exportarRevisionComoCSV(authClient, drive, fileId, revisionId) {
+  const { data: revDetalle } = await conReintentos(() => drive.revisions.get({
+    fileId, revisionId, fields: 'exportLinks',
+  }));
+  const csvUrl = revDetalle.exportLinks && revDetalle.exportLinks['text/csv'];
+  if (!csvUrl) return { error: 'sin exportLinks (revisión sin contenido exportable)' };
+  const { token } = await authClient.getAccessToken();
+  const resp = await fetch(csvUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!resp.ok) return { error: `export respondió ${resp.status}` };
+  const texto = await resp.text();
+  return { filas: parsearCSV(texto) };
+}
+
+// GET ?modo=investigar-historial-k9p2&nombre=... — busca ficha(s) por nombre (mismo
+// criterio normalizarTexto que el resto del proyecto), lista TODAS sus revisiones de
+// Drive, y reconstruye nombre/dni/saldo/movimientos de cada una de las últimas N (evita
+// pegarle a la API de Drive cientos de veces si una ficha tiene un historial enorme de
+// revisiones). Devuelve también el estado actual para comparar.
+async function investigarHistorial(req, res) {
+  const nombreQuery = normalizarTexto(req.query.nombre || '');
+  if (!nombreQuery) return res.status(400).json({ error: 'Falta nombre.' });
+
+  const drive = getPacientesDriveClient();
+  const sheets = getPacientesSheetsClient();
+  const authClient = getPacientesAuthClient();
+
+  const archivos = await listarArchivosPacientes(drive);
+  const candidatos = archivos.filter((f) => normalizarTexto(f.name).includes(nombreQuery));
+  if (!candidatos.length) return res.status(404).json({ error: 'No se encontró ninguna ficha con ese nombre.', buscado: req.query.nombre });
+
+  const MAX_REVISIONES_A_ANALIZAR = Number(req.query.max) || 40;
+  const resultado = [];
+
+  for (const archivo of candidatos) {
+    const id = archivo.id;
+    const [campos, financiero, movRaw] = await Promise.all([
+      conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!C5:C7` })),
+      conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!E6:F11` })),
+      conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rangoMovimientos() })),
+    ]);
+    const [nombre = '', apellido = '', dni = ''] = (campos.data.values || []).map((r) => r[0] || '');
+    const saldoActual = financiero.data.values?.[2]?.[1] || '';
+    const movimientosActuales = (movRaw.data.values || [])
+      .map((row, i) => ({ fila: 18 + i, fecha: row[0] || '', tratamiento: row[1] || '', debe: row[2] || '', haber: row[3] || '' }))
+      .filter((m) => m.fecha || m.tratamiento || m.debe || m.haber);
+
+    const entrada = { id, nombreArchivo: archivo.name, nombre, apellido, dni, saldoActual, movimientosActuales };
+
+    try {
+      const { data } = await conReintentos(() => drive.revisions.list({
+        fileId: id,
+        fields: 'revisions(id, modifiedTime, lastModifyingUser(displayName, emailAddress), size)',
+        pageSize: 1000,
+      }));
+      const revisiones = data.revisions || [];
+      entrada.totalRevisiones = revisiones.length;
+      const aAnalizar = revisiones.slice(-MAX_REVISIONES_A_ANALIZAR);
+      entrada.revisionesAnalizadas = aAnalizar.length;
+      entrada.snapshots = [];
+      for (const rev of aAnalizar) {
+        const exportado = await exportarRevisionComoCSV(authClient, drive, id, rev.id);
+        if (exportado.error) {
+          entrada.snapshots.push({ revisionId: rev.id, modifiedTime: rev.modifiedTime, error: exportado.error });
+          continue;
+        }
+        const { filas } = exportado;
+        entrada.snapshots.push({
+          revisionId: rev.id,
+          modifiedTime: rev.modifiedTime,
+          autor: rev.lastModifyingUser?.displayName || rev.lastModifyingUser?.emailAddress || '',
+          nombre: filas[CSV_FILA_NOMBRE]?.[2] || '',
+          apellido: filas[CSV_FILA_APELLIDO]?.[2] || '',
+          saldo: filas[CSV_FILA_SALDO]?.[CSV_COL_SALDO] || '',
+          movimientos: movimientosDesdeFilasCSV(filas),
+        });
+      }
+    } catch (err) {
+      entrada.errorRevisiones = err.message;
+    }
+
+    resultado.push(entrada);
+  }
+
+  res.status(200).json({ resultado });
+}
+
+// GET ?modo=auditar-saldos-k9p2 — audita TODAS las fichas: compara el saldo que
+// muestra la fórmula de la planilla contra la suma real (Debe-Haber) de los
+// movimientos vivos (no anulados) leídos por la app. Un desfasaje acá es la señal más
+// directa de datos corrompidos/duplicados — no depende de revisiones de Drive, es sobre
+// el estado ACTUAL de cada ficha.
+function parsearMontoArgentinoLocal(texto) {
+  const limpio = String(texto || '').replace(/[^\d,.-]/g, '');
+  const sinMiles = limpio.replace(/\./g, '');
+  return parseFloat(sinMiles.replace(',', '.')) || 0;
+}
+
+async function auditarSaldos(req, res) {
+  const drive = getPacientesDriveClient();
+  const sheets = getPacientesSheetsClient();
+  const archivos = await listarArchivosPacientes(drive);
+
+  const sospechosos = [];
+  const errores = [];
+  for (const archivo of archivos) {
+    try {
+      const [financiero, movRaw] = await Promise.all([
+        conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: `${SHEET_NAME}!E6:F11` })),
+        conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: rangoMovimientos() })),
+      ]);
+      const saldoTexto = financiero.data.values?.[2]?.[1] || '';
+      const saldoFormula = parsearMontoArgentinoLocal(saldoTexto);
+
+      const movimientos = (movRaw.data.values || [])
+        .map((row) => ({ tratamiento: row[1] || '', debe: row[2], haber: row[3] }))
+        .filter((m) => !/^\[ANULADO\]/.test(m.tratamiento));
+      const sumaDebe = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.debe), 0);
+      const sumaHaber = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.haber), 0);
+      const saldoCalculado = sumaDebe - sumaHaber;
+
+      // Margen de $1 por redondeo de parseo, no por tolerancia real al error.
+      if (Math.abs(saldoFormula - saldoCalculado) > 1) {
+        sospechosos.push({
+          id: archivo.id,
+          nombreArchivo: archivo.name,
+          saldoFormula,
+          saldoCalculado,
+          diferencia: saldoFormula - saldoCalculado,
+          cantidadMovimientos: movimientos.length,
+        });
+      }
+    } catch (err) {
+      errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: err.message });
+    }
+  }
+
+  res.status(200).json({ archivosRevisados: archivos.length, sospechosos, errores });
 }
