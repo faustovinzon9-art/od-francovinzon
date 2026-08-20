@@ -140,6 +140,29 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && req.body.accion === 'receta-recibir-shortcut') {
       return await recibirRecetaShortcut(req, res);
     }
+    // DIAGNÓSTICO TEMPORAL (2026-08-20) — el QR de firma electrónica no se está leyendo
+    // en producción (funciona local); esto expone el error real de
+    // extraerUrlFirmaElectronica en vez de tragárselo. Se saca apenas se confirma la causa.
+    if (req.method === 'POST' && req.body.accion === 'receta-debug-qr-k3j9') {
+      try {
+        const buffer = Buffer.from(String(req.body.pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+        const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const { createCanvas } = await import('@napi-rs/canvas');
+        const jsQR = (await import('jsqr')).default;
+        const data = new Uint8Array(buffer);
+        const doc = await getDocument({ data, isEvalSupported: false }).promise;
+        const page = await doc.getPage(1);
+        const viewport = page.getViewport({ scale: 3 });
+        const canvas = createCanvas(viewport.width, viewport.height);
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const qr = jsQR(imageData.data, imageData.width, imageData.height);
+        return res.status(200).json({ ok: true, qr: qr ? qr.data : null });
+      } catch (err) {
+        return res.status(200).json({ ok: false, error: err.message, stack: err.stack });
+      }
+    }
 
     if (req.method === 'POST') {
       if (!claveValida(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
