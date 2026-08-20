@@ -94,9 +94,6 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
       return await backfillConsolidado(req, res);
     }
-    if (req.method === 'GET' && req.query.modo === 'test-traba-seguridad-p3k7') {
-      return await testTrabaSeguridad(req, res);
-    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -1407,29 +1404,5 @@ async function movimientoAnularInterno(id, fila) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
   }));
-}
-
-// TEST TEMPORAL DE UN SOLO USO (2026-08-20, ver el pedido) — prueba confirmarFilaLibre()
-// contra datos reales de Google Sheets (no solo simulados en JS puro): fila 22 de Karen
-// Schneider tiene datos de verdad (la restauración de este mismo día) y fila 23 está
-// realmente vacía. Solo lectura, no escribe nada. Se saca del proyecto apenas se
-// confirma el resultado.
-async function testTrabaSeguridad(req, res) {
-  const sheets = getPacientesSheetsClient();
-  const id = '1lxYxHb7adKLs5wHojydbTfAyxQB2FlfN93csmXKl_iA'; // Karen Schneider
-  const resultado = {};
-  try {
-    await confirmarFilaLibre(sheets, id, 22, false);
-    resultado.fila22 = 'NO BLOQUEÓ (mal — la fila 22 tiene datos reales)';
-  } catch (err) {
-    resultado.fila22 = `Bloqueado correctamente: ${err.message}`;
-  }
-  try {
-    await confirmarFilaLibre(sheets, id, 23, false);
-    resultado.fila23 = 'OK, no bloqueó (la fila 23 está realmente vacía)';
-  } catch (err) {
-    resultado.fila23 = `NO DEBERÍA HABER BLOQUEADO: ${err.message}`;
-  }
-  res.status(200).json(resultado);
 }
 
