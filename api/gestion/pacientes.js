@@ -1535,43 +1535,58 @@ function parsearMontoArgentinoLocal(texto) {
   return parseFloat(sinMiles.replace(',', '.')) || 0;
 }
 
+// Lotes de 8 en paralelo en vez de secuencial — con varias decenas/cientos de fichas,
+// secuencial se pasa del maxDuration de la función (ver vercel.json), confirmado en
+// producción el 2026-08-20 (FUNCTION_INVOCATION_TIMEOUT). 8 a la vez es un compromiso
+// entre velocidad y no pegarle demasiado fuerte a la cuota de la API de Sheets/Drive.
+async function auditarFicha(archivo, sheets) {
+  const [financiero, movRaw] = await Promise.all([
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: `${SHEET_NAME}!E6:F11` })),
+    conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: rangoMovimientos() })),
+  ]);
+  const saldoTexto = financiero.data.values?.[2]?.[1] || '';
+  const saldoFormula = parsearMontoArgentinoLocal(saldoTexto);
+
+  const movimientos = (movRaw.data.values || [])
+    .map((row) => ({ tratamiento: row[1] || '', debe: row[2], haber: row[3] }))
+    .filter((m) => !/^\[ANULADO\]/.test(m.tratamiento));
+  const sumaDebe = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.debe), 0);
+  const sumaHaber = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.haber), 0);
+  const saldoCalculado = sumaDebe - sumaHaber;
+
+  // Margen de $1 por redondeo de parseo, no por tolerancia real al error.
+  if (Math.abs(saldoFormula - saldoCalculado) > 1) {
+    return {
+      id: archivo.id,
+      nombreArchivo: archivo.name,
+      saldoFormula,
+      saldoCalculado,
+      diferencia: saldoFormula - saldoCalculado,
+      cantidadMovimientos: movimientos.length,
+    };
+  }
+  return null;
+}
+
 async function auditarSaldos(req, res) {
   const drive = getPacientesDriveClient();
   const sheets = getPacientesSheetsClient();
   const archivos = await listarArchivosPacientes(drive);
 
+  const TAMANO_LOTE = 8;
   const sospechosos = [];
   const errores = [];
-  for (const archivo of archivos) {
-    try {
-      const [financiero, movRaw] = await Promise.all([
-        conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: `${SHEET_NAME}!E6:F11` })),
-        conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: archivo.id, range: rangoMovimientos() })),
-      ]);
-      const saldoTexto = financiero.data.values?.[2]?.[1] || '';
-      const saldoFormula = parsearMontoArgentinoLocal(saldoTexto);
-
-      const movimientos = (movRaw.data.values || [])
-        .map((row) => ({ tratamiento: row[1] || '', debe: row[2], haber: row[3] }))
-        .filter((m) => !/^\[ANULADO\]/.test(m.tratamiento));
-      const sumaDebe = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.debe), 0);
-      const sumaHaber = movimientos.reduce((acc, m) => acc + parsearMontoArgentinoLocal(m.haber), 0);
-      const saldoCalculado = sumaDebe - sumaHaber;
-
-      // Margen de $1 por redondeo de parseo, no por tolerancia real al error.
-      if (Math.abs(saldoFormula - saldoCalculado) > 1) {
-        sospechosos.push({
-          id: archivo.id,
-          nombreArchivo: archivo.name,
-          saldoFormula,
-          saldoCalculado,
-          diferencia: saldoFormula - saldoCalculado,
-          cantidadMovimientos: movimientos.length,
-        });
+  for (let i = 0; i < archivos.length; i += TAMANO_LOTE) {
+    const lote = archivos.slice(i, i + TAMANO_LOTE);
+    const resultados = await Promise.allSettled(lote.map((archivo) => auditarFicha(archivo, sheets)));
+    resultados.forEach((r, idx) => {
+      const archivo = lote[idx];
+      if (r.status === 'fulfilled') {
+        if (r.value) sospechosos.push(r.value);
+      } else {
+        errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: r.reason?.message || String(r.reason) });
       }
-    } catch (err) {
-      errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: err.message });
-    }
+    });
   }
 
   res.status(200).json({ archivosRevisados: archivos.length, sospechosos, errores });

@@ -12,6 +12,7 @@
     }
   ],
   "functions": {
-    "api/gestion/admin.js": { "maxDuration": 300 }
+    "api/gestion/admin.js": { "maxDuration": 300 },
+    "api/gestion/pacientes.js": { "maxDuration": 300 }
   }
 }
