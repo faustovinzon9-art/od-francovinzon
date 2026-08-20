@@ -2195,9 +2195,8 @@
     document.getElementById('receta-profesional-matricula').value = receta.profesional?.matricula || '';
     document.getElementById('receta-profesional-profesion').value = receta.profesional?.profesion || '';
 
-    (camposFaltantes || []).forEach((c) => marcarCampo(`campo-${c}`, true));
     ['fechaReceta', 'cuir', 'profesional.nombre', 'profesional.matricula'].forEach((c) => {
-      if (!(camposFaltantes || []).includes(c)) marcarCampo(`campo-${c.replace('.', '-')}`, false);
+      marcarCampo(`campo-${c.replace('.', '-')}`, (camposFaltantes || []).includes(c));
     });
 
     recetaMedContainer.innerHTML = '';
