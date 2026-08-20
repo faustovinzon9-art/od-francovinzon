@@ -121,6 +121,9 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && req.body.accion === 'test-parse-pdf-r8w1') {
       return await testParsePdf(req, res);
     }
+    if (req.method === 'POST' && req.body.accion === 'test-ocr-pdf-r8w1') {
+      return await testOcrPdf(req, res);
+    }
 
     if (req.method === 'POST') {
       if (!claveValida(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -1424,6 +1427,37 @@ async function testParsePdf(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json({ error: err.message, stack: err.stack });
+  }
+}
+
+// DIAGNÓSTICO TEMPORAL (2026-08-20) — el PDF de MisRX no tiene texto extraíble estándar
+// (confirmado con testParsePdf: pdf-parse encuentra las 2 páginas pero ~0 texto real).
+// Prueba el OCR nativo de Google Drive en su lugar: subir el PDF convirtiéndolo a Google
+// Doc (mimeType application/vnd.google-apps.document + ocrLanguage) hace que Drive le
+// corra OCR solo — reusa el mismo cliente OAuth ya autorizado para todo /pacientes, sin
+// sumar una librería de OCR pesada a la función serverless. Borra los archivos
+// temporales de Drive apenas termina, no deja rastro.
+async function testOcrPdf(req, res) {
+  const { pdfBase64 } = req.body;
+  if (!pdfBase64) return res.status(400).json({ error: 'Falta pdfBase64.' });
+  const drive = getPacientesDriveClient();
+  let docId;
+  try {
+    const buffer = Buffer.from(String(pdfBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+    const creado = await conReintentos(() => drive.files.create({
+      requestBody: { name: `__test-ocr-temp-${Date.now()}`, mimeType: 'application/vnd.google-apps.document' },
+      media: { mimeType: 'application/pdf', body: bufferToStream(buffer) },
+      ocrLanguage: 'es',
+      fields: 'id',
+    }));
+    docId = creado.data.id;
+    const exportado = await conReintentos(() => drive.files.export({ fileId: docId, mimeType: 'text/plain' }, { responseType: 'text' }));
+    res.status(200).json({ text: exportado.data });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ error: err.message, stack: err.stack });
+  } finally {
+    if (docId) { try { await drive.files.delete({ fileId: docId }); } catch { /* limpieza best-effort */ } }
   }
 }
 
