@@ -1620,9 +1620,15 @@ async function auditarFilaSinFecha(archivo, sheets) {
 async function auditarFilasSinFecha(req, res) {
   const drive = getPacientesDriveClient();
   const sheets = getPacientesSheetsClient();
-  const archivos = await listarArchivosPacientes(drive);
+  let archivos = await listarArchivosPacientes(drive);
+  // ?ids=id1,id2,... — para reintentar solo los archivos que dieron error de cuota en
+  // una pasada anterior, sin tener que releer los 236 de nuevo.
+  if (req.query.ids) {
+    const idsSet = new Set(String(req.query.ids).split(','));
+    archivos = archivos.filter((a) => idsSet.has(a.id));
+  }
 
-  const TAMANO_LOTE = 4;
+  const TAMANO_LOTE = 3;
   const sospechosos = [];
   const errores = [];
   for (let i = 0; i < archivos.length; i += TAMANO_LOTE) {
@@ -1636,7 +1642,7 @@ async function auditarFilasSinFecha(req, res) {
         errores.push({ id: archivo.id, nombreArchivo: archivo.name, error: r.reason?.message || String(r.reason) });
       }
     });
-    if (i + TAMANO_LOTE < archivos.length) await esperar(600);
+    if (i + TAMANO_LOTE < archivos.length) await esperar(1200);
   }
 
   res.status(200).json({ archivosRevisados: archivos.length, sospechosos, errores });
