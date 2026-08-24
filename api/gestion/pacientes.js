@@ -439,7 +439,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE_FICHAS = 3; // chico + pausa larga + backoff: la cuota de LECTURA compartida se saturaba (429), ver 2026-08-24
+    const LOTE_FICHAS = 2; // igual espaciado que el de migracion (que si completo): ~500 lecturas de rangos grandes distribuidas en ~4min, bajo el limite por minuto (2026-08-24)
     const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
     let fichasConFantasma = 0;
     let filasPrestaciones = 0;
@@ -484,7 +484,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           }
         }
       }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 500)); // espaciado amplio: cuota de lectura compartida con el tráfico real (2026-08-24)
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 1500)); // espaciado maximo, mismo que el de migracion: distribuir ~500 lecturas en ~4min
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
