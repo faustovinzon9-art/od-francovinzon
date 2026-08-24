@@ -373,18 +373,18 @@ async function migrarFechaNacimientoUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE = 5; // chico a propósito: 25 en paralelo excedían la cuota de Google (429) en el primer dry-run real (107 errores de 246 fichas, 2026-08-24)
+    const LOTE = 3; // chico + pausa larga + backoff de reintentos: la cuota de LECTURA de Google (~600/min por usuario, compartida con el tráfico real) se saturaba con lotes grandes — primer dry-run real: 107-116 errores, todos "Quota exceeded Read requests" (2026-08-24)
     let migradas = 0;
     let yaCanonicas = 0;
     let ilegibles = 0;
     let errores = 0;
-    const erroresDetalle = {}; // mensaje -> cantidad (diagnóstico del primer dry-run: 107-116 errores, ver 2026-08-24)
+    const erroresDetalle = {}; // mensaje -> cantidad
 
     for (let i = 0; i < archivos.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
         try {
-          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }));
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }), { esperaBaseMs: 1500 });
           const actual = data.values?.[0]?.[0];
           const normalizada = normalizarFechaNacimientoTexto(actual);
           if (normalizada == null) return { estado: actual ? 'ilegible' : 'vacia' };
@@ -395,7 +395,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
               range: `${SHEET_NAME}!C8`,
               valueInputOption: 'RAW', // texto crudo, igual que el fix de CAMPOS_TEXTO_CRUDO
               requestBody: { values: [[normalizada]] },
-            }));
+            }), { esperaBaseMs: 1500 });
           }
           return { estado: 'migrada', de: String(actual).trim(), a: normalizada };
         } catch (err) {
@@ -411,7 +411,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
         else if (r.estado === 'ilegible') ilegibles++;
         else if (r.estado === 'error') errores++;
       });
-      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 300)); // cuota de Google (más espaciado que el primer intento, 2026-08-24)
+      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 500)); // espaciado amplio: cuota de lectura compartida con el tráfico real
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores, erroresDetalle });
@@ -439,7 +439,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE_FICHAS = 5; // chico a propósito (2 lecturas por ficha en paralelo): el paralelismo alto excede la cuota de Google (429), ver 2026-08-24
+    const LOTE_FICHAS = 3; // chico + pausa larga + backoff: la cuota de LECTURA compartida se saturaba (429), ver 2026-08-24
     const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
     let fichasConFantasma = 0;
     let filasPrestaciones = 0;
@@ -453,8 +453,8 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           const rangesPrestaciones = [];
           const rangesMovimientos = [];
           const [pres, mov] = await Promise.all([
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoPrestacionesObraSocial() })),
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoMovimientos() })),
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoPrestacionesObraSocial() }), { esperaBaseMs: 1500 }),
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoMovimientos() }), { esperaBaseMs: 1500 }),
           ]);
           (pres.data.values || []).forEach((row, idx) => {
             if (esFilaFantasma(row)) rangesPrestaciones.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO + idx}:M${MOVIMIENTOS_FILA_INICIO + idx}`);
@@ -484,7 +484,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           }
         }
       }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 300)); // cuota de Google (más espaciado que el primer intento, 2026-08-24)
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 500)); // espaciado amplio: cuota de lectura compartida con el tráfico real (2026-08-24)
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
