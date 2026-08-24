@@ -89,7 +89,7 @@ Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el ar
 - `api/gestion/pacientes.js` tiene dos modos temporales autenticados con `CRON_SECRET` (header `Authorization: Bearer <secret>`, mismo patrón que `healthcheck`), **dry-run por default** (`&dryRun=0` para escribir de verdad):
   - `?modo=migrar-fecha-nacimiento-una-vez` — normaliza las C8 existentes que quedaron como serial de fecha a texto `DD/MM/AAAA` (el fix del 2026-08-24 cubre datos nuevos; esto normaliza los viejos).
   - `?modo=limpiar-filas-fantasma-una-vez` — limpia filas fantasma (strings `'FALSE'/'TRUE'` de validación de casilla mal aplicada) de prestaciones y movimientos con `values.batchClear` (no toca formato ni datos reales).
-- También sigue `?modo=backfill-consolidado-q7m3` (2026-08-14, SIN clave, público) — retenido hasta confirmar que la planilla "Pacientes consolidados (no tocar)" está poblada; se saca apenas se confirme.
+- (El `?modo=backfill-consolidado-q7m3` de 2026-08-14 ya se dio de baja el 2026-08-24 — la planilla "Pacientes consolidados" está poblada por los upserts normales. Ver `changelog.md`.)
 - **Regla:** correrlos (dry-run primero), confirmar el resultado y **sacarlos del código** con un commit de baja. No agregar features nuevas ahí.
 
 ## Deploy: cosas a tener en cuenta
