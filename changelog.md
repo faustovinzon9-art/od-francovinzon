@@ -2,6 +2,18 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Fix de los 2 problemas reportados por la secretaria (fecha de nacimiento + alta de prestaciones)
+
+Rama `fix/fecha-nacimiento-y-prestaciones`.
+
+**1. Mes de nacimiento que "aparece borrado"** — causa raíz doble:
+- El backend guardaba `fechaNacimiento` con `valueInputOption: USER_ENTERED` → Sheets la convertía a serial de fecha (la celda C8 tiene formato de fecha) y al releerla devolvía un formato variable sin pad (`7/7/2026`). El `<select>` de mes del frontend usa opciones `01`..`12` con cero a la izquierda, así que `fnMes.value = "7"` no matcheaba ninguna opción y el mes quedaba en blanco ("aparecía borrado").
+- Fix: `fechaNacimiento` pasa a `CAMPOS_TEXTO_CRUDO` (se guarda como texto crudo `DD/MM/AAAA`, igual que teléfono/nº de afiliado — ninguna fórmula depende de que sea fecha), y `renderFicha()` normaliza el mes con pad (`String(Number(m)).padStart(2,'0')`) al rellenar el select, así también las fichas viejas que ya quedaron como fecha se muestran bien.
+
+**2. Error "La fila 2001 ya tiene datos cargados" al agregar prestaciones** — causa raíz: la contaminación documentada de `'FALSE'/'TRUE'` (string) que deja la validación de casilla aplicada por error a columnas de texto hacía que `primeraFilaLibre()` no encontrara ninguna fila "vacía" en el rango J18:M2000 (exige las 4 columnas vacías) y devolviera `18 + filas.length = 2001`, una fila FUERA del rango. La traba de seguridad (`confirmarFilaLibre`) al releer J2001:M2001 encontraba contaminación y tiraba el error — el alta quedaba bloqueado para siempre en esas fichas.
+- Fix: nuevo `esCeldaConDatoReal()` en `lib/pacientesSheet.js` (criterio único de "celda con dato real": descarta vacío, checkbox desmarcado `false` y los strings `'FALSE'/'TRUE'` de contaminación) usado por `primeraFilaLibre()` y `confirmarFilaLibre()` — la contaminación ya no se cuenta como datos y las filas fantasma se reutilizan (escribir sobre ellas es seguro, no son datos reales). `primeraFilaLibre()` ahora devuelve `null` si no hay fila libre dentro del rango (nunca 2001), y `confirmarFilaLibre()` valida que la fila esté dentro de 18..2000 con mensaje claro. Aplica también a movimientos (mismo patrón).
+- Verificado con test aislado de `primeraFilaLibre` (8 casos, todos PASS) y `node --check` de los archivos tocados. Falta probar en el preview de Vercel / producción real contra Sheets (sin credenciales en este entorno).
+
 ## 2026-08-13 (decimocuarta vuelta) — Panel /admin completo
 
 Corrida de punta a punta sin pausas, a pedido explícito del usuario (rama `feature/panel-admin`).

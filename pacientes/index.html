@@ -1517,7 +1517,12 @@
     if (document.activeElement !== fnDia && document.activeElement !== fnMes && document.activeElement !== fnAnio) {
       const [d, m, a] = (c.fechaNacimiento || '').split('/');
       fnDia.value = d || '';
-      fnMes.value = m || '';
+      // Las opciones del select usan "01".."12" con cero a la izquierda, pero Sheets
+      // puede devolver el mes sin pad ("7/7/2026" cuando la celda C8 quedó como fecha
+      // en vez de texto — ver CAMPOS_TEXTO_CRUDO en api/gestion/pacientes.js). Sin
+      // normalizar, "7" no matchea ninguna opción y el mes "aparece borrado" en el
+      // select (bug reportado por la secretaria, 2026-08-24).
+      fnMes.value = m ? String(Number(m)).padStart(2, '0') : '';
       fnAnio.value = a || '';
     }
 

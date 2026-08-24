@@ -17,7 +17,9 @@ import {
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
-  rangoPrestacionesObraSocial, primeraFilaLibre, nombreArchivo, parsearNombreArchivo,
+  rangoPrestacionesObraSocial, primeraFilaLibre, esCeldaConDatoReal,
+  MOVIMIENTOS_FILA_INICIO, MOVIMIENTOS_FILA_FIN,
+  nombreArchivo, parsearNombreArchivo,
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas, aTituloCase,
   MAPEO_TELEFONO_FICHA_NAME, normalizarTelefonoMapeo,
 } from '../../lib/pacientesSheet.js';
@@ -906,11 +908,15 @@ async function actualizarCampo(req, res) {
   }
 }
 
-// RAW para teléfono y nº de afiliado: con USER_ENTERED, Sheets los interpretaría como
-// número y se comería un 0 inicial (ej. un fijo con característica "011"). No hay
-// ninguna fórmula que dependa de que estas dos celdas sean numéricas, así que no hace
-// falta el parseo — se guardan tal cual se tipearon.
-const CAMPOS_TEXTO_CRUDO = new Set(['telefono', 'nAfiliado']);
+// RAW para teléfono, nº de afiliado y fecha de nacimiento: con USER_ENTERED, Sheets los
+// interpretaría y convertiría — se comería un 0 inicial (ej. un fijo con característica
+// "011") o convertiría la fecha a serial de fecha (la celda C8 tiene formato de fecha en
+// la plantilla), y al releerla devolvería un formato variable tipo "7/7/2026" sin pad,
+// que el select de mes del frontend no podía rellenar (bug "el mes de nacimiento
+// aparece borrado", reportado el 2026-08-24 — ver pacientes/index.html, renderFicha).
+// No hay ninguna fórmula que dependa de que estas celdas sean numéricas/fecha, así que
+// se guardan tal cual se tipearon.
+const CAMPOS_TEXTO_CRUDO = new Set(['telefono', 'nAfiliado', 'fechaNacimiento']);
 
 async function escribirCampoEnSheet(id, campo, valor) {
   const sheets = getPacientesSheetsClient();
@@ -950,13 +956,23 @@ async function escribirCampoEnSheet(id, campo, valor) {
 // Pensada como red de seguridad genérica ante CUALQUIER futuro bug de lógica parecido a
 // éste — no asume que la única causa posible sea primeraFilaLibre(). Quien llama a esto
 // NO debe reintentar ciegamente contra la misma fila: repetiría el mismo pisado.
+//
+// 2026-08-24: "vacía" ahora se decide con esCeldaConDatoReal() (mismo criterio que
+// primeraFilaLibre en lib/pacientesSheet.js), para que la contaminación 'FALSE'/'TRUE'
+// string de la validación de casilla mal aplicada no se interprete como datos cargados
+// (bug "La fila 2001 ya tiene datos cargados"). Además valida que la fila esté DENTRO
+// del rango permitido (18..2000) — una fila fuera de rango nunca es una fila válida para
+// escribir, sin importar lo que contenga.
 async function confirmarFilaLibre(sheets, id, fila, esPrestacion) {
+  if (!Number.isInteger(fila) || fila < MOVIMIENTOS_FILA_INICIO || fila > MOVIMIENTOS_FILA_FIN) {
+    throw new Error('No hay filas libres dentro del rango de la ficha. Avisale a Fausto para revisar la ficha.');
+  }
   const rango = esPrestacion ? `${SHEET_NAME}!J${fila}:M${fila}` : `${SHEET_NAME}!B${fila}:E${fila}`;
   const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: rango }));
   const [col1, col2, col3, col4] = (data.values && data.values[0]) || [];
-  const vacia = !String(col1 || '').trim() && !String(col2 || '').trim() && !col3 && !col4;
+  const vacia = !esCeldaConDatoReal(col1) && !esCeldaConDatoReal(col2) && !esCeldaConDatoReal(col3) && !esCeldaConDatoReal(col4);
   if (!vacia) {
-    throw new Error(`La fila ${fila} ya tiene datos cargados — no se puede agregar ahí sin pisarlos. Esto no debería pasar nunca; avisale a Fausto.`);
+    throw new Error(`La fila ${fila} tiene datos cargados y no se puede sobrescribir. Avisale a Fausto para revisar la ficha.`);
   }
 }
 
