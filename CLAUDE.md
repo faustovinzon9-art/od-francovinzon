@@ -15,7 +15,7 @@ Sitio del consultorio: home pública (`/`), reserva de turnos para pacientes (`/
 
 Sitio **estático** (HTML/CSS/JS plano, sin build, sin framework) + **Vercel Serverless Functions** (Node.js, `googleapis`) para todo lo que necesita hablar con Google Calendar. **No usa Next.js** — cuidado con asumir convenciones de Next (App Router, `app/api/.../route.js`, etc.); las funciones son simplemente archivos `.js` bajo `api/` con `export default function handler(req, res)`, convención zero-config de Vercel.
 
-No hay `middleware.js` ni `vercel.json` en el proyecto (se probaron y se sacaron en su momento — ver `decisions.md`).
+No hay `middleware.js` ni Next.js. **Sí hay `vercel.json`** (actualizado 2026-08-24 — los docs viejos decían que no): define el cron de salud diario (`0 7 * * *` → `/api/gestion/pacientes?modo=healthcheck`), el rewrite del link corto (`/t/:codigo` → `/api/reservar?codigo=:codigo`), `maxDuration: 300` para `admin.js` y `pacientes.js`, e `includeFiles` del worker de `pdfjs-dist`.
 
 ### Por qué no hay Apps Script ni iframes
 
@@ -51,7 +51,7 @@ Solo nombres, nunca valores en el código ni en estos docs:
 - `GOOGLE_CLIENT_EMAIL` — email de la cuenta de servicio.
 - `GOOGLE_PRIVATE_KEY` — clave privada de la cuenta de servicio (con `\n` escapados; se des-escapan en `getCalendarClient()`).
 - `GESTION_KEY` — clave de acceso al panel `/gestion` (la usa Ayelen). Se manda como `key` en cada request a `/api/gestion/*`, nunca queda logueada en el cliente salvo `sessionStorage`.
-- `GEMINI_API_KEY` — clave de la API de Gemini, usada solo server-side por `api/gestion/asistente.js` (asistente de ayuda del panel). Nunca se expone al frontend.
+- `GEMINI_API_KEY` — clave de la API de Gemini. **En desuso desde 2026-08-13**: los únicos consumidores (`api/chat.js` chatbot público y `api/gestion/asistente.js` asistente de `/gestion`) fueron **eliminados** en el commit "Mega batch" — hoy ningún código usa Gemini. Se puede conservar por si se retoma el chatbot, pero no la lee nadie.
 - `RESEND_API_KEY` — opcional. Clave de la API de Resend, usada solo por `lib/alertas.js` (`avisarFallo()`) para mandar un email a Fausto cuando algo falla de verdad después de agotar los reintentos automáticos (`lib/retry.js`). Sin esta variable, `avisarFallo()` no hace más que un `console.error` — nunca tira, nunca rompe el endpoint que la llama.
 - `CRON_SECRET` — necesaria para que el chequeo de salud diario (`vercel.json`, `modo=healthcheck` en `api/gestion/pacientes.js`, 4:00 AM hora Argentina) funcione. Vercel manda automáticamente `Authorization: Bearer <valor>` en cada invocación de cron cuando esta variable está seteada — sin ella, el endpoint devuelve 401 y el cron nunca hace nada útil (no rompe nada, solo queda inactivo). Se genera un valor random cualquiera, no depende de ningún servicio externo.
 - `ADMIN_KEY` — nueva (2026-08-13). Clave de acceso al panel `/admin`, separada de `GESTION_KEY` — solo Fausto la tiene, Ayelen no ve `/admin`. Ver `lib/adminAuth.js`. Sin esta variable seteada, `/admin` rechaza cualquier clave (fail-closed, no hay acceso "por accidente").
@@ -61,12 +61,11 @@ Solo nombres, nunca valores en el código ni en estos docs:
 
 **Esto ya rompió un deploy entero una vez** (ver `changelog.md` 2026-08-05, "Fusionar rutas..."). El plan gratuito de Vercel permite **como máximo 12 Serverless Functions por deployment** — si se supera, **el build entero falla** (no solo la función de más) y producción se queda pegada en el último deploy bueno, sin ningún aviso claro salvo mirar el dashboard.
 
-**Antes de agregar un archivo nuevo bajo `api/`**, contar cuántos hay y cuántos quedan libres. Si hace falta una ruta nueva y no hay margen, **fusionar en un archivo existente usando un campo `accion`/`modo` en el body o query** en vez de crear un archivo — patrón ya usado en `bloqueo-dia.js`, `evento.js` y `buscar.js` (ver `architecture.md`).
+**Antes de agregar un archivo nuevo bajo `api/`**, contar cuántos hay y cuántos quedan libres. Si hace falta una ruta nueva y no hay margen, **fusionar en un archivo existente usando un campo `accion`/`modo`/`recurso` en el body o query** en vez de crear un archivo — patrón ya usado en `disponibilidad.js`, `bloqueos.js`, `evento.js`, `buscar.js`, `pacientes.js` y `admin.js` (ver `architecture.md`).
 
-Archivos actuales bajo `api/` (**12 de 12 — sin margen, el próximo endpoint nuevo requiere fusionar con uno existente**; esta lista se desactualizó en algún momento sin que nadie la corrigiera — la de abajo se verificó contra el `api/` real el 2026-08-13, confiar siempre en el filesystem antes que en este bloque):
+Archivos actuales bajo `api/` (**11 de 12 — queda 1 de margen**; lista verificada contra el filesystem el 2026-08-24 — confiar siempre en el filesystem antes que en este bloque):
 
 ```
-api/chat.js
 api/disponibilidad.js
 api/reservar.js
 api/gestion/turnos-dia.js
@@ -75,12 +74,14 @@ api/gestion/bloqueos.js
 api/gestion/evento.js
 api/gestion/buscar.js
 api/gestion/agregar-telefono.js
-api/gestion/asistente.js
+api/gestion/agregar-dni.js
 api/gestion/pacientes.js
 api/gestion/admin.js
 ```
 
-`api/disponibilidad.js` fusiona lo que antes eran `disponibilidad-mes.js` + `horarios-dia.js` (sin `modo` = mes, `?modo=dia` = horarios de un día). `api/gestion/bloqueos.js` fusiona lo que antes eran `bloqueo-dia.js` + `bloquear-horario.js` (2026-08-13, liberó el cupo para `api/gestion/admin.js` — panel `/admin`, ver más abajo y `architecture.md`).
+`api/disponibilidad.js` fusiona lo que antes eran `disponibilidad-mes.js` + `horarios-dia.js` (sin `modo` = mes, `?modo=dia` = horarios de un día, `?modo=estado` = interruptor de reserva online). `api/gestion/bloqueos.js` fusiona lo que antes eran `bloqueo-dia.js` + `bloquear-horario.js` (2026-08-13). `api/gestion/buscar.js` incluye además `?modo=proximo-bloqueo` (lo que antes era un archivo propio). `api/gestion/agregar-dni.js` es nuevo (2026-08-14, no figuraba en versiones viejas de este doc).
+
+**Ojo (2026-08-24): los docs viejos mencionan `api/chat.js` y `api/gestion/asistente.js` — fueron BORRADOS el 2026-08-13.** El chatbot público y el asistente IA de `/gestion` ya no existen; `architecture.md` todavía tiene secciones que los describen — no guiarse por esas secciones.
 
 Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el archivo, correrlo, **sacarlo del proyecto y hacer commit de la baja** ni bien confirma el resultado (patrón ya usado dos veces — limpieza de títulos viejos y rescate de teléfonos sueltos).
 
