@@ -411,7 +411,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
         else if (r.estado === 'ilegible') ilegibles++;
         else if (r.estado === 'error') errores++;
       });
-      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 500)); // espaciado amplio: cuota de lectura compartida con el tráfico real
+      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 1500)); // espaciado maximo: distribuir 246 lecturas en ~4min (bajo el limite de 600/min)
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores, erroresDetalle });
