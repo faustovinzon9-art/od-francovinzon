@@ -2,6 +2,10 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Baja definitiva del backfill de consolidados (planilla confirmada poblada)
+
+Fausto confirmó que la planilla "Pacientes consolidados (no tocar)" está poblada (por los upserts normales de turnos/fichas). Se eliminó del código (commit `b7817fd`): el modo público `backfill-consolidado-q7m3`, la función `backfillConsolidado()` y `reemplazarTodasLasFilas()` (solo la usaba el backfill). Verificado: módulo carga OK, 0 referencias restantes, en producción el modo ya no existe (401). Quedan los 2 utilitarios de migración (auth `CRON_SECRET`, dry-run) pendientes de correr.
+
 ## 2026-08-24 — INCIDENTE detectado y resuelto: módulo de pacientes caído en producción
 
 - **Síntoma**: `FUNCTION_INVOCATION_FAILED` (500) en TODO `api/gestion/pacientes.js` — fichas, fotos y recetas caídas (las páginas estáticas seguían en 200, por eso pasó desapercibido hasta probar la API).
