@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Limpieza de filas fantasma EN EJECUCIÓN (utilitario `limpiar-filas-fantasma-una-vez`)
+
+Con el consultorio cerrado y cuota libre se diagnosticó y ejecutó la limpieza:
+- **La contaminación es masiva**: primera tanda real (20 fichas) limpió **5.998 filas fantasma de prestaciones** (strings 'FALSE' de la validación de casilla mal aplicada). El barrido completo (246 fichas) corre por tandas de 15 con pausa de 75s (la cuota de ESCRITURA de Google, ~60 writes/min, se satura si se limpian muchas filas de golpe — primera tanda real devolvió 500 "Write requests quota exceeded" en la tanda siguiente).
+- El utilitario se ajustó para la corrida real: rangos acotados a las primeras 500 filas (leer hasta la 2000 excedía el maxDuration), parámetros `?maxFichas=` y `?offset=` para correr en tandas sucesivas.
+- **Pendiente al cierre de esta entrada**: verificar con dry-run que todas las tandas quedaron en 0 filas fantasma, re-correr la migración de fechas (las ~5 que faltaron por cuota), y **sacar ambos utilitarios del código** (regla del proyecto).
+
 ## 2026-08-24 — Migración de fechas de nacimiento EJECUTADA (utilitario `migrar-fecha-nacimiento-una-vez`)
 
 Corrida real contra producción con `CRON_SECRET` (que Fausto configuró en Vercel). Resultado: de 246 fichas, **~214 quedaron con la fecha en formato canónico `DD/MM/AAAA`** (la mayoría en la primera corrida, las últimas 9 en una segunda), 1 ilegible (no matchea el patrón — no se toca), y ~5 fallaron por **cuota de lectura de Google** ("Quota exceeded Read requests per minute per user" — compartida con el tráfico real en horario de atención). El utilitario quedó ajustado para cuota (lotes de 2, pausa 1.5s, backoff de reintentos 1500ms) y sigue en el código para re-correr los pendientes cuando la cuota esté libre (fuera del horario de atención).
