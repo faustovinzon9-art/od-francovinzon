@@ -457,19 +457,35 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
       const lote = aProcesar.slice(i, i + LOTE_FICHAS);
       const resultados = await Promise.all(lote.map(async (f) => {
         try {
-          const rangesPrestaciones = [];
-          const rangesMovimientos = [];
+          let rangesPrestaciones = [];
+          let rangesMovimientos = [];
+          const clearsCompletos = [];
           const [pres, mov] = await Promise.all([
             conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO}:M${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
             conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO}:E${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
           ]);
+          let filasRealesP = 0;
+          let filasRealesM = 0;
           (pres.data.values || []).forEach((row, idx) => {
             if (esFilaFantasma(row)) rangesPrestaciones.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO + idx}:M${MOVIMIENTOS_FILA_INICIO + idx}`);
+            else if (row.some((celda) => esCeldaConDatoReal(celda))) filasRealesP++;
           });
           (mov.data.values || []).forEach((row, idx) => {
             if (esFilaFantasma(row)) rangesMovimientos.push(`${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO + idx}:E${MOVIMIENTOS_FILA_INICIO + idx}`);
+            else if (row.some((celda) => esCeldaConDatoReal(celda))) filasRealesM++;
           });
-          return { id: f.id, ranges: [...rangesPrestaciones, ...rangesMovimientos], filasP: rangesPrestaciones.length, filasM: rangesMovimientos.length };
+          // Bloque 100% fantasma (ninguna fila real): limpiarlo entero con 1 sola llamada
+          // values.clear en vez de cientos de batchClear — las tandas masivas agotaban la
+          // cuota de escritura (~60 writes/min) y fallaban (2026-08-24).
+          if (filasRealesP === 0 && rangesPrestaciones.length > 20) {
+            clearsCompletos.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO}:M${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}`);
+            rangesPrestaciones = [];
+          }
+          if (filasRealesM === 0 && rangesMovimientos.length > 20) {
+            clearsCompletos.push(`${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO}:E${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}`);
+            rangesMovimientos = [];
+          }
+          return { id: f.id, ranges: [...rangesPrestaciones, ...rangesMovimientos], clearsCompletos, filasP: rangesPrestaciones.length, filasM: rangesMovimientos.length };
         } catch (err) {
           console.warn(`[pacientes.js] limpiar filas fantasma: no se pudo leer ${f.name}:`, err?.message || err);
           return { id: f.id, ranges: [], filasP: 0, filasM: 0, error: true };
@@ -483,6 +499,10 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
         filasPrestaciones += r.filasP;
         filasMovimientos += r.filasM;
         if (!dryRun) {
+          // clears completos primero (1 llamada por bloque masivo), después los puntuales
+          for (const rango of r.clearsCompletos) {
+            await conReintentos(() => sheets.spreadsheets.values.clear({ spreadsheetId: r.id, range: rango }), { esperaBaseMs: 1500 });
+          }
           for (let j = 0; j < r.ranges.length; j += LOTE_RANGES) {
             await conReintentos(() => sheets.spreadsheets.values.batchClear({
               spreadsheetId: r.id,
