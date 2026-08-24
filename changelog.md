@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Limpieza profesional y actualización de docs (rama `chore/limpieza-y-docs`)
+
+- Sacado `getSheetsClient()`/`getDriveClient()` de `lib/googleCalendar.js` — clientes de cuenta de servicio sin ningún call site (el módulo de Pacientes usa los clientes OAuth de `lib/googleOAuthPacientes.js`).
+- Sacado `reemplazarTodasLasFilas()` de `lib/pacientesConsolidados.js` — solo lo usaba el backfill.
+- **El backfill `modo=backfill-consolidado-q7m3` se mantiene por ahora** (ver decisión con Fausto, 2026-08-24): no se confirma si llegó a correrse; se saca apenas se verifique la planilla "Pacientes consolidados (no tocar)" o se corra una vez más.
+- Docs actualizados: `CLAUDE.md` y `architecture.md` ya no dicen que no existe `vercel.json` (sí existe: cron de salud + rewrite `/t/:codigo` + `maxDuration` + `includeFiles`), lista real de `api/` (11 de 12, incluye `agregar-dni.js`), `GEMINI_API_KEY` marcada en desuso, y las secciones del chatbot (`api/chat.js`) y asistente IA (`asistente.js`) — ambos ELIMINADOS el 2026-08-13 — quedaron marcadas como obsoletas en `architecture.md`.
+
 ## 2026-08-24 — Fix de los 2 problemas reportados por la secretaria (fecha de nacimiento + alta de prestaciones)
 
 Rama `fix/fecha-nacimiento-y-prestaciones`.
