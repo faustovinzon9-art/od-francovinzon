@@ -1,5 +1,5 @@
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, FERIADO_ATENDIDO_MARKER,
   toArgDate, eventBounds, isValidGestionKey, extraerTelefono, extraerEsNuevoPaciente,
   extraerTelefonoVerificado, extraerConfirmado, extraerDni, extraerCodigoCorto,
 } from '../../lib/googleCalendar.js';
@@ -38,6 +38,10 @@ export default async function handler(req, res) {
     (principal.data.items || []).forEach((ev) => {
       const { start, end } = eventBounds(ev);
       const allDay = !ev.start.dateTime;
+      // El marcador de "feriado que se atiende" (feature 2026-08-24) no es un bloqueo ni
+      // un turno: su estado ya lo informa el badge de feriado de la cabecera — si entrara
+      // acá se vería como una fila "Feriado atendido" tipo bloqueo, que confunde.
+      if (allDay && (ev.description || '').includes(FERIADO_ATENDIDO_MARKER)) return;
       const isBloqueo = allDay || (ev.description || '').includes(BLOCK_MARKER);
       items.push({
         id: ev.id,
