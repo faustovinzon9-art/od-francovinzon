@@ -1247,6 +1247,29 @@ async function escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, ha
   }));
 }
 
+// Lógica compartida de anulación: relee la fila y, si todavía no está anulada, la marca
+// "[ANULADO] ..." (conservando los montos originales en el texto) y pone Debe/Haber en 0
+// para que deje de afectar el saldo (las fórmulas de Saldo se recalculan solas, ver
+// pacientesSheet.js). Devuelve true si anuló, false si ya estaba anulada (no toca nada).
+// La usan movimientoAnular (handler, con respaldo de emergencia) y movimientoAnularInterno
+// (recuperación de respaldos, el llamador maneja el error) — refactor 2026-08-24 para no
+// duplicar el cuerpo en los dos.
+async function anularMovimientoEnSheet(sheets, id, fila) {
+  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({
+    spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}`,
+  }));
+  const [fecha = '', tratamiento = '', debe = 0, haber = 0] = (data.values && data.values[0]) || [];
+  if (/^\[ANULADO\]/.test(tratamiento)) return false; // ya estaba anulado, no hace nada
+  const nuevoTexto = `[ANULADO] ${tratamiento} (era: Debe $${debe || 0} / Haber $${haber || 0})`;
+  await conReintentos(() => sheets.spreadsheets.values.update({
+    spreadsheetId: id,
+    range: `${SHEET_NAME}!B${fila}:E${fila}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
+  }));
+  return true;
+}
+
 // Nunca se borra un movimiento físicamente: se marca "[ANULADO]" en el texto (con los
 // montos originales, para no perder el dato) y se ponen Debe/Haber en 0 para que deje de
 // afectar el saldo (las fórmulas de Saldo sí se recalculan solas, ver pacientesSheet.js).
@@ -1256,20 +1279,7 @@ async function movimientoAnular(req, res) {
 
   try {
     const sheets = getPacientesSheetsClient();
-    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({
-      spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}`,
-    }));
-    const [fecha = '', tratamiento = '', debe = 0, haber = 0] = (data.values && data.values[0]) || [];
-    if (/^\[ANULADO\]/.test(tratamiento)) {
-      return res.status(200).json({ success: true }); // ya estaba anulado, no hace nada
-    }
-    const nuevoTexto = `[ANULADO] ${tratamiento} (era: Debe $${debe || 0} / Haber $${haber || 0})`;
-    await conReintentos(() => sheets.spreadsheets.values.update({
-      spreadsheetId: id,
-      range: `${SHEET_NAME}!B${fila}:E${fila}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
-    }));
+    await anularMovimientoEnSheet(sheets, id, fila);
     res.status(200).json({ success: true });
   } catch (err) {
     console.error(err);
@@ -1592,16 +1602,7 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
 
 async function movimientoAnularInterno(id, fila) {
   const sheets = getPacientesSheetsClient();
-  const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${SHEET_NAME}!B${fila}:E${fila}` }));
-  const [fecha = '', tratamiento = '', debe = 0, haber = 0] = (data.values || [[]])[0];
-  if (/^\[ANULADO\]/.test(tratamiento)) return;
-  const nuevoTexto = `[ANULADO] ${tratamiento} (era: Debe $${debe || 0} / Haber $${haber || 0})`;
-  await conReintentos(() => sheets.spreadsheets.values.update({
-    spreadsheetId: id,
-    range: `${SHEET_NAME}!B${fila}:E${fila}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[fecha, nuevoTexto, 0, 0]] },
-  }));
+  await anularMovimientoEnSheet(sheets, id, fila);
 }
 
 // ---------- Recetas (capa de presentación sobre una receta ya emitida en MisRX/RCTA,
