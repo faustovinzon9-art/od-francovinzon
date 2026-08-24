@@ -319,9 +319,9 @@ Queda uno de los dos del pedido original de 8 puntos — el resto ya está hecho
 - Incluye todos los tipos de feriado de la API (inamovibles, trasladables, puentes, no laborables). `/turnos` no cambió: los feriados se manejan bloqueando el día, como ya hacía el sistema.
 - **Falta verificar en vivo** (lo hace Ayelen/Franco): que el badge aparezca en un día feriado real, que Sí/No funcionen y que la tarea desaparezca después de decidir.
 
-### 7. Apple Liquid Glass (sutil) en las 3 páginas
-Efecto visual tipo "Liquid Glass" de Apple (blur/translucidez tinted según el color de cada botón), muy sutil, manteniendo la paleta actual (navy/dorado/crema). Afecta `index.html`, `turnos/index.html` y `gestion/index.html`. **Distinto de lo ya hecho el 2026-08-06 (cuarta vuelta)**: ese pase fue microinteracciones (hover/active/focus, transiciones, toasts) — no toca el look de blur/vidrio esmerilado que pide específicamente este ítem. Bajo riesgo de romper funcionalidad, pero hay que aplicarlo con cuidado para que "se note sutil" y no termine viéndose como un efecto exagerado.
+### 7. ✅ Apple Liquid Glass (sutil) en las 3 páginas — IMPLEMENTADO (2026-08-24, commit `62ba268`)
+Vidrio esmerilado con tinte crema de la paleta en las tarjetas principales: `.card` y `.ig-card` (home, `styles.css`), `.card` (turnos — calendario/horarios/formulario) y `.agenda`/`.panel`/`.sidebar` (gestion). `backdrop-filter: blur(8px) saturate(1.2)` con prefijo `-webkit` (Safari), envuelto en `@supports` — navegadores viejos quedan con el fondo sólido de siempre. No toca el `@media print` del ticket ni la impresión. Decisión acordada con Fausto: las 3 páginas, intensidad sutil. **Falta la verificación visual** (que se vea bien y no exagerado en desktop y celular).
 
 ## Nota sobre alcance
 
-El ítem 4 ya se implementó con el acuerdo previo del usuario (2026-08-24). El ítem 7 (Liquid Glass) sigue pendiente de la decisión de alcance e intensidad.
+Los ítems 4 y 7 del pedido del 2026-08-06 ya se implementaron con el acuerdo previo del usuario (2026-08-24).

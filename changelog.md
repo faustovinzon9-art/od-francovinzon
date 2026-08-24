@@ -2,7 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Feature: Apple Liquid Glass sutil en las 3 páginas (pedido del 2026-08-06, ítem 7)
+
+Rama `feature/liquid-glass`, mergeada a `main` (commit `62ba268`). Detalle en `tasks.md`.
+
+- Vidrio esmerilado sutil (`backdrop-filter: blur(8px) saturate(1.2)` con tinte crema `rgba(250,249,246,...)`) en las tarjetas principales: `.card`/`.ig-card` (home, `styles.css`), `.card` (turnos: calendario/horarios/formulario), `.agenda`/`.panel`/`.sidebar` (gestion).
+- Envuelto en `@supports` con prefijo `-webkit` (Safari): navegadores sin soporte quedan con el fondo sólido de siempre. No toca el `@media print` del ticket.
+- Decisión acordada con Fausto: las 3 páginas, intensidad sutil. Falta la verificación visual (desktop + celular).
+
 ## 2026-08-24 — Feature: feriados argentinos en /gestion (pedido del 2026-08-06, ítem 4)
+
 
 Rama `feature/feriados-argentinos`, mergeada a `main` (commit `9505f7c`). Detalle en `tasks.md`.
 
