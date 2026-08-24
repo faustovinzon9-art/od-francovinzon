@@ -441,6 +441,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     const archivos = await listarArchivosPacientes(drive);
     const LOTE_FICHAS = 2; // igual espaciado que el de migracion (que si completo): ~500 lecturas de rangos grandes distribuidas en ~4min, bajo el limite por minuto (2026-08-24)
     const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
+    const LIMPIEZA_MAX_FILAS = 500; // barrido acotado a las primeras 500 filas: leer los rangos completos (hasta la 2000) hace cada request pesado y la corrida excede el maxDuration (300s). Las filas fantasma reales de un consultorio viven en las primeras decenas de filas; y las de más abajo ya no bloquean nada (fix esCeldaConDatoReal, 2026-08-24).
     let fichasConFantasma = 0;
     let filasPrestaciones = 0;
     let filasMovimientos = 0;
@@ -453,8 +454,8 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           const rangesPrestaciones = [];
           const rangesMovimientos = [];
           const [pres, mov] = await Promise.all([
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoPrestacionesObraSocial() }), { esperaBaseMs: 1500 }),
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoMovimientos() }), { esperaBaseMs: 1500 }),
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO}:M${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO}:E${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
           ]);
           (pres.data.values || []).forEach((row, idx) => {
             if (esFilaFantasma(row)) rangesPrestaciones.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO + idx}:M${MOVIMIENTOS_FILA_INICIO + idx}`);
@@ -484,7 +485,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           }
         }
       }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 1500)); // espaciado maximo, mismo que el de migracion: distribuir ~500 lecturas en ~4min
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 1000)); // espaciado: ~500 lecturas de rangos acotados (500 filas) en ~3min
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
