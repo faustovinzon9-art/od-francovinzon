@@ -2,7 +2,14 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Migración de fechas de nacimiento EJECUTADA (utilitario `migrar-fecha-nacimiento-una-vez`)
+
+Corrida real contra producción con `CRON_SECRET` (que Fausto configuró en Vercel). Resultado: de 246 fichas, **~214 quedaron con la fecha en formato canónico `DD/MM/AAAA`** (la mayoría en la primera corrida, las últimas 9 en una segunda), 1 ilegible (no matchea el patrón — no se toca), y ~5 fallaron por **cuota de lectura de Google** ("Quota exceeded Read requests per minute per user" — compartida con el tráfico real en horario de atención). El utilitario quedó ajustado para cuota (lotes de 2, pausa 1.5s, backoff de reintentos 1500ms) y sigue en el código para re-correr los pendientes cuando la cuota esté libre (fuera del horario de atención).
+
+**Pendiente:** re-correr `limpiar-filas-fantasma-una-vez` (dry-run → real) en un momento de baja actividad — la cuota saturada impidió completar la corrida en horario de atención (2 intentos, sin respuesta). Después se sacan ambos utilitarios del código (regla del proyecto).
+
 ## 2026-08-24 — Feature: Apple Liquid Glass sutil en las 3 páginas (pedido del 2026-08-06, ítem 7)
+
 
 Rama `feature/liquid-glass`, mergeada a `main` (commit `62ba268`). Detalle en `tasks.md`.
 
