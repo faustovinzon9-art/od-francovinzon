@@ -425,6 +425,20 @@
     #ticket-print img { filter: grayscale(1) contrast(1000%) !important; }
     @page { size: 58mm auto; margin: 2mm; }
   }
+
+  /* Apple Liquid Glass sutil (feature 2026-08-24): vidrio esmerilado con tinte crema de
+     la paleta en la agenda, los paneles y el sidebar. Solo si el navegador soporta
+     backdrop-filter (@supports) — si no, queda el fondo sólido de siempre. No afecta el
+     @media print del ticket. */
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .agenda,
+    .panel,
+    .sidebar {
+      background: rgba(250, 249, 246, 0.78);
+      -webkit-backdrop-filter: blur(8px) saturate(1.2);
+      backdrop-filter: blur(8px) saturate(1.2);
+    }
+  }
 </style>
 </head>
 <body>

@@ -233,6 +233,17 @@
   .confirm-actions .btn-danger { background: #C14437; color: var(--white); }
   .confirm-actions button:hover { filter: brightness(1.06); }
   .calendar-choice-actions { display: flex; flex-direction: column; gap: 9px; margin-bottom: 10px; }
+
+/* Apple Liquid Glass sutil (feature 2026-08-24): vidrio esmerilado con tinte crema de
+   la paleta en las tarjetas (calendario, horarios, formulario). Solo si el navegador
+   soporta backdrop-filter (@supports) — si no, queda el fondo sólido de siempre. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card {
+    background: rgba(250, 249, 246, 0.75);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+    backdrop-filter: blur(8px) saturate(1.2);
+  }
+}
 </style>
 </head>
 <body>

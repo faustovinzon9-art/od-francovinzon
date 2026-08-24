@@ -331,3 +331,15 @@ h1, h2, h3 {
   .footer-buttons { justify-content: center; }
   .footer-note { margin-top: 28px; }
 }
+
+/* Apple Liquid Glass sutil (feature 2026-08-24): vidrio esmerilado con tinte crema de
+   la paleta en las tarjetas principales. Solo si el navegador soporta backdrop-filter
+   (@supports) — si no, queda el fondo sólido de siempre. No afecta impresión. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card,
+  .ig-card {
+    background: rgba(250, 249, 246, 0.72);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+    backdrop-filter: blur(8px) saturate(1.2);
+  }
+}
