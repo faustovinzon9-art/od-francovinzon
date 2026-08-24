@@ -378,6 +378,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
     let yaCanonicas = 0;
     let ilegibles = 0;
     let errores = 0;
+    const erroresDetalle = {}; // mensaje -> cantidad (diagnóstico del primer dry-run: 107-116 errores, ver 2026-08-24)
 
     for (let i = 0; i < archivos.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
@@ -399,6 +400,8 @@ async function migrarFechaNacimientoUnaVez(req, res) {
           return { estado: 'migrada', de: String(actual).trim(), a: normalizada };
         } catch (err) {
           console.warn(`[pacientes.js] migrar fecha: no se pudo leer/escribir ${f.name}:`, err?.message || err);
+          const msg = String(err?.message || err).slice(0, 100);
+          erroresDetalle[msg] = (erroresDetalle[msg] || 0) + 1;
           return { estado: 'error' };
         }
       }));
@@ -411,7 +414,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
       if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 300)); // cuota de Google (más espaciado que el primer intento, 2026-08-24)
     }
 
-    res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores });
+    res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores, erroresDetalle });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err?.message || String(err) });
