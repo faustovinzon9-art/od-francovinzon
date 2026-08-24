@@ -17,7 +17,8 @@ import {
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
-  rangoPrestacionesObraSocial, primeraFilaLibre, esCeldaConDatoReal,
+  rangoPrestacionesObraSocial, primeraFilaLibre, esCeldaConDatoReal, esFilaFantasma,
+  normalizarFechaNacimientoTexto,
   MOVIMIENTOS_FILA_INICIO, MOVIMIENTOS_FILA_FIN,
   nombreArchivo, parsearNombreArchivo,
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas, aTituloCase,
@@ -111,6 +112,17 @@ export default async function handler(req, res) {
     // mano en este entorno) — se saca del proyecto apenas se confirma el resultado.
     if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
       return await backfillConsolidado(req, res);
+    }
+
+    // UTILITARIOS TEMPORALES DE MIGRACIÓN (2026-08-24) — autenticados con CRON_SECRET
+    // (mismo patrón que healthcheck), dryRun por default. Se agregan, se corren contra
+    // producción con `?dryRun=0` cuando corresponda, y se sacan del proyecto apenas se
+    // confirma el resultado (regla de CLAUDE.md).
+    if (req.method === 'GET' && req.query.modo === 'migrar-fecha-nacimiento-una-vez') {
+      return await migrarFechaNacimientoUnaVez(req, res);
+    }
+    if (req.method === 'GET' && req.query.modo === 'limpiar-filas-fantasma-una-vez') {
+      return await limpiarFilasFantasmaUnaVez(req, res);
     }
 
     if (req.method === 'GET') {
@@ -431,6 +443,141 @@ async function backfillConsolidado(req, res) {
     const totalEscrito = await reemplazarTodasLasFilas([...porTelefono.values()]);
 
     res.status(200).json({ totalFichas, turnosAgregados, totalEscrito, fichasFallidas, archivosRevisados: archivos.length, eventosRevisados: eventos.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
+  }
+}
+
+// ---------- UTILITARIO TEMPORAL: migrar fechas de nacimiento a texto (2026-08-24) ----------
+// El fix del 2026-08-24 (CAMPOS_TEXTO_CRUDO) ya hace que las fechas NUEVAS se guarden
+// como texto "DD/MM/AAAA". Esto normaliza las fichas EXISTENTES que quedaron como serial
+// de fecha (la lectura las devuelve sin pad, ej. "7/7/2026"): reescribe C8 con
+// normalizarFechaNacimientoTexto() usando RAW, solo si matchea el patrón D/M/AAAA.
+// DryRun por default (?dryRun=0 para escribir). Se saca del proyecto apenas se confirma.
+async function migrarFechaNacimientoUnaVez(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const dryRun = req.query.dryRun !== '0';
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+    const LOTE = 25;
+    let migradas = 0;
+    let yaCanonicas = 0;
+    let ilegibles = 0;
+    let errores = 0;
+
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }));
+          const actual = data.values?.[0]?.[0];
+          const normalizada = normalizarFechaNacimientoTexto(actual);
+          if (normalizada == null) return { estado: actual ? 'ilegible' : 'vacia' };
+          if (String(actual).trim() === normalizada) return { estado: 'canonica' };
+          if (!dryRun) {
+            await conReintentos(() => sheets.spreadsheets.values.update({
+              spreadsheetId: f.id,
+              range: `${SHEET_NAME}!C8`,
+              valueInputOption: 'RAW', // texto crudo, igual que el fix de CAMPOS_TEXTO_CRUDO
+              requestBody: { values: [[normalizada]] },
+            }));
+          }
+          return { estado: 'migrada', de: String(actual).trim(), a: normalizada };
+        } catch (err) {
+          console.warn(`[pacientes.js] migrar fecha: no se pudo leer/escribir ${f.name}:`, err?.message || err);
+          return { estado: 'error' };
+        }
+      }));
+      resultados.forEach((r) => {
+        if (r.estado === 'migrada') migradas++;
+        else if (r.estado === 'canonica') yaCanonicas++;
+        else if (r.estado === 'ilegible') ilegibles++;
+        else if (r.estado === 'error') errores++;
+      });
+      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 150)); // cuota de Google
+    }
+
+    res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
+  }
+}
+
+// ---------- UTILITARIO TEMPORAL: limpiar filas fantasma (2026-08-24) ----------
+// Limpia de verdad las filas fantasma de prestaciones (J18:M2000) y movimientos
+// (B18:E2000): filas donde ninguna celda tiene un dato real pero hay strings 'FALSE'/
+// 'TRUE' de la validación de casilla mal aplicada (ver esFilaFantasma). Usa
+// values.batchClear (borra solo valores, nunca formato) en lotes de 100 ranges por
+// ficha. DryRun por default (?dryRun=0 para escribir). Se saca del proyecto apenas se
+// confirma el resultado (regla de CLAUDE.md).
+async function limpiarFilasFantasmaUnaVez(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const dryRun = req.query.dryRun !== '0';
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+    const LOTE_FICHAS = 25;
+    const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
+    let fichasConFantasma = 0;
+    let filasPrestaciones = 0;
+    let filasMovimientos = 0;
+    let errores = 0;
+
+    for (let i = 0; i < archivos.length; i += LOTE_FICHAS) {
+      const lote = archivos.slice(i, i + LOTE_FICHAS);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const rangesPrestaciones = [];
+          const rangesMovimientos = [];
+          const [pres, mov] = await Promise.all([
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoPrestacionesObraSocial() })),
+            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: rangoMovimientos() })),
+          ]);
+          (pres.data.values || []).forEach((row, idx) => {
+            if (esFilaFantasma(row)) rangesPrestaciones.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO + idx}:M${MOVIMIENTOS_FILA_INICIO + idx}`);
+          });
+          (mov.data.values || []).forEach((row, idx) => {
+            if (esFilaFantasma(row)) rangesMovimientos.push(`${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO + idx}:E${MOVIMIENTOS_FILA_INICIO + idx}`);
+          });
+          return { id: f.id, ranges: [...rangesPrestaciones, ...rangesMovimientos], filasP: rangesPrestaciones.length, filasM: rangesMovimientos.length };
+        } catch (err) {
+          console.warn(`[pacientes.js] limpiar filas fantasma: no se pudo leer ${f.name}:`, err?.message || err);
+          return { id: f.id, ranges: [], filasP: 0, filasM: 0, error: true };
+        }
+      }));
+
+      for (const r of resultados) {
+        if (r.error) { errores++; continue; }
+        if (!r.ranges.length) continue;
+        fichasConFantasma++;
+        filasPrestaciones += r.filasP;
+        filasMovimientos += r.filasM;
+        if (!dryRun) {
+          for (let j = 0; j < r.ranges.length; j += LOTE_RANGES) {
+            await conReintentos(() => sheets.spreadsheets.values.batchClear({
+              spreadsheetId: r.id,
+              requestBody: { ranges: r.ranges.slice(j, j + LOTE_RANGES) },
+            }));
+          }
+        }
+      }
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 150)); // cuota de Google
+    }
+
+    res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err?.message || String(err) });
