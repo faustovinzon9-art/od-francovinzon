@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — INCIDENTE detectado y resuelto: módulo de pacientes caído en producción
+
+- **Síntoma**: `FUNCTION_INVOCATION_FAILED` (500) en TODO `api/gestion/pacientes.js` — fichas, fotos y recetas caídas (las páginas estáticas seguían en 200, por eso pasó desapercibido hasta probar la API).
+- **Causa raíz**: la limpieza de código muerto sacó `reemplazarTodasLasFilas()` de `lib/pacientesConsolidados.js`, pero el "revert parcial" del backfill (decisión de mantenerlo hasta confirmar que corrió) restauró `api/gestion/pacientes.js`, que la importa → **import roto** (`does not provide an export named 'reemplazarTodasLasFilas'`) → el módulo entero no cargaba.
+- **Fix** (commit `83a7c46`, hotfix directo a `main`): restaurada `reemplazarTodasLasFilas()` con comentario documentando el incidente. Verificado en producción: `buscar-publico` 200 con datos reales, modos nuevos 401 sin clave, home 200.
+- **Lección**: al hacer "revert parcial" de un archivo, verificar que los otros archivos del mismo commit original sigan consistentes (imports rotos no se ven en `node --check` de un solo archivo — correr `node -e "import(...)"` del módulo completo antes de mergear, y probar la API real después del deploy, no solo las páginas).
+
 ## 2026-08-24 — Limpieza profesional y actualización de docs (rama `chore/limpieza-y-docs`)
 
 - Sacado `getSheetsClient()`/`getDriveClient()` de `lib/googleCalendar.js` — clientes de cuenta de servicio sin ningún call site (el módulo de Pacientes usa los clientes OAuth de `lib/googleOAuthPacientes.js`).
