@@ -306,18 +306,22 @@ Pedido explícito, con una aclaración inicial pedida por el usuario ("si no est
 - **Badge "⚠ Tel. inválido" (2026-08-06, corregido): probado con un teléfono legado válido (no se marca) y uno con formato inválido (sí se marca)** con datos simulados. No probado contra el Calendar real.
 - **Ítems 5, 6 y 8 (2026-08-06, cuarta vuelta): probados con datos simulados**, sin credenciales de Google en esta máquina — se verificaron uno por uno: generación del `.ics` (fechas UTC correctas), reprogramar y cancelar el turno recién creado desde `/turnos` (mismo `eventId` viaja correctamente en ambos casos), buscador con auto-retorno, "Nuevo turno" con la casilla "Paciente nuevo" (el badge dorado aparece después), edición de teléfono y cancelación de turno en `/gestion` sin recargar toda la agenda, diálogo de confirmación propio, toasts. **No probado contra el Calendar real en producción.** Antes de confiar 100%: reservar un turno real desde `/turnos` desplegado, probar "Cambiar día y horario" y "Cancelar turno" ahí, y confirmar en `/gestion` que un turno creado con "Paciente nuevo" tildado muestra bien el badge.
 
-## Pendiente: ítems 4 y 7 del pedido del 2026-08-06 (sin empezar)
+## Pendiente: ítem 7 del pedido del 2026-08-06 (el 4 ya se implementó)
 
-Quedan estos dos del pedido original de 8 puntos — el resto ya está hecho, ver arriba.
+Queda uno de los dos del pedido original de 8 puntos — el resto ya está hecho, ver arriba.
 
-### 4. Feriados argentinos + tarea "¿Se atiende este día?"
-Detección automática de feriados (necesita una fuente de feriados — no hay ninguna cargada todavía, evaluar una API pública gratuita o una lista fija actualizada a mano por año) + una tarea con ciclo de vida con estado (Sí → se borra; No → ofrece bloquear el día). Es la pieza más compleja de las 2 pendientes — necesita persistencia de estado de tareas en algún lado (hoy no hay ninguna base de datos ni storage propio, todo vive en eventos de Calendar; probablemente haya que "codificar" el estado de la tarea como un evento marcador en el calendario, similar a como se marcan los bloqueos con `BLOCK_MARKER`).
+### 4. ✅ Feriados argentinos + tarea "¿Se atiende este día?" — IMPLEMENTADO (2026-08-24, commit `9505f7c`)
 
-**Nota (2026-08-06):** la tarea "Mover turnos de un día bloqueado" que este ítem iba a necesitar **ya está implementada** (independiente de la detección de feriados — se generaliza a cualquier día bloqueado a mano, no solo feriados). Lo que falta acá es específicamente la detección automática de feriados y la tarea "¿Se atiende este día?" con su ciclo de vida Sí/No.
+**Hecho** con las decisiones acordadas en `propuesta-mejoras-pendientes.md`:
+- Fuente: `api.argentinadatos.com/v1/feriados/{anio}` (la MISMA API del dólar blue de `/admin`, gratis, sin key) — `lib/feriados.js` con cache 24h y fallback seguro (verificado contra la API real).
+- Badge dorado en `/gestion` bajo la barra de fecha: "🎉 <nombre>" con estado ("se atiende ✓" / "no se atiende") y botón **Quitar** para desmarcar (modo `buscar?modo=feriados` devuelve `{feriado, atendido, bloqueado}`).
+- Tarea "¿Se atiende el X? (Feriado: ...)" en el sidebar/modal (próximos 14 días sin decidir): **Sí** → marcador `FERIADO_ATENDIDO` (evento all-day, patrón `BLOCK_MARKER`, sin DB); **No** → bloquea el día completo con motivo "Feriado" (reusa `bloqueos.js`; la tarea "Reorganizar turnos" se activa sola si había turnos).
+- Incluye todos los tipos de feriado de la API (inamovibles, trasladables, puentes, no laborables). `/turnos` no cambió: los feriados se manejan bloqueando el día, como ya hacía el sistema.
+- **Falta verificar en vivo** (lo hace Ayelen/Franco): que el badge aparezca en un día feriado real, que Sí/No funcionen y que la tarea desaparezca después de decidir.
 
 ### 7. Apple Liquid Glass (sutil) en las 3 páginas
 Efecto visual tipo "Liquid Glass" de Apple (blur/translucidez tinted según el color de cada botón), muy sutil, manteniendo la paleta actual (navy/dorado/crema). Afecta `index.html`, `turnos/index.html` y `gestion/index.html`. **Distinto de lo ya hecho el 2026-08-06 (cuarta vuelta)**: ese pase fue microinteracciones (hover/active/focus, transiciones, toasts) — no toca el look de blur/vidrio esmerilado que pide específicamente este ítem. Bajo riesgo de romper funcionalidad, pero hay que aplicarlo con cuidado para que "se note sutil" y no termine viéndose como un efecto exagerado.
 
 ## Nota sobre alcance
 
-El ítem 4 no es "una tarde de trabajo" — implica decisiones de producto y de diseño técnico que vale la pena confirmar con el usuario antes de programar (fuente de feriados, ciclo de vida de la tarea). No asumir la implementación más simple sin preguntar.
+El ítem 4 ya se implementó con el acuerdo previo del usuario (2026-08-24). El ítem 7 (Liquid Glass) sigue pendiente de la decisión de alcance e intensidad.

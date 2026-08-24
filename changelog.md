@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-24 — Feature: feriados argentinos en /gestion (pedido del 2026-08-06, ítem 4)
+
+Rama `feature/feriados-argentinos`, mergeada a `main` (commit `9505f7c`). Detalle en `tasks.md`.
+
+- Fuente: `api.argentinadatos.com/v1/feriados/{anio}` — la MISMA API que ya usa `/admin` para el dólar blue (gratis, sin key). Nuevo `lib/feriados.js` (cache 24h, fallback seguro, verificado contra la API real).
+- **Badge en la agenda de `/gestion`**: bajo la barra de fecha, "🎉 <nombre>" con el estado (se atiende ✓ / no se atiende) y botón "Quitar" para desmarcar. Nuevo modo `buscar?modo=feriados` (devuelve `{feriado, atendido, bloqueado}`).
+- **Tarea "¿Se atiende este día?"** en el sidebar/modal (feriados de los próximos 14 días sin decidir): **Sí** → marcador `FERIADO_ATENDIDO` (evento all-day, patrón `BLOCK_MARKER`, sin base de datos); **No** → bloquea el día completo con motivo "Feriado" (la tarea "Reorganizar turnos" ya existente se activa sola si había turnos). Acciones `marcar-feriado-atendido`/`desmarcar-feriado-atendido` en `api/gestion/bloqueos.js` (idempotentes).
+- Incluye todos los tipos de feriado de la API (inamovibles, trasladables, puentes, no laborables). `/turnos` no cambió (los feriados se manejan bloqueando el día, como ya hacía el sistema).
+- Verificado: módulo de feriados contra la API real, sintaxis e imports OK, en producción el modo responde 401 sin clave. **Falta la verificación visual de Ayelen** (badge + Sí/No en un feriado real).
+
 ## 2026-08-24 — Baja definitiva del backfill de consolidados (planilla confirmada poblada)
 
 Fausto confirmó que la planilla "Pacientes consolidados (no tocar)" está poblada (por los upserts normales de turnos/fichas). Se eliminó del código (commit `b7817fd`): el modo público `backfill-consolidado-q7m3`, la función `backfillConsolidado()` y `reemplazarTodasLasFilas()` (solo la usaba el backfill). Verificado: módulo carga OK, 0 referencias restantes, en producción el modo ya no existe (401). Quedan los 2 utilitarios de migración (auth `CRON_SECRET`, dry-run) pendientes de correr.
