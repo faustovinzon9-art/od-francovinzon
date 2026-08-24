@@ -439,7 +439,11 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE_FICHAS = 2; // igual espaciado que el de migracion (que si completo): ~500 lecturas de rangos grandes distribuidas en ~4min, bajo el limite por minuto (2026-08-24)
+    // Tandas: ?maxFichas=N procesa solo las primeras N fichas (dry-run o real) — para no exceder
+    // el maxDuration con las ~500 lecturas de rangos; se corre en tandas hasta cubrir todo.
+    const maxFichas = req.query.maxFichas ? Math.min(parseInt(req.query.maxFichas, 10) || 0, archivos.length) : archivos.length;
+    const aProcesar = archivos.slice(0, maxFichas);
+    const LOTE_FICHAS = 4; // corrida por tandas (?maxFichas=): el tiempo total de ~500 lecturas excedia el maxDuration; en tandas de 60 fichas cada corrida responde en <2min (2026-08-24)
     const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
     const LIMPIEZA_MAX_FILAS = 500; // barrido acotado a las primeras 500 filas: leer los rangos completos (hasta la 2000) hace cada request pesado y la corrida excede el maxDuration (300s). Las filas fantasma reales de un consultorio viven en las primeras decenas de filas; y las de más abajo ya no bloquean nada (fix esCeldaConDatoReal, 2026-08-24).
     let fichasConFantasma = 0;
@@ -447,8 +451,8 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     let filasMovimientos = 0;
     let errores = 0;
 
-    for (let i = 0; i < archivos.length; i += LOTE_FICHAS) {
-      const lote = archivos.slice(i, i + LOTE_FICHAS);
+    for (let i = 0; i < aProcesar.length; i += LOTE_FICHAS) {
+      const lote = aProcesar.slice(i, i + LOTE_FICHAS);
       const resultados = await Promise.all(lote.map(async (f) => {
         try {
           const rangesPrestaciones = [];
@@ -485,10 +489,10 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           }
         }
       }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 1000)); // espaciado: ~500 lecturas de rangos acotados (500 filas) en ~3min
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 400)); // pausa corta: en tandas chicas la cuota por minuto no se satura
     }
 
-    res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
+    res.status(200).json({ dryRun, totalFichas: archivos.length, procesadas: aProcesar.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err?.message || String(err) });
