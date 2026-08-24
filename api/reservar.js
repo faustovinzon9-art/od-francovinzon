@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     const { date, time, nombre, apellido, telefono, dni, email, motivo, esNuevo } = req.body;
     const calendar = getCalendarClient();
     const { slotMinutes } = await obtenerHorariosConfig();
-    // Misma lógica que usa el chatbot para la reserva conversacional — ver lib/googleCalendar.js.
+    // Misma lógica de creación de turnos que usa el panel de /gestion — ver lib/googleCalendar.js.
     const resultado = await crearTurno(calendar, { date, time, nombre, apellido, telefono, dni, email, motivo, esNuevo, slotMinutes });
     if (resultado.success) {
       await logActividad({ tipo: 'turno_creado', detalle: `${nombre} ${apellido} — ${date} ${time}`, actor: 'paciente (/turnos)' });

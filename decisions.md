@@ -339,6 +339,19 @@ directamente, que era el objetivo. Se cambió a dos opciones:
 - **El link de "Detalles de tu turno" (`/turno?eventId=...`) ahora se manda por dos canales**: el QR del ticket térmico (como ya hacía) y, desde esta vuelta, también el mensaje de WhatsApp de recordatorio de `/gestion` — mismo link, mismo destino, un solo helper compartido (`armarLinkTurno()` en `gestion/index.html`) para no duplicar la construcción entre los dos usos.
 - **"No estoy seguro" en `/turno`**: cuarto botón, deliberadamente sin acción propia — muestra un disclaimer invitando a reprogramar (mismo flujo/calendario que "Reprogramo día y horario", no uno nuevo) más una nota + botón de WhatsApp para cuando ningún día/horario sirve. No escribe nada en el turno por sí solo.
 
+## Fecha de nacimiento: se guarda como texto, nunca como fecha (2026-08-24)
+
+- **`fechaNacimiento` se guarda SIEMPRE como texto crudo `DD/MM/AAAA`** (`CAMPOS_TEXTO_CRUDO` en `api/gestion/pacientes.js`, igual que teléfono/nº de afiliado). Con `USER_ENTERED`, Sheets convertía la fecha a serial (la celda C8 tiene formato de fecha) y al releerla devolvía un formato variable sin pad (`7/7/2026`) — el `<select>` de mes del frontend usa opciones `01`..`12`, así que el mes quedaba en blanco ("aparecía borrado", bug reportado por la secretaria). Ninguna fórmula depende de que C8 sea fecha.
+- **El frontend normaliza el mes con pad al rellenar el select** (`String(Number(m)).padStart(2, '0')` en `renderFicha()` de `pacientes/index.html`) — así las fichas que YA quedaron como serial se muestran bien sin esperar la migración.
+- **Migración de fichas existentes**: pendiente de correr (rama `chore/utilitarios-migracion`, modo `migrar-fecha-nacimiento-una-vez`, dry-run por default) — normaliza las C8 existentes a texto.
+
+## Fila libre en prestaciones/movimientos: la contaminación de casilla no es un dato (2026-08-24)
+
+- **Criterio único de "celda con dato real"**: `esCeldaConDatoReal()` en `lib/pacientesSheet.js` — descarta vacío, checkbox desmarcado (`false`) y los strings `'FALSE'/'TRUE'` que deja la validación de casilla aplicada por error a columnas de texto (contaminación documentada en `celdaTextoLimpia`). Un `true` (checkbox marcado) SÍ es un dato real.
+- **`primeraFilaLibre()` nunca devuelve una fila fuera del rango**: antes devolvía `18 + filas.length` (podía ser 2001, fuera de J18:M2000) cuando ninguna fila "parecía vacía" por la contaminación — la traba de seguridad (`confirmarFilaLibre`) entonces tiraba "La fila 2001 ya tiene datos cargados" y el alta quedaba bloqueado para siempre. Ahora devuelve `null` y los call sites muestran un mensaje claro. `confirmarFilaLibre()` además valida que la fila esté dentro de 18..2000.
+- **Las filas fantasma se pueden limpiar de verdad** con el utilitario `limpiar-filas-fantasma-una-vez` (rama `chore/utilitarios-migracion`, `values.batchClear`, dry-run por default) — solo filas sin ningún dato real y con strings `'FALSE'/'TRUE'`; nunca toca checkboxes desmarcados ni datos reales.
+- **No revertir el criterio estricto de "4 columnas sin dato real"** del fix de Karen Schneider (2026-08-20): una fila con datos reales pero fecha vacía sigue contando como ocupada. El cambio de 2026-08-24 solo agrega el filtro de contaminación encima.
+
 ## Zona horaria
 
 - **Nunca usar getters locales de `Date` para "hoy"/"ahora"** en código que corre en el navegador (afecta a cualquier visitante en otro huso horario). Siempre `Intl.DateTimeFormat` con `timeZone: 'America/Argentina/Buenos_Aires'` explícito. Ya hubo un bug real de esto, corregido — no reintroducirlo.
