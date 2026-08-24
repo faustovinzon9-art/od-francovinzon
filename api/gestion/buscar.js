@@ -1,9 +1,11 @@
 import {
-  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER,
+  getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, FERIADO_ATENDIDO_MARKER,
   eventBounds, extraerTelefono, extraerTelefonoVerificado, extraerDni, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 import { buscarPacienteConsolidadoPorNombre } from '../../lib/pacientesConsolidados.js';
+import { esFeriado } from '../../lib/feriados.js';
+import { conReintentos } from '../../lib/retry.js';
 
 const MESES_RANGO = 6;
 
@@ -27,6 +29,10 @@ export default async function handler(req, res) {
   }
   if (req.query.modo === 'proximo-bloqueo') {
     return proximoBloqueo(req, res);
+  }
+  // Feriado de un día puntual (badge en la agenda de /gestion, feature 2026-08-24).
+  if (req.query.modo === 'feriados') {
+    return feriadoDelDia(req, res);
   }
 
   try {
@@ -209,6 +215,43 @@ const RANGO_SIN_TELEFONO_DIAS = 14;
 // esos eventos a la Calendar API). Mismo horizonte que ya usa proximo-bloqueo.js.
 const RANGO_REORGANIZAR_DIAS = 120;
 
+// Badge de feriado del día en la agenda de /gestion: GET ?modo=feriados&date=YYYY-MM-DD.
+// Devuelve { feriado: { fecha, tipo, nombre } | null, atendido: bool (marcador de
+// "se atiende"), bloqueado: bool (bloqueo de día completo) }. Fallback seguro: si la
+// API de feriados no responde, feriado = null (nunca rompe el panel).
+async function feriadoDelDia(req, res) {
+  try {
+    const dateStr = req.query.date;
+    const [feriado, calendar] = await Promise.all([
+      esFeriado(dateStr),
+      getCalendarClient(),
+    ]);
+    let atendido = false;
+    let bloqueado = false;
+    if (feriado) {
+      const dayStart = toArgDate(dateStr, '00:00');
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60000);
+      const { data } = await conReintentos(() => calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: dayStart.toISOString(),
+        timeMax: dayEnd.toISOString(),
+        singleEvents: true,
+      }));
+      (data.items || []).forEach((ev) => {
+        if (!ev.start.dateTime) {
+          const desc = ev.description || '';
+          if (desc.includes(FERIADO_ATENDIDO_MARKER)) atendido = true;
+          else if (desc.includes(BLOCK_MARKER)) bloqueado = true;
+        }
+      });
+    }
+    res.status(200).json({ feriado, atendido, bloqueado });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ feriado: null, atendido: false, bloqueado: false });
+  }
+}
+
 // Alimenta la "lista de tareas inteligente" del sidebar de /gestion. Tres categorías,
 // todas de datos reales, cada una con su propia ventana (sinDni comparte la ventana
 // corta de sinTelefono — mismo criterio: no tiene sentido recordar un dato faltante de
@@ -260,22 +303,27 @@ async function tareas(req, res) {
     const sinDni = [];
     const bloqueos = [];
     const turnos = [];
+    const feriadosAtendidos = new Set(); // fechas con marcador FERIADO_ATENDIDO (se atiende)
 
     todos.forEach(({ ev, calendarId }) => {
       const allDay = !ev.start.dateTime;
+      const { start, end } = eventBounds(ev);
+      const esMarcadorFeriado = allDay && (ev.description || '').includes(FERIADO_ATENDIDO_MARKER);
+      if (esMarcadorFeriado) {
+        feriadosAtendidos.add(formatArgDay(start));
+        return;
+      }
       const esBloqueo = allDay || (ev.description || '').includes(BLOCK_MARKER);
 
       if (esBloqueo) {
         // Los bloqueos (día completo u horario puntual) solo se crean en CALENDAR_ID
         // — ver bloqueo-dia.js / bloquear-horario.js / architecture.md.
         if (calendarId === CALENDAR_ID) {
-          const { start, end } = eventBounds(ev);
           bloqueos.push({ start, end, fecha: formatArgDay(start) });
         }
         return;
       }
 
-      const { start, end } = eventBounds(ev);
       turnos.push({ start, end });
 
       // "Agregar teléfono"/"Agregar DNI" solo para turnos dentro de la ventana corta —
@@ -312,13 +360,29 @@ async function tareas(req, res) {
       .filter((b) => b.cantidadTurnos > 0)
       .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
+    // "¿Se atiende este día?" (feature 2026-08-24): feriados en la ventana corta (14
+    // días) que todavía no se decidieron — sin bloqueo ese día (ya se decidió "no") y
+    // sin marcador de atendido (ya se decidió "sí"). Una tarea por feriado, para que la
+    // secretaria responda con un toque (Sí = marcador, No = bloqueo de día completo).
+    const bloqueosPorFecha = new Set(bloqueos.map((b) => b.fecha));
+    const feriados = [];
+    for (let i = 0; i < RANGO_SIN_TELEFONO_DIAS; i++) {
+      const dia = new Date(desde.getTime() + i * 24 * 60 * 60000);
+      const fechaStr = formatArgDay(dia);
+      if (bloqueosPorFecha.has(fechaStr) || feriadosAtendidos.has(fechaStr)) continue;
+      const feriado = await esFeriado(fechaStr);
+      if (feriado) {
+        feriados.push({ fecha: fechaStr, nombre: feriado.nombre, tipo: feriado.tipo });
+      }
+    }
+
     sinTelefono.sort((a, b) => new Date(a.start) - new Date(b.start));
     sinDni.sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    res.status(200).json({ sinTelefono, sinDni, reorganizar });
+    res.status(200).json({ sinTelefono, sinDni, reorganizar, feriados });
   } catch (err) {
     console.error(err);
-    res.status(200).json({ sinTelefono: [], sinDni: [], reorganizar: [] });
+    res.status(200).json({ sinTelefono: [], sinDni: [], reorganizar: [], feriados: [] });
   }
 }
 

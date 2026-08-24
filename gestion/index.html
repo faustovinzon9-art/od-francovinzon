@@ -105,6 +105,8 @@
   .task-item-nombre { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .task-item-detalle { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .task-item-btn { padding: 5px 11px; border-radius: 100px; border: 1.5px solid var(--gold); background: var(--white); color: var(--gold); font-size: 10.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .task-item-btn-sm { padding: 5px 10px; }
+  .task-item-btn-no { border-color: var(--bloqueo, #C1443A); color: var(--bloqueo, #C1443A); }
   .tasks-more { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: center; }
 
   /* Tareas "Reorganizar turnos": destacadas como urgentes con un rojo suave (no
@@ -162,6 +164,11 @@
   .today-btn { border-radius: 8px; border: none; background: var(--cream); color: var(--navy); font-size: 12.5px; font-weight: 700; padding: 0 14px; height: 34px; flex-shrink: 0; }
   .today-btn:disabled { opacity: .4; cursor: default; }
   #date-input { flex: 1; border: none; background: transparent; font-weight: 600; color: var(--navy); text-align: center; padding: 6px; }
+  /* Badge de feriado (feature 2026-08-24): aviso dorado bajo la barra de fecha cuando el
+     día consultado es feriado — la tarea "¿Se atiende este día?" del sidebar decide qué
+     hacer. El botón "Quitar" desmarca un feriado que ya se había marcado como atendido. */
+  .feriado-badge { margin: 8px 0 0; padding: 7px 12px; border-radius: 9px; background: #FBF3E2; border: 1px solid var(--gold); color: var(--navy); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .feriado-badge-btn { padding: 3px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
   #date-input:focus { outline: none; }
 
   .mc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -540,6 +547,11 @@
     <input type="date" id="date-input">
     <button class="nav-btn" id="next-day">›</button>
     <button class="today-btn" id="today-btn">Hoy</button>
+  </div>
+
+  <div id="feriado-badge" class="feriado-badge hidden">
+    <span id="feriado-badge-texto"></span>
+    <button id="feriado-badge-quitar" class="feriado-badge-btn hidden">Quitar</button>
   </div>
 
   <div class="viewbar">
@@ -995,6 +1007,22 @@
       ? `${t.cantidadTurnos} turno${t.cantidadTurnos === 1 ? '' : 's'}`
       : `${t.label} · ${fecha}`;
     const icono = urgente ? '<span class="task-item-icon" aria-hidden="true">❗</span>' : '';
+
+    // Tarea "¿Se atiende este día?" (feature 2026-08-24): dos botones, Sí (marcador de
+    // atendido) y No (bloquea el día completo) — se resuelve con un toque.
+    if (t.modo === 'feriado') {
+      return `
+        <div class="task-item">
+          <span class="task-item-icon" aria-hidden="true">🎉</span>
+          <div class="task-item-info">
+            <div class="task-item-nombre">¿Se atiende el ${fecha}?</div>
+            <div class="task-item-detalle">Feriado: ${escapeHtml(t.nombre || '')}</div>
+          </div>
+          <button class="task-item-btn task-item-btn-sm" data-task-idx="${i}" data-task-accion="si">Sí</button>
+          <button class="task-item-btn task-item-btn-sm task-item-btn-no" data-task-idx="${i}" data-task-accion="no">No</button>
+        </div>`;
+    }
+
     return `
       <div class="task-item${urgente ? ' urgent' : ''}">
         ${icono}
@@ -1033,7 +1061,21 @@
       .map((t) => ({ ...t, modo: 'agregar-dni', label: 'Agregar DNI' }))
       .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    const items = [...itemsReorganizar, ...itemsSinTelefono, ...itemsSinDni];
+    // "¿Se atiende este día?" (feature 2026-08-24): feriados próximos sin decidir.
+    // Van después de "Reorganizar turnos" (decisión de agenda) y antes de los
+    // recordatorios de datos faltantes.
+    const itemsFeriados = (tareas && tareas.feriados ? tareas.feriados : [])
+      .map((f) => ({
+        modo: 'feriado',
+        fecha: f.fecha,
+        nombre: f.nombre,
+        tipo: f.tipo,
+        start: `${f.fecha}T00:00:00-03:00`,
+        label: 'Feriado',
+      }))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    const items = [...itemsReorganizar, ...itemsFeriados, ...itemsSinTelefono, ...itemsSinDni];
 
     sidebarTareas = items;
 
@@ -1067,15 +1109,39 @@
     wrap.classList.remove('hidden');
 
     listEl.querySelectorAll('[data-task-idx]').forEach((btn) => {
-      btn.addEventListener('click', () => manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]));
+      btn.addEventListener('click', () => manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)], btn.dataset.taskAccion));
     });
   }
 
-  function manejarClickTarea(t) {
+  function manejarClickTarea(t, accion) {
     if (!t) return;
     if (t.modo === 'ir-dia') irADia(t.fecha);
     else if (t.modo === 'agregar-dni') irYEditarDni(t);
+    else if (t.modo === 'feriado') resolverFeriado(t, accion);
     else irYEditarTelefono(t);
+  }
+
+  // "¿Se atiende este día?" (feature 2026-08-24): Sí = marcador de atendido (no vuelve
+  // a preguntar); No = bloquea el día completo con motivo "Feriado" (y la tarea
+  // "Reorganizar turnos" se activa sola si había turnos ese día). Recarga tareas y
+  // agenda al terminar.
+  function resolverFeriado(t, accion) {
+    if (!t || !accion) return;
+    const body = accion === 'no'
+      ? { key: gestionKey, date: t.fecha, motivo: 'Feriado' }
+      : { key: gestionKey, date: t.fecha, accion: 'marcar-feriado-atendido' };
+    fetch('/api/gestion/bloqueos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json())
+      .then((r) => {
+        toast(r.message || (accion === 'no' ? 'Día bloqueado.' : 'Feriado marcado.'));
+        cargarResumenSidebar();
+        if (currentDate === t.fecha) cargarAgenda();
+      })
+      .catch(() => toast('No se pudo guardar la decisión.'));
   }
 
   // ---------- Modal de tareas pendientes (mobile) ----------
@@ -1094,7 +1160,7 @@
     tasksModalList.querySelectorAll('[data-task-idx]').forEach((btn) => {
       btn.addEventListener('click', () => {
         cerrarModalTareas();
-        manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)]);
+        manejarClickTarea(sidebarTareas[parseInt(btn.dataset.taskIdx, 10)], btn.dataset.taskAccion);
       });
     });
   }
@@ -1182,15 +1248,59 @@
   viewSemanaBtn.addEventListener('click', () => cambiarVista('semana'));
 
   // ---------- Agenda (vista Día) ----------
+  function cargarFeriadoBadge(fecha) {
+    const badge = document.getElementById('feriado-badge');
+    const texto = document.getElementById('feriado-badge-texto');
+    const quitar = document.getElementById('feriado-badge-quitar');
+    badge.dataset.fecha = fecha;
+    return fetch(`/api/gestion/buscar?modo=feriados&date=${fecha}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => {
+        if (data && data.feriado) {
+          texto.textContent = data.bloqueado
+            ? `🎉 ${data.feriado.nombre} — no se atiende`
+            : data.atendido
+              ? `🎉 ${data.feriado.nombre} — se atiende ✓`
+              : `🎉 ${data.feriado.nombre}`;
+          quitar.classList.toggle('hidden', !data.atendido);
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      })
+      .catch(() => badge.classList.add('hidden')); // sin feriados: nunca rompe la agenda
+  }
+
+  // "Quitar" del badge: desmarca un feriado que se había marcado como atendido
+  // (desmarcar-feriado-atendido) y recarga badge + tareas.
+  document.getElementById('feriado-badge-quitar').addEventListener('click', () => {
+    const badge = document.getElementById('feriado-badge');
+    if (!badge.dataset.fecha) return;
+    fetch('/api/gestion/bloqueos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gestionKey, date: badge.dataset.fecha, accion: 'desmarcar-feriado-atendido' }),
+    })
+      .then((r) => r.json())
+      .then((r) => {
+        toast(r.message || 'Feriado desmarcado.');
+        cargarFeriadoBadge(badge.dataset.fecha);
+        cargarResumenSidebar();
+      })
+      .catch(() => toast('No se pudo desmarcar.'));
+  });
+
   function cargarAgenda() {
     showOnly(null);
     agendaEl.innerHTML = '<div class="loading-note">Cargando agenda...</div>';
-    return fetch(`/api/gestion/turnos-dia?date=${currentDate}&key=${encodeURIComponent(gestionKey)}`)
+    const fecha = currentDate;
+    return fetch(`/api/gestion/turnos-dia?date=${fecha}&key=${encodeURIComponent(gestionKey)}`)
       .then((r) => {
         if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); }
         return r.json();
       })
       .then((data) => { agendaItems = data; renderAgenda(); cargarResumenSidebar(); })
+      .then(() => cargarFeriadoBadge(fecha))
       .catch((err) => {
         if (err.message !== 'unauthorized') agendaEl.innerHTML = '<div class="agenda-empty">No se pudo cargar la agenda.</div>';
       });

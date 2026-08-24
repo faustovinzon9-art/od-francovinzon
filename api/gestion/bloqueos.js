@@ -1,5 +1,5 @@
 import {
-  getCalendarClient, CALENDAR_ID, BLOCK_MARKER, TIME_ZONE, pad2, toArgDate, isValidGestionKey,
+  getCalendarClient, CALENDAR_ID, BLOCK_MARKER, FERIADO_ATENDIDO_MARKER, TIME_ZONE, pad2, toArgDate, isValidGestionKey,
 } from '../../lib/googleCalendar.js';
 import { avisarFallo } from '../../lib/alertas.js';
 
@@ -52,6 +52,60 @@ export default async function handler(req, res) {
       );
 
       return res.status(200).json({ success: true, message: `Día ${date} desbloqueado.` });
+    }
+
+    // Marcador de "feriado que se atiende" (feature 2026-08-24 — ver lib/feriados.js):
+    // la tarea "¿Se atiende este día?" escribe esto cuando la secretaria dice que SÍ se
+    // atiende, para no volver a preguntar. Mismo patrón de evento marcador que el
+    // bloqueo (BLOCK_MARKER), sin base de datos propia. Idempotente: si ya existe el
+    // marcador, no duplica.
+    if (accion === 'marcar-feriado-atendido') {
+      const dayStart = toArgDate(date, '00:00');
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60000);
+      const { data } = await calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: dayStart.toISOString(),
+        timeMax: dayEnd.toISOString(),
+        singleEvents: true,
+      });
+      const yaMarcado = (data.items || []).some(
+        (ev) => !ev.start.dateTime && (ev.description || '').includes(FERIADO_ATENDIDO_MARKER)
+      );
+      if (yaMarcado) {
+        return res.status(200).json({ success: true, message: `Feriado del ${date} marcado como atendido.` });
+      }
+      await calendar.events.insert({
+        calendarId: CALENDAR_ID,
+        requestBody: {
+          summary: 'Feriado atendido',
+          description: FERIADO_ATENDIDO_MARKER,
+          start: { date },
+          end: { date: nextDayStr(date) },
+        },
+      });
+      return res.status(200).json({ success: true, message: `Feriado del ${date} marcado como atendido.` });
+    }
+
+    // Quitar el marcador (la secretaria se equivocó, o cambió de idea).
+    if (accion === 'desmarcar-feriado-atendido') {
+      const dayStart = toArgDate(date, '00:00');
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60000);
+      const { data } = await calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: dayStart.toISOString(),
+        timeMax: dayEnd.toISOString(),
+        singleEvents: true,
+      });
+      const marcadores = (data.items || []).filter(
+        (ev) => !ev.start.dateTime && (ev.description || '').includes(FERIADO_ATENDIDO_MARKER)
+      );
+      if (marcadores.length === 0) {
+        return res.status(200).json({ success: false, message: 'Ese feriado no está marcado como atendido.' });
+      }
+      await Promise.all(
+        marcadores.map((ev) => calendar.events.delete({ calendarId: CALENDAR_ID, eventId: ev.id }))
+      );
+      return res.status(200).json({ success: true, message: `Feriado del ${date} desmarcado.` });
     }
 
     await calendar.events.insert({
