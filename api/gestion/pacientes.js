@@ -373,7 +373,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE = 25;
+    const LOTE = 5; // chico a propósito: 25 en paralelo excedían la cuota de Google (429) en el primer dry-run real (107 errores de 246 fichas, 2026-08-24)
     let migradas = 0;
     let yaCanonicas = 0;
     let ilegibles = 0;
@@ -408,7 +408,7 @@ async function migrarFechaNacimientoUnaVez(req, res) {
         else if (r.estado === 'ilegible') ilegibles++;
         else if (r.estado === 'error') errores++;
       });
-      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 150)); // cuota de Google
+      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 300)); // cuota de Google (más espaciado que el primer intento, 2026-08-24)
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores });
@@ -436,7 +436,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE_FICHAS = 25;
+    const LOTE_FICHAS = 5; // chico a propósito (2 lecturas por ficha en paralelo): el paralelismo alto excede la cuota de Google (429), ver 2026-08-24
     const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
     let fichasConFantasma = 0;
     let filasPrestaciones = 0;
@@ -481,7 +481,7 @@ async function limpiarFilasFantasmaUnaVez(req, res) {
           }
         }
       }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 150)); // cuota de Google
+      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 300)); // cuota de Google (más espaciado que el primer intento, 2026-08-24)
     }
 
     res.status(200).json({ dryRun, totalFichas: archivos.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
