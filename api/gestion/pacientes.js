@@ -32,7 +32,7 @@ import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
-import { upsertPacienteConsolidado, reemplazarTodasLasFilas } from '../../lib/pacientesConsolidados.js';
+import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
@@ -103,15 +103,6 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.modo === 'receta-proceso') {
       return await obtenerRecetaProceso(req, res);
-    }
-    // UTILITARIO TEMPORAL (2026-08-14, ver el pedido) — poblar la planilla "Pacientes
-    // consolidados" de una sola vez con todo lo que ya existe (fichas + historial de
-    // turnos), para que el autocompletado de /gestion tenga datos desde ya en vez de ir
-    // acumulando solo con turnos/fichas nuevas de acá en más. Sin GESTION_KEY por el
-    // mismo motivo que el backfill de DNI anterior (no hay forma de correrlo con clave a
-    // mano en este entorno) — se saca del proyecto apenas se confirma el resultado.
-    if (req.method === 'GET' && req.query.modo === 'backfill-consolidado-q7m3') {
-      return await backfillConsolidado(req, res);
     }
 
     // UTILITARIOS TEMPORALES DE MIGRACIÓN (2026-08-24) — autenticados con CRON_SECRET
@@ -362,90 +353,6 @@ async function hoyPublico(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json([]);
-  }
-}
-
-// ---------- UTILITARIO TEMPORAL: backfill de "Pacientes consolidados" (2026-08-14) ----------
-// Arma TODAS las filas en memoria (fichas + historial de turnos, ficha gana por
-// teléfono) y las escribe de una sola vez con reemplazarTodasLasFilas() — evita el
-// read-por-fila de upsertPacienteConsolidado(), que con cientos/miles de registros
-// hubiera sido lentísimo (O(n²)) para un backfill de una sola vez.
-const BACKFILL_CONSOLIDADO_ANIOS = 3;
-async function backfillConsolidado(req, res) {
-  try {
-    const drive = getPacientesDriveClient();
-    const sheets = getPacientesSheetsClient();
-    const archivos = await listarArchivosPacientes(drive);
-
-    const porTelefono = new Map(); // telefono normalizado -> fila
-    let fichasFallidas = 0;
-
-    const LOTE = 25;
-    for (let i = 0; i < archivos.length; i += LOTE) {
-      const lote = archivos.slice(i, i + LOTE);
-      const resultados = await Promise.all(lote.map(async (f) => {
-        try {
-          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
-            spreadsheetId: f.id,
-            ranges: [`${SHEET_NAME}!C5:C7`, `${SHEET_NAME}!C14`],
-          }));
-          const [nombre = '', apellido = '', dni = ''] = (data.valueRanges?.[0]?.values || []).map((r) => r[0] || '');
-          const telefono = data.valueRanges?.[1]?.values?.[0]?.[0] || '';
-          return { id: f.id, nombre, apellido, dni, telefono };
-        } catch (err) {
-          console.warn(`[pacientes.js] backfill consolidado: no se pudo leer ${f.name}:`, err?.message || err);
-          return null;
-        }
-      }));
-      resultados.forEach((r) => {
-        if (!r) { fichasFallidas++; return; }
-        const telNorm = normalizarTelefonoMapeo(r.telefono);
-        if (!telNorm) return; // sin teléfono no hay con qué matchear en el autocompletado
-        porTelefono.set(telNorm, {
-          telefono: r.telefono, nombre: r.nombre, apellido: r.apellido, dni: r.dni,
-          fichaId: r.id, origen: 'ficha', actualizado: new Date().toISOString(),
-        });
-      });
-    }
-    const totalFichas = porTelefono.size;
-
-    const calendar = getCalendarClient();
-    const ahora = new Date();
-    const desde = new Date(Date.UTC(ahora.getUTCFullYear() - BACKFILL_CONSOLIDADO_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
-    let eventos = [];
-    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
-      let pageToken;
-      do {
-        const { data } = await conReintentos(() => calendar.events.list({
-          calendarId, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
-          singleEvents: true, maxResults: 2500, pageToken,
-        }));
-        eventos = eventos.concat(data.items || []);
-        pageToken = data.nextPageToken;
-      } while (pageToken);
-    }
-
-    let turnosAgregados = 0;
-    eventos.forEach((ev) => {
-      if ((ev.description || '').includes(BLOCK_MARKER)) return;
-      const telNorm = normalizarTelefonoMapeo(extraerTelefono(ev.description));
-      if (!telNorm || porTelefono.has(telNorm)) return; // ya cubierto por una ficha
-      const partesNombre = (ev.summary || '').trim().split(/\s+/);
-      const nombre = partesNombre.shift() || '';
-      const apellido = partesNombre.join(' ');
-      porTelefono.set(telNorm, {
-        telefono: extraerTelefono(ev.description), nombre, apellido, dni: extraerDni(ev.description),
-        fichaId: '', origen: 'turno', actualizado: new Date().toISOString(),
-      });
-      turnosAgregados++;
-    });
-
-    const totalEscrito = await reemplazarTodasLasFilas([...porTelefono.values()]);
-
-    res.status(200).json({ totalFichas, turnosAgregados, totalEscrito, fichasFallidas, archivosRevisados: archivos.length, eventosRevisados: eventos.length });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
   }
 }
 
