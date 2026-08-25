@@ -2,6 +2,18 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-25 — SISTEMA CENTRALIZADO DE PACIENTES (Fases 1-4, en producción)
+
+Pedido de Fausto: un paciente = un único registro central, con DNI como identificador, sin duplicados, y **Ayelen siempre puede dar el turno aunque falten datos** (se completan después).
+
+- **Fase 1 — Registro central fortalecido** (`lib/pacientesConsolidados.js`): columna `email` (encabezado A1:H1, migración idempotente), identidad por **DNI primero y teléfono después**, pacientes sin teléfono/DNI permitidos (solo nombre), fusión automática de filas duplicadas (misma persona con DNI y teléfono en filas separadas), búsqueda por DNI y por teléfono. Backfill de email desde turnos: ejecutado en dry-run (202 turnos, 0 emails históricos — se puebla con turnos nuevos y el perfil).
+- **Fase 2 — Sección "Pacientes" en `/gestion`**: botón "Pacientes" en la barra de vistas, listado central con buscador por nombre/DNI/teléfono/email y badge "Con ficha / Sin ficha" (modo `pacientes-central` en `buscar.js`).
+- **Fase 3 — Perfil central**: al tocar un paciente → datos editables (nombre/apellido/DNI/teléfono/email), estado de ficha con botón "Abrir/Crear ficha", lista de turnos pasados y futuros (modo `perfil-paciente`), y "+ Nuevo turno" que autocompleta el formulario.
+- **Fase 4 — Nuevo turno potenciado**: el autocompletado usa el registro central (muestra el DNI, distingue homónimos, busca por DNI), opción "+ Crear nuevo paciente" cuando no hay resultados (el paciente queda registrado al guardar el turno), campo **email** en el formulario, y **teléfono OPCIONAL** — Ayelen da el turno con los datos que tenga.
+- **Fase 5 — Sincronización cuidada** (`accion=actualizar-paciente-central`): editar un dato central actualiza el registro + la ficha si existe + los turnos **futuros** del paciente (teléfono/email); nunca se reescriben los históricos.
+
+Comprobación (para Ayelen/Franco): en `/gestion` → pestaña **Pacientes** → buscar a alguien → abrir perfil → editar y guardar; y al dar un turno sin teléfono, que guarde igual.
+
 ## 2026-08-24 — Cierre: limpieza de filas fantasma COMPLETA + utilitarios dados de baja
 
 - **Limpieza de filas fantasma EJECUTADA en producción** (con el consultorio cerrado y el `CRON_SECRET`): la contaminación era **masiva** — se limpiaron **~40.000 filas fantasma de prestaciones** (strings `'FALSE'` de la validación de casilla mal aplicada) en la mayoría de las 246 fichas. El utilitario se ajustó en el camino: rangos acotados a 500 filas, corrida por tandas (`?maxFichas=`/`?offset=`) y bloques 100% fantasma limpiados con 1 `values.clear` en vez de cientos de `batchClear` (las tandas masivas agotaban la cuota de escritura). **Verificado por tandas: 0 filas fantasma en las 246 fichas.**
