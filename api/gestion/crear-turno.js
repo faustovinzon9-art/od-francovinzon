@@ -14,18 +14,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Método no permitido.' });
   }
 
-  const { key, date, time, nombre, apellido, telefono, dni, motivo, sobreturno, esNuevo } = req.body;
+  const { key, date, time, nombre, apellido, telefono, dni, email, motivo, sobreturno, esNuevo } = req.body;
 
   if (!isValidGestionKey(key)) {
     return res.status(401).json({ success: false, message: 'No autorizado.' });
   }
 
-  if (!telefono || !telefono.trim()) {
-    return res.status(200).json({ success: false, message: 'El teléfono es obligatorio.' });
-  }
-  const telNormalizado = telefonoParaWhatsApp(telefono);
-  if (!telNormalizado) {
-    return res.status(200).json({ success: false, message: 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.' });
+  // Teléfono OPCIONAL (pedido 2026-08-25, sistema centralizado de pacientes): Ayelen puede
+  // cargar el turno aunque falte el teléfono (o el DNI o el email) — los datos se
+  // completan después desde el perfil del paciente o con la tarea "Agregar teléfono" del
+  // sidebar. Solo si se TIPEA un teléfono, tiene que ser válido (no se aceptan errores).
+  let telNormalizado = null;
+  if (telefono && String(telefono).trim()) {
+    telNormalizado = telefonoParaWhatsApp(telefono);
+    if (!telNormalizado) {
+      return res.status(200).json({ success: false, message: 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.' });
+    }
   }
 
   try {
@@ -77,9 +81,10 @@ export default async function handler(req, res) {
 
     const codigoCorto = generarCodigoCorto();
     const description =
-      `Teléfono: ${telNormalizado}\n` +
-      'Teléfono verificado: Sí\n' +
+      `Teléfono: ${telNormalizado || '-'}\n` +
+      (telNormalizado ? 'Teléfono verificado: Sí\n' : '') +
       `DNI: ${dni || '-'}\n` +
+      `Email: ${email || '-'}\n` +
       `Motivo: ${motivo}\n` +
       `Paciente nuevo: ${esNuevo ? 'Sí' : 'No'}\n` +
       `Código corto: ${codigoCorto}\n` +
@@ -102,10 +107,12 @@ export default async function handler(req, res) {
       actor: 'gestión (Ayelen)',
     });
 
-    // Best-effort, ver lib/pacientesConsolidados.js — si ya hay ficha con este teléfono
-    // esos datos ganan solos (no hace falta chequearlo acá), y no bloquea la respuesta
-    // si la planilla falla.
-    await upsertPacienteConsolidado({ telefono: telNormalizado, nombre: aTituloCase(nombre), apellido: aTituloCase(apellido), dni, origen: 'turno' });
+    // Best-effort, ver lib/pacientesConsolidados.js — registro central de pacientes: el
+    // DNI es el identificador principal; si ya hay ficha con este DNI/teléfono esos datos
+    // ganan solos (no hace falta chequearlo acá), y no bloquea la respuesta si la
+    // planilla falla. Un turno sin teléfono ni DNI crea igual la fila con nombre (se
+    // completa después).
+    await upsertPacienteConsolidado({ telefono: telNormalizado || '', nombre: aTituloCase(nombre), apellido: aTituloCase(apellido), dni, email, origen: 'turno' });
 
     res.status(200).json({
       success: true,
