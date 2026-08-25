@@ -3076,6 +3076,8 @@
   // paciente (la secretaria solo elige fecha/hora y guarda).
   document.getElementById('paci-nuevo-turno').addEventListener('click', () => {
     if (!perfilPacienteActual) return;
+    // OJO: abrirNuevoTurno() limpia los campos — por eso se llena DESPUÉS de abrirlo.
+    abrirNuevoTurno();
     document.getElementById('mc-nombre').value = document.getElementById('paci-nombre').value;
     document.getElementById('mc-apellido').value = document.getElementById('paci-apellido').value;
     document.getElementById('mc-dni').value = document.getElementById('paci-dni').value;
@@ -3083,7 +3085,6 @@
     const tel = document.getElementById('paci-telefono').value;
     if (tel) itiMcTelefono.setNumber(tel.replace(/^\+/, ''));
     document.getElementById('mc-nuevo').checked = false;
-    abrirNuevoTurno();
     cambiarVista('dia');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
