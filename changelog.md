@@ -2,6 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-25 — Fix: buscador de la sección Pacientes no encontraba pacientes (lección aprendida)
+
+- **Síntoma** (reportado por Fausto): la pestaña "Pacientes" de /gestion mostraba solo el buscador y no encontraba pacientes.
+- **Causa raíz**: la sección lee la planilla "Pacientes consolidados", que estaba incompleta — el backfill original (2026-08-14) nunca se confirmó y los upserts solo agregaban pacientes nuevos. Se asumió completa (usuario dijo "tiene filas") sin verificar.
+- **Fix**: (1) utilitario temporal de repoblación ejecutado contra producción: **246 fichas + 187 turnos upsertados, verificado 0 errores por tandas** (el utilitario se ajustó para cuota: lotes de 4, pausa 800ms, backoff, y tandas ?maxFichas=/offset= — un bug TDZ en el return temprano de las tandas se detectó y corrigió); (2) **plan B**: el buscador `pacientes-central` cae a Calendar si la planilla no trae resultados — nunca queda vacío; (3) límite del listado subido de 50 a 500 (lista completa al entrar).
+- Lección documentada en `decisions.md`: nunca dar por terminada una feature dependiente de datos existentes sin verificar que los datos están.
+
 ## 2026-08-25 — SISTEMA CENTRALIZADO DE PACIENTES (Fases 1-4, en producción)
 
 Pedido de Fausto: un paciente = un único registro central, con DNI como identificador, sin duplicados, y **Ayelen siempre puede dar el turno aunque falten datos** (se completan después).
