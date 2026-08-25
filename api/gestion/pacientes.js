@@ -31,7 +31,7 @@ import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
-import { upsertPacienteConsolidado, actualizarPacienteConsolidado, listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
+import { upsertPacienteConsolidado, actualizarPacienteConsolidado, listarPacientesConsolidados, PACIENTES_CONSOLIDADOS_NAME } from '../../lib/pacientesConsolidados.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
@@ -71,6 +71,13 @@ export default async function handler(req, res) {
     // de este archivo, ver el comentario del encabezado.
     if (req.method === 'GET' && req.query.modo === 'healthcheck') {
       return await healthcheck(req, res);
+    }
+
+    // UTILITARIO TEMPORAL DE DIAGNÓSTICO (2026-08-25): solo lectura — reporta el estado de
+    // la planilla "Pacientes consolidados" (encabezado, cantidad de filas, primeras 5) para
+    // entender por qué la sección Pacientes aparece vacía. Se saca apenas se diagnostique.
+    if (req.method === 'GET' && req.query.modo === 'diagnostico-consolidados') {
+      return await diagnosticoConsolidados(req, res);
     }
 
     // Fotos de pacientes (/mobilephotouploaderodfrancovinzon, ver el pedido) — SIN
@@ -1799,3 +1806,38 @@ async function sincronizarTurnosFuturosPaciente(paciente, campo, valor) {
     console.warn('[pacientes.js] no se pudieron sincronizar los turnos futuros:', err?.message || err);
   }
 }
+
+// UTILITARIO TEMPORAL DE DIAGNÓSTICO (2026-08-25) — SOLO LECTURA, no escribe nada.
+async function diagnosticoConsolidados(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const { data: archivo } = await conReintentos(() => drive.files.list({
+      q: `'${PACIENTES_FOLDER_ID}' in parents and name = '${PACIENTES_CONSOLIDADOS_NAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+      fields: 'files(id, name)',
+    }));
+    if (!archivo.files || !archivo.files.length) {
+      return res.status(200).json({ planillaExiste: false });
+    }
+    const id = archivo.files[0].id;
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: 'A1:H50' }));
+    const filas = data.values || [];
+    const conDatos = filas.filter((r) => r[0] || r[1] || r[2] || r[3]);
+    res.status(200).json({
+      planillaExiste: true, planillaId: id,
+      encabezado: filas[0] || [],
+      filasTotalesEnRango: filas.length,
+      filasConDatos: conDatos.length,
+      primerasFilas: conDatos.slice(0, 5),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
+  }
+}
+
