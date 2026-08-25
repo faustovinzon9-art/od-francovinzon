@@ -17,8 +17,7 @@ import {
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
   FORMA_PAGO_COLUMN_INDEX, CAMPO_CELDA, CAMPOS_ORDENADOS, rangoMovimientos,
-  rangoPrestacionesObraSocial, primeraFilaLibre, esCeldaConDatoReal, esFilaFantasma,
-  normalizarFechaNacimientoTexto,
+  rangoPrestacionesObraSocial, primeraFilaLibre, esCeldaConDatoReal,
   MOVIMIENTOS_FILA_INICIO, MOVIMIENTOS_FILA_FIN,
   nombreArchivo, parsearNombreArchivo,
   normalizarDni, CAMPOS_MAYUSCULAS, aMayusculas, aTituloCase,
@@ -105,16 +104,6 @@ export default async function handler(req, res) {
       return await obtenerRecetaProceso(req, res);
     }
 
-    // UTILITARIOS TEMPORALES DE MIGRACIÓN (2026-08-24) — autenticados con CRON_SECRET
-    // (mismo patrón que healthcheck), dryRun por default. Se agregan, se corren contra
-    // producción con `?dryRun=0` cuando corresponda, y se sacan del proyecto apenas se
-    // confirma el resultado (regla de CLAUDE.md).
-    if (req.method === 'GET' && req.query.modo === 'migrar-fecha-nacimiento-una-vez') {
-      return await migrarFechaNacimientoUnaVez(req, res);
-    }
-    if (req.method === 'GET' && req.query.modo === 'limpiar-filas-fantasma-una-vez') {
-      return await limpiarFilasFantasmaUnaVez(req, res);
-    }
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
@@ -353,171 +342,6 @@ async function hoyPublico(req, res) {
   } catch (err) {
     console.error(err);
     res.status(200).json([]);
-  }
-}
-
-// ---------- UTILITARIO TEMPORAL: migrar fechas de nacimiento a texto (2026-08-24) ----------
-// El fix del 2026-08-24 (CAMPOS_TEXTO_CRUDO) ya hace que las fechas NUEVAS se guarden
-// como texto "DD/MM/AAAA". Esto normaliza las fichas EXISTENTES que quedaron como serial
-// de fecha (la lectura las devuelve sin pad, ej. "7/7/2026"): reescribe C8 con
-// normalizarFechaNacimientoTexto() usando RAW, solo si matchea el patrón D/M/AAAA.
-// DryRun por default (?dryRun=0 para escribir). Se saca del proyecto apenas se confirma.
-async function migrarFechaNacimientoUnaVez(req, res) {
-  const secreto = process.env.CRON_SECRET;
-  const auth = req.headers.authorization || '';
-  if (!secreto || auth !== `Bearer ${secreto}`) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-  const dryRun = req.query.dryRun !== '0';
-  try {
-    const drive = getPacientesDriveClient();
-    const sheets = getPacientesSheetsClient();
-    const archivos = await listarArchivosPacientes(drive);
-    const LOTE = 3; // chico + pausa larga + backoff de reintentos: la cuota de LECTURA de Google (~600/min por usuario, compartida con el tráfico real) se saturaba con lotes grandes — primer dry-run real: 107-116 errores, todos "Quota exceeded Read requests" (2026-08-24)
-    let migradas = 0;
-    let yaCanonicas = 0;
-    let ilegibles = 0;
-    let errores = 0;
-    const erroresDetalle = {}; // mensaje -> cantidad
-
-    for (let i = 0; i < archivos.length; i += LOTE) {
-      const lote = archivos.slice(i, i + LOTE);
-      const resultados = await Promise.all(lote.map(async (f) => {
-        try {
-          const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }), { esperaBaseMs: 1500 });
-          const actual = data.values?.[0]?.[0];
-          const normalizada = normalizarFechaNacimientoTexto(actual);
-          if (normalizada == null) return { estado: actual ? 'ilegible' : 'vacia' };
-          if (String(actual).trim() === normalizada) return { estado: 'canonica' };
-          if (!dryRun) {
-            await conReintentos(() => sheets.spreadsheets.values.update({
-              spreadsheetId: f.id,
-              range: `${SHEET_NAME}!C8`,
-              valueInputOption: 'RAW', // texto crudo, igual que el fix de CAMPOS_TEXTO_CRUDO
-              requestBody: { values: [[normalizada]] },
-            }), { esperaBaseMs: 1500 });
-          }
-          return { estado: 'migrada', de: String(actual).trim(), a: normalizada };
-        } catch (err) {
-          console.warn(`[pacientes.js] migrar fecha: no se pudo leer/escribir ${f.name}:`, err?.message || err);
-          const msg = String(err?.message || err).slice(0, 100);
-          erroresDetalle[msg] = (erroresDetalle[msg] || 0) + 1;
-          return { estado: 'error' };
-        }
-      }));
-      resultados.forEach((r) => {
-        if (r.estado === 'migrada') migradas++;
-        else if (r.estado === 'canonica') yaCanonicas++;
-        else if (r.estado === 'ilegible') ilegibles++;
-        else if (r.estado === 'error') errores++;
-      });
-      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 1500)); // espaciado maximo: distribuir 246 lecturas en ~4min (bajo el limite de 600/min)
-    }
-
-    res.status(200).json({ dryRun, totalFichas: archivos.length, migradas, yaCanonicas, ilegibles, errores, erroresDetalle });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
-  }
-}
-
-// ---------- UTILITARIO TEMPORAL: limpiar filas fantasma (2026-08-24) ----------
-// Limpia de verdad las filas fantasma de prestaciones (J18:M2000) y movimientos
-// (B18:E2000): filas donde ninguna celda tiene un dato real pero hay strings 'FALSE'/
-// 'TRUE' de la validación de casilla mal aplicada (ver esFilaFantasma). Usa
-// values.batchClear (borra solo valores, nunca formato) en lotes de 100 ranges por
-// ficha. DryRun por default (?dryRun=0 para escribir). Se saca del proyecto apenas se
-// confirma el resultado (regla de CLAUDE.md).
-async function limpiarFilasFantasmaUnaVez(req, res) {
-  const secreto = process.env.CRON_SECRET;
-  const auth = req.headers.authorization || '';
-  if (!secreto || auth !== `Bearer ${secreto}`) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-  const dryRun = req.query.dryRun !== '0';
-  try {
-    const drive = getPacientesDriveClient();
-    const sheets = getPacientesSheetsClient();
-    const archivos = await listarArchivosPacientes(drive);
-    // Tandas: ?maxFichas=N&offset=M procesa el bloque [M, M+N) de fichas (dry-run o real) —
-    // el barrido completo excede el maxDuration con las lecturas de rangos grandes; se corre
-    // en tandas hasta cubrir todo (2026-08-24).
-    const maxFichas = req.query.maxFichas ? Math.min(parseInt(req.query.maxFichas, 10) || 0, archivos.length) : archivos.length;
-    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-    const aProcesar = archivos.slice(offset, offset + maxFichas);
-    const LOTE_FICHAS = 4; // corrida por tandas (?maxFichas=): el tiempo total de ~500 lecturas excedia el maxDuration; en tandas de 60 fichas cada corrida responde en <2min (2026-08-24)
-    const LOTE_RANGES = 100; // límite de ranges por llamada de values.batchClear
-    const LIMPIEZA_MAX_FILAS = 500; // barrido acotado a las primeras 500 filas: leer los rangos completos (hasta la 2000) hace cada request pesado y la corrida excede el maxDuration (300s). Las filas fantasma reales de un consultorio viven en las primeras decenas de filas; y las de más abajo ya no bloquean nada (fix esCeldaConDatoReal, 2026-08-24).
-    let fichasConFantasma = 0;
-    let filasPrestaciones = 0;
-    let filasMovimientos = 0;
-    let errores = 0;
-
-    for (let i = 0; i < aProcesar.length; i += LOTE_FICHAS) {
-      const lote = aProcesar.slice(i, i + LOTE_FICHAS);
-      const resultados = await Promise.all(lote.map(async (f) => {
-        try {
-          let rangesPrestaciones = [];
-          let rangesMovimientos = [];
-          const clearsCompletos = [];
-          const [pres, mov] = await Promise.all([
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO}:M${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
-            conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO}:E${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}` }), { esperaBaseMs: 1500 }),
-          ]);
-          let filasRealesP = 0;
-          let filasRealesM = 0;
-          (pres.data.values || []).forEach((row, idx) => {
-            if (esFilaFantasma(row)) rangesPrestaciones.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO + idx}:M${MOVIMIENTOS_FILA_INICIO + idx}`);
-            else if (row.some((celda) => esCeldaConDatoReal(celda))) filasRealesP++;
-          });
-          (mov.data.values || []).forEach((row, idx) => {
-            if (esFilaFantasma(row)) rangesMovimientos.push(`${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO + idx}:E${MOVIMIENTOS_FILA_INICIO + idx}`);
-            else if (row.some((celda) => esCeldaConDatoReal(celda))) filasRealesM++;
-          });
-          // Bloque 100% fantasma (ninguna fila real): limpiarlo entero con 1 sola llamada
-          // values.clear en vez de cientos de batchClear — las tandas masivas agotaban la
-          // cuota de escritura (~60 writes/min) y fallaban (2026-08-24).
-          if (filasRealesP === 0 && rangesPrestaciones.length > 20) {
-            clearsCompletos.push(`${SHEET_NAME}!J${MOVIMIENTOS_FILA_INICIO}:M${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}`);
-            rangesPrestaciones = [];
-          }
-          if (filasRealesM === 0 && rangesMovimientos.length > 20) {
-            clearsCompletos.push(`${SHEET_NAME}!B${MOVIMIENTOS_FILA_INICIO}:E${MOVIMIENTOS_FILA_INICIO + LIMPIEZA_MAX_FILAS - 1}`);
-            rangesMovimientos = [];
-          }
-          return { id: f.id, ranges: [...rangesPrestaciones, ...rangesMovimientos], clearsCompletos, filasP: rangesPrestaciones.length, filasM: rangesMovimientos.length };
-        } catch (err) {
-          console.warn(`[pacientes.js] limpiar filas fantasma: no se pudo leer ${f.name}:`, err?.message || err);
-          return { id: f.id, ranges: [], filasP: 0, filasM: 0, error: true };
-        }
-      }));
-
-      for (const r of resultados) {
-        if (r.error) { errores++; continue; }
-        if (!r.ranges.length) continue;
-        fichasConFantasma++;
-        filasPrestaciones += r.filasP;
-        filasMovimientos += r.filasM;
-        if (!dryRun) {
-          // clears completos primero (1 llamada por bloque masivo), después los puntuales
-          for (const rango of r.clearsCompletos) {
-            await conReintentos(() => sheets.spreadsheets.values.clear({ spreadsheetId: r.id, range: rango }), { esperaBaseMs: 1500 });
-          }
-          for (let j = 0; j < r.ranges.length; j += LOTE_RANGES) {
-            await conReintentos(() => sheets.spreadsheets.values.batchClear({
-              spreadsheetId: r.id,
-              requestBody: { ranges: r.ranges.slice(j, j + LOTE_RANGES) },
-            }));
-          }
-        }
-      }
-      if (lote.length === LOTE_FICHAS) await new Promise((r) => setTimeout(r, 400)); // pausa corta: en tandas chicas la cuota por minuto no se satura
-    }
-
-    res.status(200).json({ dryRun, totalFichas: archivos.length, offset, procesadas: aProcesar.length, fichasConFantasma, filasPrestaciones, filasMovimientos, errores });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
   }
 }
 
