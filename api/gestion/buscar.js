@@ -446,7 +446,7 @@ async function pacientesCentral(req, res) {
         String(f.email || '').toLowerCase().includes(q)
       );
     }
-    const resultado = filas.slice(0, 50).map((f) => ({
+    const resultado = filas.slice(0, 500).map((f) => ({
       nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono,
       email: f.email, conFicha: !!f.fichaId, fichaId: f.fichaId || '', origen: f.origen,
       actualizado: f.actualizado,
