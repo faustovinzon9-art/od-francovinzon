@@ -85,12 +85,11 @@ api/gestion/admin.js
 
 Para utilidades de un solo uso (migraciones, scripts de limpieza): agregar el archivo, correrlo, **sacarlo del proyecto y hacer commit de la baja** ni bien confirma el resultado (patrón ya usado dos veces — limpieza de títulos viejos y rescate de teléfonos sueltos).
 
-**Utilitarios de migración actualmente en el código (2026-08-24, pendientes de correr — NO son features):**
-- `api/gestion/pacientes.js` tiene dos modos temporales autenticados con `CRON_SECRET` (header `Authorization: Bearer <secret>`, mismo patrón que `healthcheck`), **dry-run por default** (`&dryRun=0` para escribir de verdad):
-  - `?modo=migrar-fecha-nacimiento-una-vez` — normaliza las C8 existentes que quedaron como serial de fecha a texto `DD/MM/AAAA` (el fix del 2026-08-24 cubre datos nuevos; esto normaliza los viejos).
-  - `?modo=limpiar-filas-fantasma-una-vez` — limpia filas fantasma (strings `'FALSE'/'TRUE'` de validación de casilla mal aplicada) de prestaciones y movimientos con `values.batchClear` (no toca formato ni datos reales).
-- (El `?modo=backfill-consolidado-q7m3` de 2026-08-14 ya se dio de baja el 2026-08-24 — la planilla "Pacientes consolidados" está poblada por los upserts normales. Ver `changelog.md`.)
-- **Regla:** correrlos (dry-run primero), confirmar el resultado y **sacarlos del código** con un commit de baja. No agregar features nuevas ahí.
+**Utilitarios temporales: NINGUNO en el código (2026-08-24).** Los tres que existieron se usaron y se dieron de baja con su commit de baja (regla del proyecto: los utilitarios de un solo uso se agregan, se corren y se sacan):
+- `backfill-consolidado-q7m3` (2026-08-14) — dado de baja el 2026-08-24 (la planilla "Pacientes consolidados" está poblada por los upserts normales).
+- `migrar-fecha-nacimiento-una-vez` — EJECUTADO el 2026-08-24 (217/246 fichas con fecha canónica `DD/MM/AAAA`; 0 pendientes) y sacado del código.
+- `limpiar-filas-fantasma-una-vez` — EJECUTADO el 2026-08-24 (~40.000 filas fantasma `'FALSE'` limpiadas en las 246 fichas; verificado 0 restantes) y sacado del código.
+Si alguna vez hacen falta de nuevo, están en el historial de git. Ver `changelog.md`.
 
 ## Deploy: cosas a tener en cuenta
 
