@@ -2,12 +2,13 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
-## 2026-08-24 — Limpieza de filas fantasma EN EJECUCIÓN (utilitario `limpiar-filas-fantasma-una-vez`)
+## 2026-08-24 — Cierre: limpieza de filas fantasma COMPLETA + utilitarios dados de baja
 
-Con el consultorio cerrado y cuota libre se diagnosticó y ejecutó la limpieza:
-- **La contaminación es masiva**: primera tanda real (20 fichas) limpió **5.998 filas fantasma de prestaciones** (strings 'FALSE' de la validación de casilla mal aplicada). El barrido completo (246 fichas) corre por tandas de 15 con pausa de 75s (la cuota de ESCRITURA de Google, ~60 writes/min, se satura si se limpian muchas filas de golpe — primera tanda real devolvió 500 "Write requests quota exceeded" en la tanda siguiente).
-- El utilitario se ajustó para la corrida real: rangos acotados a las primeras 500 filas (leer hasta la 2000 excedía el maxDuration), parámetros `?maxFichas=` y `?offset=` para correr en tandas sucesivas.
-- **Pendiente al cierre de esta entrada**: verificar con dry-run que todas las tandas quedaron en 0 filas fantasma, re-correr la migración de fechas (las ~5 que faltaron por cuota), y **sacar ambos utilitarios del código** (regla del proyecto).
+- **Limpieza de filas fantasma EJECUTADA en producción** (con el consultorio cerrado y el `CRON_SECRET`): la contaminación era **masiva** — se limpiaron **~40.000 filas fantasma de prestaciones** (strings `'FALSE'` de la validación de casilla mal aplicada) en la mayoría de las 246 fichas. El utilitario se ajustó en el camino: rangos acotados a 500 filas, corrida por tandas (`?maxFichas=`/`?offset=`) y bloques 100% fantasma limpiados con 1 `values.clear` en vez de cientos de `batchClear` (las tandas masivas agotaban la cuota de escritura). **Verificado por tandas: 0 filas fantasma en las 246 fichas.**
+- **Migración de fechas de nacimiento COMPLETA**: 217/246 fichas con fecha canónica `DD/MM/AAAA`, 0 pendientes (1 ilegible legítima que no matchea el patrón — se deja tal cual).
+- **Ambos utilitarios dados de baja del código** (regla del proyecto): `migrar-fecha-nacimiento-una-vez` y `limpiar-filas-fantasma-una-vez`, más sus funciones puras (`normalizarFechaNacimientoTexto`, `esFilaFantasma`). Quedan en el historial de git si algún día hacen falta.
+- El fix del bug del mes de nacimiento (2026-08-24) queda aplicado a los datos existentes: las fechas de las 217 fichas ya no pueden "perder el mes".
+
 
 ## 2026-08-24 — Migración de fechas de nacimiento EJECUTADA (utilitario `migrar-fecha-nacimiento-una-vez`)
 
