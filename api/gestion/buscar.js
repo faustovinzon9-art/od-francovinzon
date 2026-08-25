@@ -196,6 +196,11 @@ async function buscarPacientes(req, res) {
         g.nombre = titulo;
         g.nombreStart = start;
       }
+      const dniEv = extraerDni(ev.description);
+      if (dniEv && (!g.dni || start > g.dniStart)) {
+        g.dni = dniEv;
+        g.dniStart = start;
+      }
       if (telefono && (!g.telStart || start > g.telStart)) {
         g.telefono = telefono;
         g.telefonoVerificado = extraerTelefonoVerificado(ev.description);
@@ -208,7 +213,7 @@ async function buscarPacientes(req, res) {
     const resultados = [...grupos.values()]
       .sort((a, b) => b.nombreStart - a.nombreStart)
       .slice(0, PACIENTES_LIMITE)
-      .map(({ nombre, telefono, telefonoVerificado }) => ({ nombre, telefono: telefono || '', telefonoVerificado }));
+      .map(({ nombre, telefono, telefonoVerificado, dni }) => ({ nombre, telefono: telefono || '', telefonoVerificado, dni: dni || '' }));
 
     res.status(200).json(resultados);
   } catch (err) {
@@ -446,11 +451,48 @@ async function pacientesCentral(req, res) {
         String(f.email || '').toLowerCase().includes(q)
       );
     }
-    const resultado = filas.slice(0, 500).map((f) => ({
+    let resultado = filas.slice(0, 500).map((f) => ({
       nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono,
       email: f.email, conFicha: !!f.fichaId, fichaId: f.fichaId || '', origen: f.origen,
       actualizado: f.actualizado,
     }));
+
+    // PLAN B (lección 2026-08-25): si la planilla consolidada no trae resultados (está
+    // vacía/incompleta o la búsqueda no matchea), caer a la búsqueda en Calendar para que
+    // el buscador NUNCA quede vacío — la sección Pacientes no puede romperse por la
+    // planilla. Se marca el origen para que la UI lo muestre igual.
+    if (resultado.length === 0 && q) {
+      try {
+        const desdeC = new Date();
+        desdeC.setFullYear(desdeC.getFullYear() - 2);
+        const hastaC = new Date();
+        hastaC.setMonth(hastaC.getMonth() + 3);
+        const calendar = getCalendarClient();
+        const [p, s] = await Promise.all([
+          conReintentos(() => calendar.events.list({ calendarId: CALENDAR_ID, timeMin: desdeC.toISOString(), timeMax: hastaC.toISOString(), singleEvents: true, maxResults: 2500 })),
+          conReintentos(() => calendar.events.list({ calendarId: SOBRETURNOS_CALENDAR_ID, timeMin: desdeC.toISOString(), timeMax: hastaC.toISOString(), singleEvents: true, maxResults: 2500 })),
+        ]);
+        const qNorm = normalizarTexto(q);
+        const vistos = new Map();
+        [...(p.data.items || []), ...(s.data.items || [])].forEach((ev) => {
+          if ((ev.description || '').includes(BLOCK_MARKER)) return;
+          const titulo = (ev.summary || '').trim();
+          if (!titulo || !normalizarTexto(titulo).includes(qNorm)) return;
+          const key = normalizarTexto(titulo) + '|' + normalizarDni(extraerDni(ev.description));
+          if (!vistos.has(key)) {
+            const partes = titulo.split(' ');
+            vistos.set(key, {
+              nombre: partes.shift() || '', apellido: partes.join(' '), dni: extraerDni(ev.description),
+              telefono: extraerTelefono(ev.description), email: '', conFicha: false, fichaId: '', origen: 'turno', actualizado: '',
+            });
+          }
+        });
+        if (vistos.size) resultado = [...vistos.values()].slice(0, 100);
+      } catch (err) {
+        console.warn('[buscar.js] fallback a Calendar falló:', err?.message || err);
+      }
+    }
+
     res.status(200).json(resultado);
   } catch (err) {
     console.error(err);
