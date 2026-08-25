@@ -12,7 +12,7 @@ import {
 } from '../../lib/googleOAuthPacientes.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, normalizarTexto, extraerTelefono,
-  extraerEmail, extraerDni, isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
+  extraerDni, isValidGestionKey, getHorariosLibresDia, formatArgDay, formatArgTime, toArgDate,
 } from '../../lib/googleCalendar.js';
 import {
   PACIENTES_FOLDER_ID, FICHA_TEMPLATE_ID, BACKUP_FOLDER_NAME, SHEET_NAME,
@@ -104,13 +104,6 @@ export default async function handler(req, res) {
       return await obtenerRecetaProceso(req, res);
     }
 
-    // UTILITARIO TEMPORAL (2026-08-25, sistema centralizado de pacientes): poblar el email
-    // de la planilla "Pacientes consolidados" leyéndolo de los turnos existentes en
-    // Calendar ("Email: ..." en la description). Se corre en dry-run, se confirma y se saca
-    // del código (regla del proyecto).
-    if (req.method === 'GET' && req.query.modo === 'backfill-email-consolidados-una-vez') {
-      return await backfillEmailConsolidadosUnaVez(req, res);
-    }
 
 
     if (req.method === 'GET') {
@@ -1711,85 +1704,3 @@ async function obtenerRecetaProceso(req, res) {
     res.status(500).json({ error: 'No se pudo cargar la receta.' });
   }
 }
-
-// ---------- UTILITARIO TEMPORAL: backfill de email en consolidados (2026-08-25) ----------
-// Sistema centralizado de pacientes: el email hoy solo vive en la description de los
-// turnos; esto lo copia a la planilla "Pacientes consolidados" (columna H, agregada en la
-// Fase 1) para que el perfil central lo tenga. Agrupa por identidad (DNI primero, después
-// teléfono normalizado) y guarda el email del turno más reciente. DryRun por default
-// (?dryRun=0 para escribir). Autenticado con CRON_SECRET. Se saca del proyecto apenas se
-// confirma el resultado (regla de CLAUDE.md).
-const BACKFILL_EMAIL_ANIOS = 2;
-async function backfillEmailConsolidadosUnaVez(req, res) {
-  const secreto = process.env.CRON_SECRET;
-  const auth = req.headers.authorization || '';
-  if (!secreto || auth !== `Bearer ${secreto}`) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-  const dryRun = req.query.dryRun !== '0';
-  try {
-    const calendar = getCalendarClient();
-    const ahora = new Date();
-    const desde = new Date(Date.UTC(ahora.getUTCFullYear() - BACKFILL_EMAIL_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
-
-    const porIdentidad = new Map(); // telNorm|dniNorm -> { telefono, dni, nombre, apellido, email, fecha }
-    let eventosRevisados = 0;
-
-    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
-      let pageToken;
-      do {
-        const { data } = await conReintentos(() => calendar.events.list({
-          calendarId,
-          timeMin: desde.toISOString(),
-          timeMax: ahora.toISOString(),
-          singleEvents: true,
-          maxResults: 2500,
-          pageToken,
-        }));
-        const items = data.items || [];
-        eventosRevisados += items.length;
-        for (const ev of items) {
-          if ((ev.description || '').includes(BLOCK_MARKER)) continue;
-          const email = extraerEmail(ev.description);
-          if (!email) continue;
-          const telNorm = normalizarTelefonoMapeo(extraerTelefono(ev.description));
-          const dniNorm = normalizarDni(extraerDni(ev.description));
-          const identidad = dniNorm || telNorm;
-          if (!identidad) continue;
-          const partesNombre = (ev.summary || '').trim().split(/\s+/);
-          const nombre = partesNombre.shift() || '';
-          const apellido = partesNombre.join(' ');
-          const previo = porIdentidad.get(identidad);
-          if (!previo || new Date(ev.start?.dateTime || 0) > new Date(previo.fecha || 0)) {
-            porIdentidad.set(identidad, {
-              telefono: extraerTelefono(ev.description), dni: extraerDni(ev.description),
-              nombre, apellido, email, fecha: ev.start?.dateTime || '',
-            });
-          }
-        }
-        pageToken = data.nextPageToken;
-      } while (pageToken);
-    }
-
-    const conEmail = [...porIdentidad.values()].filter((p) => p.email);
-    if (dryRun) {
-      return res.status(200).json({ dryRun, eventosRevisados, pacientesConEmail: conEmail.length });
-    }
-
-    // Escribir en lotes chicos con pausa (cuota de escritura de Sheets, ~60/min).
-    const LOTE = 5;
-    for (let i = 0; i < conEmail.length; i += LOTE) {
-      const lote = conEmail.slice(i, i + LOTE);
-      await Promise.all(lote.map((p) => upsertPacienteConsolidado({
-        telefono: p.telefono, nombre: p.nombre, apellido: p.apellido, dni: p.dni, email: p.email, origen: 'turno',
-      })));
-      await new Promise((r) => setTimeout(r, 400));
-    }
-
-    res.status(200).json({ dryRun, eventosRevisados, pacientesConEmail: conEmail.length });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err?.message || String(err) });
-  }
-}
-
