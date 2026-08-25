@@ -3079,11 +3079,10 @@
       return;
     }
     const base = perfilPacienteActual;
+    // identidad: DNI preferente, teléfono como respaldo (para pacientes sin DNI)
+    const esDni = /^\d{6,9}$/.test(base);
     Promise.all(Object.keys(campos).map((campo) => {
       const body = { key: gestionKey, accion: 'actualizar-paciente-central', campo, valor: campos[campo] };
-      // identidad: DNI preferente, teléfono como respaldo (para pacientes sin DNI)
-      const base = perfilPacienteActual;
-      const esDni = /^\d{6,9}$/.test(base);
       if (esDni) body.dni = base; else body.telefono = base;
       return fetch('/api/gestion/pacientes', {
         method: 'POST',
