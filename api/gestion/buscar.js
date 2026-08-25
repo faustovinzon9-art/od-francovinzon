@@ -3,7 +3,8 @@ import {
   eventBounds, extraerTelefono, extraerTelefonoVerificado, extraerDni, normalizarTexto,
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
-import { buscarPacienteConsolidadoPorNombre } from '../../lib/pacientesConsolidados.js';
+import { buscarPacienteConsolidadoPorNombre, buscarPacienteConsolidadoPorDni, buscarPacienteConsolidadoPorTelefono, listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
+import { normalizarDni } from '../../lib/pacientesSheet.js';
 import { esFeriado } from '../../lib/feriados.js';
 import { conReintentos } from '../../lib/retry.js';
 
@@ -33,6 +34,14 @@ export default async function handler(req, res) {
   // Feriado de un día puntual (badge en la agenda de /gestion, feature 2026-08-24).
   if (req.query.modo === 'feriados') {
     return feriadoDelDia(req, res);
+  }
+  // Listado central de pacientes (Fase 2, sistema centralizado 2026-08-25).
+  if (req.query.modo === 'pacientes-central') {
+    return pacientesCentral(req, res);
+  }
+  // Perfil central de un paciente (Fase 3): datos de la planilla + turnos + ficha.
+  if (req.query.modo === 'perfil-paciente') {
+    return perfilPaciente(req, res);
   }
 
   try {
@@ -414,3 +423,103 @@ async function proximoBloqueo(req, res) {
     res.status(500).json({ error: 'No se pudo consultar.' });
   }
 }
+
+
+// ---------- FASE 2/3 — SISTEMA CENTRALIZADO DE PACIENTES (2026-08-25) ----------
+
+// Listado central de pacientes: GET ?modo=pacientes-central&q=. Todas las fuentes
+// (fichas + turnos + creados desde gestión) unificadas en la planilla consolidada.
+// Filtra por nombre/apellido/DNI/teléfono/email (substring normalizado). Devuelve
+// hasta 50; fallback seguro a lista vacía.
+async function pacientesCentral(req, res) {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    let filas = await listarPacientesConsolidados();
+    if (q) {
+      const qNorm = normalizarTexto(q);
+      const qDni = q.replace(/\D/g, '');
+      filas = filas.filter((f) =>
+        normalizarTexto(`${f.nombre} ${f.apellido}`).includes(qNorm) ||
+        (qDni && normalizarDni(f.dni).includes(qDni)) ||
+        normalizarTexto(f.telefono).includes(qNorm) ||
+        String(f.email || '').toLowerCase().includes(q)
+      );
+    }
+    const resultado = filas.slice(0, 50).map((f) => ({
+      nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono,
+      email: f.email, conFicha: !!f.fichaId, fichaId: f.fichaId || '', origen: f.origen,
+      actualizado: f.actualizado,
+    }));
+    res.status(200).json(resultado);
+  } catch (err) {
+    console.error(err);
+    res.status(200).json([]);
+  }
+}
+
+// Perfil central: GET ?modo=perfil-paciente&dni= (o &identidad= con teléfono normalizado).
+// Devuelve los datos centrales + la lista de turnos del paciente (pasados y futuros,
+// ambos calendarios, ±1 año) + si tiene ficha. Solo lectura — la edición va por
+// api/gestion/pacientes.js (accion 'actualizar-paciente-central').
+async function perfilPaciente(req, res) {
+  try {
+    const dni = String(req.query.dni || '').trim();
+    const telefono = String(req.query.telefono || '').trim();
+    const paciente = dni ? await buscarPacienteConsolidadoPorDni(dni) : (telefono ? await buscarPacienteConsolidadoPorTelefono(telefono) : null);
+    if (!paciente) {
+      return res.status(200).json({ encontrado: false });
+    }
+    const calendar = getCalendarClient();
+    const ahora = new Date();
+    const desde = new Date(ahora.getTime() - 365 * 24 * 60 * 60000);
+    const hasta = new Date(ahora.getTime() + 365 * 24 * 60 * 60000);
+
+    const turnos = [];
+    const dniNorm = normalizarDni(dni);
+    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
+      let pageToken;
+      do {
+        const { data } = await conReintentos(() => calendar.events.list({
+          calendarId,
+          timeMin: desde.toISOString(),
+          timeMax: hasta.toISOString(),
+          singleEvents: true,
+          maxResults: 2500,
+          pageToken,
+        }));
+        for (const ev of data.items || []) {
+          if ((ev.description || '').includes(BLOCK_MARKER)) continue;
+          // matchear por DNI exacto cuando el evento lo tiene; si no, por título igual
+          const evDni = normalizarDni(extraerDni(ev.description));
+          const matcheaDni = evDni && evDni === dniNorm;
+          const matcheaNombre = !evDni && (ev.summary || '').trim() === `${paciente.nombre} ${paciente.apellido}`.trim();
+          if (!matcheaDni && !matcheaNombre) continue;
+          const { start, end } = eventBounds(ev);
+          turnos.push({
+            eventId: ev.id, calendarId, title: ev.summary || '',
+            start: start.toISOString(), end: end.toISOString(),
+            tipo: !ev.start.dateTime ? 'bloqueo' : (calendarId === SOBRETURNOS_CALENDAR_ID ? 'sobreturno' : 'turno'),
+            confirmado: /Confirmado:\s*S[ií]/i.test(ev.description || ''),
+            telefono: extraerTelefono(ev.description),
+          });
+        }
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+    }
+    turnos.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    res.status(200).json({
+      encontrado: true,
+      paciente: {
+        nombre: paciente.nombre, apellido: paciente.apellido, dni: paciente.dni,
+        telefono: paciente.telefono, email: paciente.email,
+        conFicha: !!paciente.fichaId, fichaId: paciente.fichaId || '', origen: paciente.origen,
+      },
+      turnos,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ encontrado: false });
+  }
+}
+

@@ -169,6 +169,26 @@
      hacer. El botón "Quitar" desmarca un feriado que ya se había marcado como atendido. */
   .feriado-badge { margin: 8px 0 0; padding: 7px 12px; border-radius: 9px; background: #FBF3E2; border: 1px solid var(--gold); color: var(--navy); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .feriado-badge-btn { padding: 3px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+  /* Vista Pacientes (sistema centralizado, 2026-08-25) — mismo lenguaje visual del resto */
+  .paci-busqueda { margin-bottom: 12px; }
+  .paci-busqueda input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--white); font: inherit; font-size: 14px; }
+  .paci-busqueda input:focus { outline: none; border-color: var(--gold); }
+  .paci-fila { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--white); border: 1px solid var(--line); border-radius: 11px; margin-bottom: 8px; cursor: pointer; }
+  .paci-fila:hover { border-color: var(--gold); }
+  .paci-fila-info { flex: 1; min-width: 0; }
+  .paci-fila-nombre { font-weight: 700; color: var(--navy); font-size: 14.5px; }
+  .paci-fila-detalle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .paci-ficha-estado { font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px; margin-bottom: 10px; display: inline-block; }
+  .paci-ficha-estado.con-ficha { background: var(--ok-soft, #ECFDF5); color: var(--ok, #059669); }
+  .paci-ficha-estado.sin-ficha { background: var(--warn-soft, #FFFBEB); color: var(--warn, #D97706); }
+  .badge-ficha { background: var(--ok-soft, #ECFDF5); color: var(--ok, #059669); }
+  .badge-sinficha { background: var(--warn-soft, #FFFBEB); color: var(--warn, #D97706); }
+  .paci-turno-fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .paci-turno-fila:last-child { border-bottom: none; }
+  .paci-turno-fecha { font-weight: 700; color: var(--navy); flex-shrink: 0; }
+  .paci-vacio { padding: 18px; text-align: center; color: var(--muted); font-size: 13px; }
+  .autocomplete-dni { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .autocomplete-item.crear-nuevo { color: var(--gold); font-weight: 700; }
   #date-input:focus { outline: none; }
 
   .mc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -571,6 +591,7 @@
   <div class="viewbar">
     <button class="view-btn active" id="view-dia-btn">Día</button>
     <button class="view-btn" id="view-semana-btn">Semana</button>
+    <button class="view-btn" id="view-pacientes-btn">Pacientes</button>
   </div>
 
   <div class="actions-row" id="actions-row">
@@ -606,6 +627,9 @@
         <div class="field-row">
           <div class="field"><label>Teléfono</label><input type="text" id="mc-telefono"></div>
           <div class="field"><label>DNI</label><input type="text" id="mc-dni" inputmode="numeric" placeholder="Sin puntos ni espacios"></div>
+        </div>
+        <div class="field-row">
+          <div class="field full"><label>Correo electrónico (opcional)</label><input type="email" id="mc-email" placeholder="Para el registro del paciente"></div>
         </div>
         <div class="checkbox-row">
           <input type="checkbox" id="mc-nuevo">
@@ -705,6 +729,41 @@
   </div>
 
   <div class="week-grid hidden" id="week-view"></div>
+
+  <div id="pacientes-view" class="hidden">
+    <div class="paci-busqueda">
+      <input type="text" id="paci-busqueda-input" placeholder="Buscar paciente por nombre, DNI, teléfono o email..." autocomplete="off">
+    </div>
+    <div id="paci-lista"><div class="loading-note">Escribí para buscar pacientes...</div></div>
+    <div id="paci-perfil" class="hidden">
+      <button class="action-btn" id="paci-perfil-volver">← Volver a la lista</button>
+      <div class="panel">
+        <h2 id="paci-perfil-titulo">Paciente</h2>
+        <div id="paci-ficha-estado" class="paci-ficha-estado"></div>
+        <div class="field-row">
+          <div class="field"><label>Nombre</label><input type="text" id="paci-nombre"></div>
+          <div class="field"><label>Apellido</label><input type="text" id="paci-apellido"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>DNI</label><input type="text" id="paci-dni"></div>
+          <div class="field"><label>Teléfono</label><input type="text" id="paci-telefono"></div>
+        </div>
+        <div class="field-row">
+          <div class="field full"><label>Correo electrónico</label><input type="email" id="paci-email"></div>
+        </div>
+        <div class="field-row">
+          <button class="action-btn primary" id="paci-guardar">Guardar datos</button>
+          <button class="action-btn" id="paci-abrir-ficha">Abrir ficha</button>
+          <button class="action-btn gold" id="paci-nuevo-turno">+ Nuevo turno</button>
+        </div>
+        <div class="panel-msg hidden" id="paci-msg"></div>
+      </div>
+      <div class="panel">
+        <h2>Turnos del paciente</h2>
+        <div id="paci-turnos"><div class="loading-note">Cargando turnos...</div></div>
+      </div>
+    </div>
+  </div>
 
   <div id="search-results" class="hidden">
     <div class="search-header">
@@ -849,6 +908,8 @@
   const searchInput = document.getElementById('search-input');
   const viewDiaBtn = document.getElementById('view-dia-btn');
   const viewSemanaBtn = document.getElementById('view-semana-btn');
+  const viewPacientesBtn = document.getElementById('view-pacientes-btn');
+  const pacientesViewEl = document.getElementById('pacientes-view');
 
   const panelTurno = document.getElementById('panel-turno');
   const panelTurnoCalendario = document.getElementById('panel-turno-calendario');
@@ -1243,23 +1304,27 @@
     const buscando = currentView === 'busqueda';
     datebarEl.classList.toggle('hidden', buscando);
     viewbarEl.classList.toggle('hidden', buscando);
-    actionsRowEl.classList.toggle('hidden', buscando || currentView === 'semana');
+    actionsRowEl.classList.toggle('hidden', buscando || currentView === 'semana' || currentView === 'pacientes');
     searchResultsEl.classList.toggle('hidden', !buscando);
     weekViewEl.classList.toggle('hidden', currentView !== 'semana');
     agendaEl.classList.toggle('hidden', currentView !== 'dia');
+    pacientesViewEl.classList.toggle('hidden', currentView !== 'pacientes');
   }
 
   function cambiarVista(view) {
     currentView = view;
     viewDiaBtn.classList.toggle('active', view === 'dia');
     viewSemanaBtn.classList.toggle('active', view === 'semana');
+    viewPacientesBtn.classList.toggle('active', view === 'pacientes');
     actualizarVisibilidadVista();
     if (view === 'dia') return cargarAgenda();
     if (view === 'semana') return cargarSemana();
+    if (view === 'pacientes') return cargarPacientesCentral('');
     return Promise.resolve();
   }
   viewDiaBtn.addEventListener('click', () => cambiarVista('dia'));
   viewSemanaBtn.addEventListener('click', () => cambiarVista('semana'));
+  viewPacientesBtn.addEventListener('click', () => cambiarVista('pacientes'));
 
   // ---------- Agenda (vista Día) ----------
   function cargarFeriadoBadge(fecha) {
@@ -2173,12 +2238,16 @@
     const dniIngresado = document.getElementById('mc-dni').value.trim();
     const esNuevo = document.getElementById('mc-nuevo').checked;
     const motivo = document.getElementById('mc-motivo').value.trim();
+    const emailIngresado = document.getElementById('mc-email').value.trim();
 
-    if (!nombre || !apellido || !motivo || !telefonoIngresado) {
-      setMsg('mc-msg', 'Completá nombre, apellido, teléfono y motivo.', 'error');
+    if (!nombre || !apellido || !motivo) {
+      setMsg('mc-msg', 'Completá nombre, apellido y motivo.', 'error');
       return;
     }
-    if (!itiMcTelefono.isValidNumber()) {
+    // Teléfono OPCIONAL (pedido 2026-08-25): Ayelen puede dar el turno aunque falte el
+    // teléfono (u otros datos) — se completan después desde el perfil del paciente. Solo
+    // si se tipea un teléfono, tiene que ser válido.
+    if (telefonoIngresado && !itiMcTelefono.isValidNumber()) {
       setMsg('mc-msg', 'Ese teléfono no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
@@ -2191,13 +2260,13 @@
       setMsg('mc-msg', 'Ese DNI no parece válido. Revisalo e intentá de nuevo.', 'error');
       return;
     }
-    const telefono = itiMcTelefono.getNumber();
+    const telefono = telefonoIngresado ? itiMcTelefono.getNumber() : '';
 
     setMsg('mc-msg', 'Guardando...', '');
     fetch('/api/gestion/crear-turno', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, dni, motivo, esNuevo, sobreturno: false }),
+      body: JSON.stringify({ key: gestionKey, date: mcFecha, time: mcHora, nombre, apellido, telefono, dni, email: emailIngresado, motivo, esNuevo, sobreturno: false }),
     })
       .then((r) => { if (r.status === 401) { onUnauthorized(); throw new Error('unauthorized'); } return r.json(); })
       .then((res) => {
@@ -2626,14 +2695,31 @@
       document.getElementById(nombreId).value = partes.shift() || '';
       document.getElementById(apellidoId).value = partes.join(' ');
       setNumeroAutocompletado(iti, p.telefono, p.telefonoVerificado);
+      const dniEl = document.getElementById('mc-dni');
+      if (dniEl && p.dni) dniEl.value = p.dni;
       cerrarDropdown();
     }
 
     function renderDropdown(resultados) {
       resultadosActuales = resultados || [];
-      if (resultadosActuales.length === 0) { cerrarDropdown(); return; }
+      dropdownEl.innerHTML = '';
+      // "+ Crear nuevo paciente" cuando no hay resultados (sistema centralizado 2026-08-25):
+      // se deja el nombre tipeado y la secretaria completa los datos en el formulario —
+      // al guardar el turno, el paciente queda en el registro central automáticamente.
+      if (resultadosActuales.length === 0) {
+        dropdownEl.innerHTML = `<div class="autocomplete-item crear-nuevo">+ Crear nuevo paciente</div>`;
+        dropdownEl.classList.remove('hidden');
+        dropdownEl.querySelector('.crear-nuevo').addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          cerrarDropdown();
+          toast('Completá los datos del paciente y guardá el turno: queda registrado solo.');
+          const nombreInputEl = document.getElementById(nombreId);
+          nombreInputEl.focus();
+        });
+        return;
+      }
       dropdownEl.innerHTML = resultadosActuales
-        .map((p, i) => `<div class="autocomplete-item" data-idx="${i}">${escapeHtml(p.nombre)}</div>`)
+        .map((p, i) => `<div class="autocomplete-item" data-idx="${i}">${escapeHtml(p.nombre)}${p.dni ? ' <span class="autocomplete-dni">DNI ' + escapeHtml(p.dni) + '</span>' : ''}</div>`)
         .join('');
       dropdownEl.classList.remove('hidden');
       dropdownEl.querySelectorAll('.autocomplete-item').forEach((el) => {
@@ -2649,9 +2735,11 @@
       const q = nombreInput.value.trim();
       if (q.length < 3) { cerrarDropdown(); return; }
       debounce = setTimeout(() => {
-        fetch(`/api/gestion/buscar?modo=pacientes&q=${encodeURIComponent(q)}&key=${encodeURIComponent(gestionKey)}`)
+        // El autocompletado del turno usa el REGISTRO CENTRAL (pacientes-central): además
+        // de nombre/teléfono trae el DNI, distingue homónimos y busca por DNI también.
+        fetch(`/api/gestion/buscar?modo=pacientes-central&q=${encodeURIComponent(q)}&key=${encodeURIComponent(gestionKey)}`)
           .then((r) => (r.ok ? r.json() : []))
-          .then(renderDropdown)
+          .then((lista) => renderDropdown(lista.map((p) => ({ nombre: `${p.nombre} ${p.apellido}`.trim(), telefono: p.telefono, dni: p.dni, telefonoVerificado: false }))))
           .catch(() => cerrarDropdown());
       }, 300);
     });
@@ -2842,6 +2930,171 @@
 <script>
   window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
 </script>
-<script defer src="/_vercel/speed-insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js">
+
+  // ---------- SISTEMA CENTRALIZADO DE PACIENTES: vista "Pacientes" (2026-08-25) ----------
+  // Listado central (registro consolidado: fichas + turnos + creados desde gestión),
+  // perfil editable y acceso a ficha/turnos. Mismo look del resto del panel.
+  let perfilPacienteActual = null;
+
+  function cargarPacientesCentral(q) {
+    const input = document.getElementById('paci-busqueda-input');
+    if (q !== undefined) input.value = q;
+    const query = (input.value || '').trim();
+    const listaEl = document.getElementById('paci-lista');
+    const perfilEl = document.getElementById('paci-perfil');
+    if (perfilPacienteActual && !query) {
+      // al vaciar la búsqueda se vuelve a la lista
+      perfilPacienteActual = null;
+      perfilEl.classList.add('hidden');
+      listaEl.classList.remove('hidden');
+    }
+    if (perfilPacienteActual) return; // con un perfil abierto, la lista no se repinta
+    listaEl.innerHTML = '<div class="loading-note">Buscando...</div>';
+    return fetch(`/api/gestion/buscar?modo=pacientes-central&q=${encodeURIComponent(query)}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((datos) => {
+        if (!datos.length) {
+          listaEl.innerHTML = '<div class="paci-vacio">' + (query ? 'No se encontró ningún paciente. Probá con otro nombre, DNI o teléfono.' : 'Escribí para buscar pacientes...') + '</div>';
+          return;
+        }
+        listaEl.innerHTML = datos.map((p) => `
+          <div class="paci-fila" data-dni="${p.dni || ''}" data-tel="${p.telefono || ''}">
+            <div class="paci-fila-info">
+              <div class="paci-fila-nombre">${escapeHtml(p.nombre || '')} ${escapeHtml(p.apellido || '')}</div>
+              <div class="paci-fila-detalle">
+                ${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'DNI: —'}
+                ${p.telefono ? ' · Tel: ' + escapeHtml(p.telefono) : ''}
+                ${p.email ? ' · ' + escapeHtml(p.email) : ''}
+              </div>
+            </div>
+            <span class="badge ${p.conFicha ? 'badge-ficha' : 'badge-sinficha'}">${p.conFicha ? 'Con ficha' : 'Sin ficha'}</span>
+          </div>`).join('');
+        listaEl.querySelectorAll('.paci-fila').forEach((el) => {
+          el.addEventListener('click', () => abrirPerfilPaciente(el.dataset.dni, el.dataset.tel));
+        });
+      })
+      .catch(() => { listaEl.innerHTML = '<div class="paci-vacio">No se pudo cargar la lista.</div>'; });
+  }
+
+  function abrirPerfilPaciente(dni, telefono) {
+    if (!dni && !telefono) return;
+    const listaEl = document.getElementById('paci-lista');
+    const perfilEl = document.getElementById('paci-perfil');
+    perfilEl.classList.remove('hidden');
+    listaEl.classList.add('hidden');
+    perfilPacienteActual = dni || telefono;
+    fetch(`/api/gestion/buscar?modo=perfil-paciente&dni=${encodeURIComponent(dni || '')}&telefono=${encodeURIComponent(telefono || '')}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.encontrado) {
+          perfilEl.innerHTML = '<div class="paci-vacio">No se encontró el paciente.</div>';
+          return;
+        }
+        const p = data.paciente;
+        document.getElementById('paci-perfil-titulo').textContent = `${p.nombre || ''} ${p.apellido || ''}`.trim() || 'Paciente';
+        document.getElementById('paci-nombre').value = p.nombre || '';
+        document.getElementById('paci-apellido').value = p.apellido || '';
+        document.getElementById('paci-dni').value = p.dni || '';
+        document.getElementById('paci-telefono').value = p.telefono || '';
+        document.getElementById('paci-email').value = p.email || '';
+        const estadoEl = document.getElementById('paci-ficha-estado');
+        estadoEl.textContent = p.conFicha ? '✓ Tiene ficha clínica' : 'Sin ficha clínica todavía';
+        estadoEl.className = 'paci-ficha-estado ' + (p.conFicha ? 'con-ficha' : 'sin-ficha');
+        document.getElementById('paci-abrir-ficha').textContent = p.conFicha ? 'Abrir ficha' : 'Crear ficha';
+        document.getElementById('paci-abrir-ficha').dataset.fichaId = p.fichaId || '';
+        const turnosEl = document.getElementById('paci-turnos');
+        if (!data.turnos.length) {
+          turnosEl.innerHTML = '<div class="paci-vacio">Sin turnos en el último año / próximo año.</div>';
+          return;
+        }
+        const ahora = new Date().getTime();
+        turnosEl.innerHTML = data.turnos.map((t) => {
+          const esFuturo = new Date(t.start).getTime() > ahora;
+          const fecha = new Intl.DateTimeFormat('es-AR', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(t.start));
+          return `<div class="paci-turno-fila">
+            <span class="paci-turno-fecha">${escapeHtml(fecha)}</span>
+            <span>${t.tipo === 'sobreturno' ? 'Sobreturno' : 'Turno'}${t.confirmado ? ' · ✓ confirmado' : ''}</span>
+            <span style="margin-left:auto; font-size:11px; color:var(--muted)">${esFuturo ? 'próximo' : 'pasado'}</span>
+          </div>`;
+        }).join('');
+      })
+      .catch(() => { perfilEl.innerHTML = '<div class="paci-vacio">No se pudo cargar el perfil.</div>'; });
+  }
+
+  document.getElementById('paci-perfil-volver').addEventListener('click', () => {
+    perfilPacienteActual = null;
+    document.getElementById('paci-perfil').classList.add('hidden');
+    const listaEl = document.getElementById('paci-lista');
+    listaEl.classList.remove('hidden');
+    cargarPacientesCentral('');
+  });
+
+  // Guardar datos del perfil: manda cada campo cambiado a actualizar-paciente-central
+  // (actualiza registro central + ficha si existe + turnos futuros de teléfono/email).
+  document.getElementById('paci-guardar').addEventListener('click', () => {
+    const msg = document.getElementById('paci-msg');
+    msg.classList.add('hidden');
+    if (!perfilPacienteActual) return;
+    const campos = {
+      nombre: document.getElementById('paci-nombre').value.trim(),
+      apellido: document.getElementById('paci-apellido').value.trim(),
+      dni: document.getElementById('paci-dni').value.replace(/[.\s]/g, ''),
+      telefono: document.getElementById('paci-telefono').value.trim(),
+      email: document.getElementById('paci-email').value.trim(),
+    };
+    const base = perfilPacienteActual;
+    Promise.all(Object.keys(campos).map((campo) => {
+      const body = { key: gestionKey, accion: 'actualizar-paciente-central', campo, valor: campos[campo] };
+      // identidad: DNI preferente, teléfono como respaldo (para pacientes sin DNI)
+      const base = perfilPacienteActual;
+      const esDni = /^\d{6,9}$/.test(base);
+      if (esDni) body.dni = base; else body.telefono = base;
+      return fetch('/api/gestion/pacientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((r) => r.json());
+    })).then((res) => {
+      const ok = res.every((r) => r.success);
+      msg.textContent = ok ? '✅ Datos guardados y sincronizados.' : 'Hubo un error al guardar.';
+      msg.className = 'panel-msg ' + (ok ? 'ok' : 'error');
+      msg.classList.remove('hidden');
+      if (ok) abrirPerfilPaciente(campos.dni || (esDni ? base : ''), campos.dni ? '' : (campos.telefono || base));
+    });
+  });
+
+  document.getElementById('paci-abrir-ficha').addEventListener('click', () => {
+    if (!perfilPacienteActual) return;
+    // El id de la ficha no viene en el listado (solo si conFicha); se pide el perfil con
+    // la fichaId — lo guardamos al abrir el perfil.
+    const fichaId = (document.getElementById('paci-abrir-ficha').dataset.fichaId) || '';
+    window.open(fichaId ? `/pacientes?id=${fichaId}` : '/pacientes', '_blank');
+  });
+
+  // "Nuevo turno" desde el perfil: completa el formulario de turno con los datos del
+  // paciente (la secretaria solo elige fecha/hora y guarda).
+  document.getElementById('paci-nuevo-turno').addEventListener('click', () => {
+    if (!perfilPacienteActual) return;
+    document.getElementById('mc-nombre').value = document.getElementById('paci-nombre').value;
+    document.getElementById('mc-apellido').value = document.getElementById('paci-apellido').value;
+    document.getElementById('mc-dni').value = document.getElementById('paci-dni').value;
+    document.getElementById('mc-email').value = document.getElementById('paci-email').value;
+    const tel = document.getElementById('paci-telefono').value;
+    if (tel) itiMcTelefono.setNumber(tel.replace(/^\+/, ''));
+    document.getElementById('mc-nuevo').checked = false;
+    abrirNuevoTurno();
+    cambiarVista('dia');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // Buscador de la lista (debounce)
+  document.getElementById('paci-busqueda-input').addEventListener('input', () => {
+    clearTimeout(paciBusquedaDebounce);
+    paciBusquedaDebounce = setTimeout(() => cargarPacientesCentral(''), 300);
+  });
+  let paciBusquedaDebounce = null;
+
+</script>
 </body>
 </html>

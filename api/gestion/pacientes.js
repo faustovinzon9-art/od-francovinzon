@@ -31,7 +31,7 @@ import { conReintentos } from '../../lib/retry.js';
 import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
-import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
+import { upsertPacienteConsolidado, actualizarPacienteConsolidado, listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
@@ -139,6 +139,7 @@ export default async function handler(req, res) {
       if (!claveValida(req.body.key)) return res.status(401).json({ error: 'unauthorized' });
       if (req.body.accion === 'crear') return await crearPaciente(req, res);
       if (req.body.accion === 'actualizar-campo') return await actualizarCampo(req, res);
+      if (req.body.accion === 'actualizar-paciente-central') return await actualizarPacienteCentral(req, res);
       if (req.body.accion === 'fusionar') return await fusionarPacientes(req, res);
       if (req.body.accion === 'completar-telefono-turno') return await completarTelefonoTurno(req, res);
       if (req.body.accion === 'confirmar-match') return await confirmarMatch(req, res);
@@ -1704,3 +1705,97 @@ async function obtenerRecetaProceso(req, res) {
     res.status(500).json({ error: 'No se pudo cargar la receta.' });
   }
 }
+
+
+// ---------- SISTEMA CENTRALIZADO DE PACIENTES: editar datos centrales (2026-08-25) ----------
+// POST accion='actualizar-paciente-central' { key, dni?, telefono?, campo, valor }.
+// 1) Actualiza la planilla consolidada (registro central, identificador DNI).
+// 2) Si el paciente tiene ficha, sincroniza el campo en la ficha (para los campos que la
+//    ficha guarda: nombre/apellido/dni/telefono — el email aún no tiene celda en la ficha).
+// 3) Si cambió teléfono/email, actualiza SOLO los turnos FUTUROS del paciente en Calendar
+//    (pocos por paciente; nunca los históricos — sincronización cuidada, Fase 5).
+const CAMPOS_PACIENTE_CENTRAL = ['nombre', 'apellido', 'dni', 'telefono', 'email'];
+async function actualizarPacienteCentral(req, res) {
+  const { key, dni, telefono, campo, valor } = req.body;
+  if (!claveValida(key)) return res.status(401).json({ success: false, message: 'No autorizado.' });
+  if (!CAMPOS_PACIENTE_CENTRAL.includes(campo)) {
+    return res.status(400).json({ success: false, message: 'Campo inválido.' });
+  }
+  try {
+    const filas = await listarPacientesConsolidados();
+    const paciente = dni
+      ? filas.find((f) => f.dni && normalizarDni(f.dni) === normalizarDni(dni))
+      : filas.find((f) => f.telefono && normalizarTelefonoMapeo(f.telefono) === normalizarTelefonoMapeo(telefono));
+    if (!paciente) return res.status(200).json({ success: false, message: 'Paciente no encontrado.' });
+
+    // 1. Registro central.
+    await actualizarPacienteConsolidado({ dni: paciente.dni, telefono: paciente.telefono, campos: { [campo]: valor } });
+
+    // 2. Ficha (si existe) — el autosave de la ficha también sincroniza la planilla, no
+    // se pisa nada: la ficha es la fuente de verdad para sus propios campos.
+    if (paciente.fichaId && ['nombre', 'apellido', 'dni', 'telefono'].includes(campo)) {
+      await escribirCampoEnSheet(paciente.fichaId, campo, valor);
+    }
+
+    // 3. Turnos futuros del paciente (teléfono/email).
+    if (['telefono', 'email'].includes(campo) && String(valor || '').trim()) {
+      await sincronizarTurnosFuturosPaciente(paciente, campo, valor);
+    }
+
+    res.status(200).json({ success: true, message: 'Datos del paciente actualizados.' });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ success: false, message: 'No se pudieron actualizar los datos.' });
+  }
+}
+
+// Busca los turnos FUTUROS del paciente (por DNI exacto en la description, o por título
+// si el evento no tiene DNI) y reemplaza la línea del campo en su description. Lotes
+// chicos con pausa (cuota de escritura de Calendar). Nunca toca turnos pasados.
+async function sincronizarTurnosFuturosPaciente(paciente, campo, valor) {
+  try {
+    const calendar = getCalendarClient();
+    const ahora = new Date();
+    const desde = ahora;
+    const hasta = new Date(ahora.getTime() + 120 * 24 * 60 * 60000); // 120 días
+    const dniNorm = normalizarDni(paciente.dni);
+    const nombreCompleto = `${paciente.nombre} ${paciente.apellido}`.trim();
+    const etiqueta = campo === 'telefono' ? 'Teléfono' : 'Email';
+    const valorFinal = campo === 'telefono' ? telefonoParaWhatsApp(valor) || valor : valor;
+
+    const eventos = [];
+    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
+      let pageToken;
+      do {
+        const { data } = await conReintentos(() => calendar.events.list({
+          calendarId, timeMin: desde.toISOString(), timeMax: hasta.toISOString(),
+          singleEvents: true, maxResults: 2500, pageToken,
+        }));
+        eventos.push(...(data.items || []).map((ev) => ({ ev, calendarId })));
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+    }
+
+    const pendientes = eventos.filter(({ ev }) => {
+      const evDni = normalizarDni(extraerDni(ev.description));
+      if (evDni && dniNorm) return evDni === dniNorm;
+      return !evDni && (ev.summary || '').trim() === nombreCompleto;
+    });
+
+    const LOTE = 4;
+    for (let i = 0; i < pendientes.length; i += LOTE) {
+      const lote = pendientes.slice(i, i + LOTE);
+      await Promise.all(lote.map(async ({ ev, calendarId }) => {
+        const desc = ev.description || '';
+        const nueva = /Tel[eé]fono:\s*[^\n]*/.test(desc) || /Email:\s*[^\n]*/.test(desc)
+          ? desc.replace(new RegExp(`${etiqueta}:\\s*[^\\n]*`, 'i'), `${etiqueta}: ${valorFinal}`)
+          : `${desc.replace(/\s+$/, '')}\n${etiqueta}: ${valorFinal}`;
+        await conReintentos(() => calendar.events.patch({ calendarId, eventId: ev.id, requestBody: { description: nueva } }));
+      }));
+      if (lote.length === LOTE) await new Promise((r) => setTimeout(r, 400));
+    }
+  } catch (err) {
+    console.warn('[pacientes.js] no se pudieron sincronizar los turnos futuros:', err?.message || err);
+  }
+}
+
