@@ -4,7 +4,8 @@ import {
   isValidGestionKey, toArgDate, formatArgDay,
 } from '../../lib/googleCalendar.js';
 import { buscarPacienteConsolidadoPorNombre, buscarPacienteConsolidadoPorDni, buscarPacienteConsolidadoPorTelefono, listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
-import { normalizarDni } from '../../lib/pacientesSheet.js';
+import { normalizarDni, rangoPrestacionesObraSocial } from '../../lib/pacientesSheet.js';
+import { getPacientesSheetsClient } from '../../lib/googleOAuthPacientes.js';
 import { esFeriado } from '../../lib/feriados.js';
 import { conReintentos } from '../../lib/retry.js';
 
@@ -508,6 +509,25 @@ async function perfilPaciente(req, res) {
     }
     turnos.sort((a, b) => new Date(a.start) - new Date(b.start));
 
+    // Prestaciones de obra social: viven en la ficha (tabla J:M). Si el paciente tiene
+    // ficha, se devuelven las últimas 8 con su estado — el perfil central las muestra sin
+    // salir de /gestion (Fase 3 completa).
+    let prestaciones = [];
+    if (paciente.fichaId) {
+      try {
+        const sheets = getPacientesSheetsClient();
+        const { data: pres } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: paciente.fichaId, range: rangoPrestacionesObraSocial() }));
+        const limpiar = (v) => (v === true || v === false || v === 'TRUE' || v === 'FALSE') ? '' : (v || '');
+        prestaciones = (pres.data.values || [])
+          .map((row) => ({ fecha: row[0] || '', tratamiento: limpiar(row[1]), codigo: limpiar(row[2]), autorizado: row[3] === true || row[3] === 'TRUE' }))
+          .filter((p) => p.fecha || p.tratamiento || p.codigo)
+          .slice(-8)
+          .reverse();
+      } catch (err) {
+        console.warn('[buscar.js] no se pudieron leer las prestaciones del perfil:', err?.message || err);
+      }
+    }
+
     res.status(200).json({
       encontrado: true,
       paciente: {
@@ -516,6 +536,7 @@ async function perfilPaciente(req, res) {
         conFicha: !!paciente.fichaId, fichaId: paciente.fichaId || '', origen: paciente.origen,
       },
       turnos,
+      prestaciones,
     });
   } catch (err) {
     console.error(err);

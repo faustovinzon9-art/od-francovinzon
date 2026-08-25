@@ -762,6 +762,10 @@
         <h2>Turnos del paciente</h2>
         <div id="paci-turnos"><div class="loading-note">Cargando turnos...</div></div>
       </div>
+      <div class="panel">
+        <h2>Prestaciones de obra social</h2>
+        <div id="paci-prestaciones"><div class="paci-vacio">Cargando...</div></div>
+      </div>
     </div>
   </div>
 
@@ -2936,6 +2940,7 @@
   // Listado central (registro consolidado: fichas + turnos + creados desde gestión),
   // perfil editable y acceso a ficha/turnos. Mismo look del resto del panel.
   let perfilPacienteActual = null;
+  let valoresOriginalesPerfil = {};
 
   function cargarPacientesCentral(q) {
     const input = document.getElementById('paci-busqueda-input');
@@ -3001,6 +3006,26 @@
         const estadoEl = document.getElementById('paci-ficha-estado');
         estadoEl.textContent = p.conFicha ? '✓ Tiene ficha clínica' : 'Sin ficha clínica todavía';
         estadoEl.className = 'paci-ficha-estado ' + (p.conFicha ? 'con-ficha' : 'sin-ficha');
+        // guardar los valores originales para mandar solo los cambiados al editar
+        valoresOriginalesPerfil = {
+          nombre: p.nombre || '', apellido: p.apellido || '', dni: p.dni || '',
+          telefono: p.telefono || '', email: p.email || '',
+        };
+        // Prestaciones (Fase 3 completa)
+        const presEl = document.getElementById('paci-prestaciones');
+        const pres = data.prestaciones || [];
+        if (!p.conFicha) {
+          presEl.innerHTML = '<div class="paci-vacio">Sin ficha: las prestaciones se ven cuando exista la ficha.</div>';
+        } else if (!pres.length) {
+          presEl.innerHTML = '<div class="paci-vacio">Sin prestaciones cargadas.</div>';
+        } else {
+          presEl.innerHTML = pres.map((pr) => `
+            <div class="paci-turno-fila">
+              <span class="paci-turno-fecha">${escapeHtml(pr.fecha || '—')}</span>
+              <span>${escapeHtml(pr.tratamiento || '')} ${pr.codigo ? '· ' + escapeHtml(pr.codigo) : ''}</span>
+              <span style="margin-left:auto; font-size:11px; color:var(--muted)">${pr.autorizado ? '✓ autorizado' : 'sin autorizar'}</span>
+            </div>`).join('');
+        }
         document.getElementById('paci-abrir-ficha').textContent = p.conFicha ? 'Abrir ficha' : 'Crear ficha';
         document.getElementById('paci-abrir-ficha').dataset.fichaId = p.fichaId || '';
         const turnosEl = document.getElementById('paci-turnos');
@@ -3043,6 +3068,16 @@
       telefono: document.getElementById('paci-telefono').value.trim(),
       email: document.getElementById('paci-email').value.trim(),
     };
+    // solo los campos que efectivamente cambiaron
+    Object.keys(campos).forEach((k) => {
+      if (campos[k] === (valoresOriginalesPerfil[k] || '')) delete campos[k];
+    });
+    if (!Object.keys(campos).length) {
+      msg.textContent = 'No hay cambios para guardar.';
+      msg.className = 'panel-msg ok';
+      msg.classList.remove('hidden');
+      return;
+    }
     const base = perfilPacienteActual;
     Promise.all(Object.keys(campos).map((campo) => {
       const body = { key: gestionKey, accion: 'actualizar-paciente-central', campo, valor: campos[campo] };
