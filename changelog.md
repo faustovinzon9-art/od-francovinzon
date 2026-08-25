@@ -2,6 +2,17 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-08-25 — Review de calidad del sistema centralizado (2 bugs de runtime corregidos)
+
+Aplicando la lección del día (cazar bugs con review manual antes de que los encuentre la
+secretaria — el check de sintaxis no detecta errores de scope/runtime):
+- **`esDni` fuera de scope** (commit `0bb29cf`): se declaraba dentro del `.map()` y se usaba
+  en el `.then()` — `ReferenceError` al guardar el perfil con éxito. Declarado en el scope
+  del handler.
+- **Perfil "no encontrado" destruía la estructura** (commit `bee0562`): el `innerHTML`
+  reemplazaba todo el perfil (y sus listeners); ahora el mensaje vive en un div dedicado.
+- Verificación: sintaxis JS OK, producción 200, modos protegidos.
+
 ## 2026-08-25 — Fix: buscador de la sección Pacientes no encontraba pacientes (lección aprendida)
 
 - **Síntoma** (reportado por Fausto): la pestaña "Pacientes" de /gestion mostraba solo el buscador y no encontraba pacientes.
