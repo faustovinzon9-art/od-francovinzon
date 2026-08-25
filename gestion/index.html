@@ -737,6 +737,7 @@
     <div id="paci-lista"><div class="loading-note">Escribí para buscar pacientes...</div></div>
     <div id="paci-perfil" class="hidden">
       <button class="action-btn" id="paci-perfil-volver">← Volver a la lista</button>
+      <div id="paci-perfil-error" class="paci-vacio hidden"></div>
       <div class="panel">
         <h2 id="paci-perfil-titulo">Paciente</h2>
         <div id="paci-ficha-estado" class="paci-ficha-estado"></div>
@@ -2993,9 +2994,11 @@
       .then((r) => r.json())
       .then((data) => {
         if (!data.encontrado) {
-          perfilEl.innerHTML = '<div class="paci-vacio">No se encontró el paciente.</div>';
+          document.getElementById('paci-perfil-error').textContent = 'No se encontró el paciente.';
+          document.getElementById('paci-perfil-error').classList.remove('hidden');
           return;
         }
+        document.getElementById('paci-perfil-error').classList.add('hidden');
         const p = data.paciente;
         document.getElementById('paci-perfil-titulo').textContent = `${p.nombre || ''} ${p.apellido || ''}`.trim() || 'Paciente';
         document.getElementById('paci-nombre').value = p.nombre || '';
