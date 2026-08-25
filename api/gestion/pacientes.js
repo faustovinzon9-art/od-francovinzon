@@ -1838,6 +1838,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
     // 1. Fichas: nombre/apellido/dni (C5:C7) + teléfono (C14).
     let fichasProcesadas = 0;
     let fichasError = 0;
+    let turnosConDatos = 0; // declarada acá: el return temprano (sin turnos) la usa antes del bloque de turnos
     for (let i = 0; i < aProcesar.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
@@ -1871,7 +1872,6 @@ async function repoblarConsolidadosUnaVez(req, res) {
     const calendar = getCalendarClient();
     const ahora = new Date();
     const desde = new Date(Date.UTC(ahora.getUTCFullYear() - REPOBLAR_TURNOS_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
-    let turnosConDatos = 0;
     for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
       let pageToken;
       do {
