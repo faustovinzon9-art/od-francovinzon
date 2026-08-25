@@ -616,7 +616,7 @@ async function calcularCumpleanosHoy(forzar) {
 
     const LOTE = 25;
     for (let i = 0; i < archivos.length; i += LOTE) {
-      const lote = archivos.slice(i, i + LOTE);
+      const lote = aProcesar.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
         try {
           const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: f.id, range: `${SHEET_NAME}!C8` }));
@@ -1827,12 +1827,18 @@ async function repoblarConsolidadosUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
+    // Tandas (?maxFichas=&offset=): la corrida completa excede el maxDuration (300s) —
+    // se corre por tandas hasta cubrir todas las fichas (2026-08-25).
+    const maxFichas = req.query.maxFichas ? Math.min(parseInt(req.query.maxFichas, 10) || 0, archivos.length) : archivos.length;
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const aProcesar = archivos.slice(offset, offset + maxFichas);
+    const procesarTurnos = offset === 0; // los turnos solo en la primera tanda
     const LOTE = 4; // chico + pausa + backoff: la cuota de lectura (~600/min) se saturaba y 98 fichas fallaban en el primer dry-run (2026-08-25)
 
     // 1. Fichas: nombre/apellido/dni (C5:C7) + teléfono (C14).
     let fichasProcesadas = 0;
     let fichasError = 0;
-    for (let i = 0; i < archivos.length; i += LOTE) {
+    for (let i = 0; i < aProcesar.length; i += LOTE) {
       const lote = archivos.slice(i, i + LOTE);
       const resultados = await Promise.all(lote.map(async (f) => {
         try {
@@ -1857,7 +1863,11 @@ async function repoblarConsolidadosUnaVez(req, res) {
     }
 
     // 2. Turnos (ambos calendarios, 2 años): los que no tengan ficha ya quedan cubiertos
-    //    por el upsert (ficha gana); esto agrega los pacientes solo-turno.
+    //    por el upsert (ficha gana); esto agrega los pacientes solo-turno. Solo en la
+    //    primera tanda (offset 0) para no repetirlos en cada una.
+    if (!procesarTurnos) {
+      return res.status(200).json({ dryRun, fichasTotales: archivos.length, offset, procesadas: aProcesar.length, fichasProcesadas, fichasError, turnosConDatos });
+    }
     const calendar = getCalendarClient();
     const ahora = new Date();
     const desde = new Date(Date.UTC(ahora.getUTCFullYear() - REPOBLAR_TURNOS_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
@@ -1892,7 +1902,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
       } while (pageToken);
     }
 
-    res.status(200).json({ dryRun, fichasTotales: archivos.length, fichasProcesadas, fichasError, turnosConDatos });
+    res.status(200).json({ dryRun, fichasTotales: archivos.length, offset, procesadas: aProcesar.length, fichasProcesadas, fichasError, turnosConDatos });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err?.message || String(err) });
