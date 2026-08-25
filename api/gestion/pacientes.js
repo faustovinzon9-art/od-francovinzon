@@ -1827,7 +1827,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
     const drive = getPacientesDriveClient();
     const sheets = getPacientesSheetsClient();
     const archivos = await listarArchivosPacientes(drive);
-    const LOTE = 10;
+    const LOTE = 4; // chico + pausa + backoff: la cuota de lectura (~600/min) se saturaba y 98 fichas fallaban en el primer dry-run (2026-08-25)
 
     // 1. Fichas: nombre/apellido/dni (C5:C7) + teléfono (C14).
     let fichasProcesadas = 0;
@@ -1839,7 +1839,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
           const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
             spreadsheetId: f.id,
             ranges: [`${SHEET_NAME}!C5:C7`, `${SHEET_NAME}!C14`],
-          }));
+          }), { esperaBaseMs: 1500 });
           const [nombre = '', apellido = '', dni = ''] = (data.valueRanges?.[0]?.values || []).map((r) => r[0] || '');
           const telefono = data.valueRanges?.[1]?.values?.[0]?.[0] || '';
           if (!nombre && !apellido && !dni && !telefono) return 'vacia';
@@ -1853,7 +1853,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
         }
       }));
       resultados.forEach((r) => { if (r === 'ok') fichasProcesadas++; else if (r === 'error') fichasError++; });
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 800)); // espaciado amplio: cuota de lectura compartida
     }
 
     // 2. Turnos (ambos calendarios, 2 años): los que no tengan ficha ya quedan cubiertos
@@ -1886,7 +1886,7 @@ async function repoblarConsolidadosUnaVez(req, res) {
             }
             turnosConDatos++;
           }));
-          await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 800));
         }
         pageToken = data.nextPageToken;
       } while (pageToken);
