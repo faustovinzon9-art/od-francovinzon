@@ -104,6 +104,15 @@ export default async function handler(req, res) {
       return await obtenerRecetaProceso(req, res);
     }
 
+    // UTILITARIO TEMPORAL (2026-08-25, sistema centralizado): repoblar la planilla
+    // "Pacientes consolidados" desde TODAS las fichas y los turnos de los últimos 2 años.
+    // El backfill original (2026-08-14) nunca se confirmó y los upserts solo agregaban
+    // pacientes nuevos — por eso el buscador de la sección Pacientes no encontraba a los
+    // pacientes viejos. Se corre en dry-run, se confirma y se saca del código.
+    if (req.method === 'GET' && req.query.modo === 'repoblar-consolidados-una-vez') {
+      return await repoblarConsolidadosUnaVez(req, res);
+    }
+
 
 
     if (req.method === 'GET') {
@@ -1796,6 +1805,97 @@ async function sincronizarTurnosFuturosPaciente(paciente, campo, valor) {
     }
   } catch (err) {
     console.warn('[pacientes.js] no se pudieron sincronizar los turnos futuros:', err?.message || err);
+  }
+}
+
+// ---------- UTILITARIO TEMPORAL: repoblar "Pacientes consolidados" (2026-08-25) ----------
+// Sistema centralizado: el buscador de pacientes de /gestion lee la planilla consolidada;
+// si está incompleta (el backfill original nunca se confirmó), faltan pacientes. Esto
+// la repuebla desde las FICHAS (nombre/apellido/DNI/teléfono de C5:C15) y los TURNOS de
+// los últimos 2 años. El upsert unifica por DNI/teléfono y la ficha gana sobre el turno.
+// DryRun por default (?dryRun=0 para escribir). Autenticado con CRON_SECRET. Se saca del
+// proyecto apenas se confirma el resultado (regla de CLAUDE.md).
+const REPOBLAR_TURNOS_ANIOS = 2;
+async function repoblarConsolidadosUnaVez(req, res) {
+  const secreto = process.env.CRON_SECRET;
+  const auth = req.headers.authorization || '';
+  if (!secreto || auth !== `Bearer ${secreto}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const dryRun = req.query.dryRun !== '0';
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    const archivos = await listarArchivosPacientes(drive);
+    const LOTE = 10;
+
+    // 1. Fichas: nombre/apellido/dni (C5:C7) + teléfono (C14).
+    let fichasProcesadas = 0;
+    let fichasError = 0;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+            spreadsheetId: f.id,
+            ranges: [`${SHEET_NAME}!C5:C7`, `${SHEET_NAME}!C14`],
+          }));
+          const [nombre = '', apellido = '', dni = ''] = (data.valueRanges?.[0]?.values || []).map((r) => r[0] || '');
+          const telefono = data.valueRanges?.[1]?.values?.[0]?.[0] || '';
+          if (!nombre && !apellido && !dni && !telefono) return 'vacia';
+          if (!dryRun) {
+            await upsertPacienteConsolidado({ telefono, nombre, apellido, dni, fichaId: f.id, origen: 'ficha' });
+          }
+          return 'ok';
+        } catch (err) {
+          console.warn(`[pacientes.js] repoblar: no se pudo leer ${f.name}:`, err?.message || err);
+          return 'error';
+        }
+      }));
+      resultados.forEach((r) => { if (r === 'ok') fichasProcesadas++; else if (r === 'error') fichasError++; });
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    // 2. Turnos (ambos calendarios, 2 años): los que no tengan ficha ya quedan cubiertos
+    //    por el upsert (ficha gana); esto agrega los pacientes solo-turno.
+    const calendar = getCalendarClient();
+    const ahora = new Date();
+    const desde = new Date(Date.UTC(ahora.getUTCFullYear() - REPOBLAR_TURNOS_ANIOS, ahora.getUTCMonth(), ahora.getUTCDate()));
+    let turnosConDatos = 0;
+    for (const calendarId of [CALENDAR_ID, SOBRETURNOS_CALENDAR_ID]) {
+      let pageToken;
+      do {
+        const { data } = await conReintentos(() => calendar.events.list({
+          calendarId, timeMin: desde.toISOString(), timeMax: ahora.toISOString(),
+          singleEvents: true, maxResults: 2500, pageToken,
+        }));
+        const items = data.items || [];
+        for (let j = 0; j < items.length; j += LOTE) {
+          const sub = items.slice(j, j + LOTE);
+          await Promise.all(sub.map(async (ev) => {
+            if ((ev.description || '').includes(BLOCK_MARKER)) return;
+            const tel = extraerTelefono(ev.description);
+            const dni = extraerDni(ev.description);
+            if (!tel && !dni) return;
+            const partesNombre = (ev.summary || '').trim().split(/\s+/);
+            const nombre = partesNombre.shift() || '';
+            const apellido = partesNombre.join(' ');
+            if (!nombre && !apellido) return;
+            if (!dryRun) {
+              await upsertPacienteConsolidado({ telefono: tel, nombre, apellido, dni, origen: 'turno' });
+            }
+            turnosConDatos++;
+          }));
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+    }
+
+    res.status(200).json({ dryRun, fichasTotales: archivos.length, fichasProcesadas, fichasError, turnosConDatos });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || String(err) });
   }
 }
 
