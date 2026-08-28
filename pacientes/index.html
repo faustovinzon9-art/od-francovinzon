@@ -1676,6 +1676,7 @@
     if (debe > 0 && haber > 0) return 'tratamiento-pago';
     if (haber > 0) return 'pago';
     if (debe > 0) return 'tratamiento';
+    if (movTratamiento.value.trim()) return 'sin-monto';
     return null;
   }
   function actualizarHintTipo() {
@@ -1687,12 +1688,12 @@
       return;
     }
     const tipo = tipoInferido();
-    const etiquetas = { tratamiento: 'Tratamiento', pago: 'Pago', 'tratamiento-pago': 'Tratamiento + Pago' };
-    movTipoHint.textContent = tipo ? `Se va a guardar como: ${etiquetas[tipo]}` : 'Cargá un monto de tratamiento y/o de pago.';
+    const etiquetas = { tratamiento: 'Tratamiento', pago: 'Pago', 'tratamiento-pago': 'Tratamiento + Pago', 'sin-monto': 'Tratamiento (sin cobro)' };
+    movTipoHint.textContent = tipo ? `Se va a guardar como: ${etiquetas[tipo]}` : 'Cargá un monto de tratamiento, de pago, o una descripción.';
     movTipoHint.className = 'mov-tipo-hint';
     formaWrap.style.display = (Number(movHaber.value) || 0) > 0 ? '' : 'none';
   }
-  [movDebe, movHaber].forEach((el) => el.addEventListener('input', actualizarHintTipo));
+  [movDebe, movHaber, movTratamiento].forEach((el) => el.addEventListener('input', actualizarHintTipo));
 
   document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null, false));
   document.getElementById('btn-add-mov-historica').addEventListener('click', () => abrirFormMov(null, true));
@@ -1763,8 +1764,12 @@
       movMsg.classList.remove('hidden');
       return;
     }
-    if (!(Number(movDebe.value) || 0) && !(Number(movHaber.value) || 0)) {
-      movMsg.textContent = 'Cargá un monto de tratamiento, de pago, o ambos.';
+    // Sin monto en ninguno de los dos campos se permite SIEMPRE QUE haya una
+    // descripción cargada (ej. "vino, se hizo una revisión, no pagó ni quedó
+    // debiendo nada") — pedido explícito 2026-08-28. Lo único que se sigue
+    // bloqueando es un movimiento totalmente vacío (sin monto y sin descripción).
+    if (!(Number(movDebe.value) || 0) && !(Number(movHaber.value) || 0) && !movTratamiento.value.trim()) {
+      movMsg.textContent = 'Cargá un monto de tratamiento, de pago, o al menos una descripción.';
       movMsg.className = 'panel-msg error';
       movMsg.classList.remove('hidden');
       return;
