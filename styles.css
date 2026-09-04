@@ -175,8 +175,7 @@ h1, h2, h3 {
 
 /* FAQ */
 .faq { padding: 100px 24px; background: var(--bg); text-align: center; }
-.faq h2 { font-size: 2.2rem; }
-.faq-pendiente-nota { font-size: .82rem; }
+.faq h2 { font-size: 2.2rem; margin-bottom: 40px; }
 .faq-list { max-width: 680px; margin: 0 auto; text-align: left; display: flex; flex-direction: column; gap: 12px; }
 .faq-item {
   background: var(--white);
