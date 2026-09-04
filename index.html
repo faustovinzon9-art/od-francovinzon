@@ -37,17 +37,14 @@
     </a>
     <div class="hero-actions">
       <div class="hero-cta-group">
-        <a class="btn btn-whatsapp btn-lg" href="https://wa.me/5403442457764" target="_blank" rel="noopener" id="btn-whatsapp-hero">
+        <a class="btn btn-whatsapp btn-lg" href="https://wa.me/5403442457764?text=Hola!%20Quiero%20sacar%20un%20turno" target="_blank" rel="noopener">
           <svg viewBox="0 0 32 32" width="18" height="18" fill="currentColor"><path d="M16 2C8.3 2 2 8.3 2 16c0 2.6.7 5.1 2 7.3L2 30l6.9-1.8c2.1 1.2 4.6 1.8 7.1 1.8 7.7 0 14-6.3 14-14S23.7 2 16 2zm0 25.5c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.1 1.1 1.1-4-.3-.5C4.6 20.2 4 18.1 4 16 4 9.4 9.4 4 16 4s12 5.4 12 12-5.4 11.5-12 11.5zm6.6-8.7c-.4-.2-2.1-1-2.4-1.2-.3-.1-.6-.2-.8.2-.2.4-.9 1.2-1.1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1-1.9-2.2-2.1-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.7.2-.2.3-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.8-2-1.1-2.7-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.7 5.8 5.1.8.3 1.5.5 2 .7.8.3 1.6.2 2.1.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg>
-          <span id="btn-whatsapp-hero-text">Escribinos por WhatsApp</span>
+          Escribinos por WhatsApp
         </a>
-        <span class="hero-cta-note">Turnos, consultas y urgencias</span>
+        <span class="hero-cta-note">Para sacar turno o hacer una consulta</span>
       </div>
-      <a class="btn btn-gold btn-lg hidden" href="/turnos" target="_blank" rel="noopener" id="btn-turno-online">
-        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
-        Sacar turno online
-      </a>
     </div>
+    <p class="urgencia-caption">Para urgencias dentales fuera de horario</p>
     <a class="urgencia-badge" href="https://wa.me/543442403556" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9 2.4 18a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z"/></svg>
       ¿Urgencia dental? Tocá acá para escribirnos
@@ -142,6 +139,41 @@
   </div>
 </section>
 
+<section id="faq" class="faq">
+  <div class="container">
+    <h2>Preguntas frecuentes</h2>
+    <p class="section-sub faq-pendiente-nota">Sección en construcción — las respuestas marcadas entre corchetes todavía están pendientes de completar con la información real del consultorio.</p>
+    <div class="faq-list">
+
+      <details class="faq-item faq-pendiente">
+        <summary>¿Qué obras sociales y prepagas atienden?</summary>
+        <p>[Completar con las obras sociales/prepagas que atiende el consultorio]</p>
+      </details>
+
+      <details class="faq-item faq-pendiente">
+        <summary>¿Qué tengo que traer a la primera consulta?</summary>
+        <p>[Completar]</p>
+      </details>
+
+      <details class="faq-item faq-pendiente">
+        <summary>¿Atienden urgencias fuera de horario?</summary>
+        <p>[Completar]</p>
+      </details>
+
+      <details class="faq-item faq-pendiente">
+        <summary>¿Cuánto dura una consulta habitual?</summary>
+        <p>[Completar]</p>
+      </details>
+
+      <details class="faq-item faq-pendiente">
+        <summary>¿Atienden a niños?</summary>
+        <p>[Completar]</p>
+      </details>
+
+    </div>
+  </div>
+</section>
+
 <section id="instagram" class="instagram">
   <div class="container instagram-inner">
     <div class="instagram-text">
@@ -215,7 +247,7 @@
       </div>
     </div>
   </div>
-  <p class="footer-note">© <span id="year"></span> Franco Vinzón Odontólogo</p>
+  <p class="footer-note">© <span id="year"></span> Franco Vinzón Odontólogo · <a href="/privacidad">Política de privacidad</a></p>
 </footer>
 
 <a class="whatsapp-float" href="https://wa.me/5403442457764?text=Hola!%20Quiero%20sacar%20un%20turno" target="_blank" rel="noopener" aria-label="Escribir por WhatsApp">
@@ -223,23 +255,6 @@
 </a>
 
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
-<script>
-  // Reserva online pausada (ver el pedido, 2026-08-14, y la corrección del 2026-08-18
-  // que sacó el bloque de WhatsApp duplicado): un solo botón de WhatsApp en el hero —
-  // si está pausada, su texto y link pasan a estar enfocados en sacar turno; el botón
-  // dorado "Sacar turno online" (oculto por defecto) solo se muestra si está activada.
-  fetch('/api/disponibilidad?modo=estado')
-    .then((r) => r.json())
-    .then((data) => {
-      if (data.pausada) {
-        document.getElementById('btn-whatsapp-hero-text').textContent = 'Escribinos para sacar tu turno';
-        document.getElementById('btn-whatsapp-hero').href = 'https://wa.me/5403442457764?text=Hola!%20Quiero%20sacar%20un%20turno';
-      } else {
-        document.getElementById('btn-turno-online').classList.remove('hidden');
-      }
-    })
-    .catch(() => {}); // sin conexión/error: se queda el texto/link genérico de siempre, mismo criterio fail-safe que /turnos
-</script>
 <script>
   (() => {
     if(window.__bhldScript)return;window.__bhldScript=true;

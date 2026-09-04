@@ -54,6 +54,7 @@ h1, h2, h3 {
 .btn-whatsapp { background: #25D366; color: var(--white); box-shadow: 0 4px 16px rgba(37,211,102,.25); }
 .btn-gold { background: var(--gold); color: var(--white); box-shadow: 0 6px 22px rgba(212,162,76,.5); }
 
+.urgencia-caption { font-size: .78rem; color: var(--navy-light); margin-top: 20px; margin-bottom: -12px; }
 .urgencia-badge {
   display: inline-flex;
   align-items: center;
@@ -171,6 +172,39 @@ h1, h2, h3 {
 .card h3 { font-size: 1.35rem; margin-bottom: 8px; font-weight: 500; }
 .card p { color: var(--navy-light); font-size: .92rem; }
 .section-more { margin-top: 48px; color: var(--navy-light); font-weight: 500; }
+
+/* FAQ */
+.faq { padding: 100px 24px; background: var(--bg); text-align: center; }
+.faq h2 { font-size: 2.2rem; }
+.faq-pendiente-nota { font-size: .82rem; }
+.faq-list { max-width: 680px; margin: 0 auto; text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.faq-item {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 4px 24px;
+  box-shadow: 0 12px 30px rgba(30,58,95,.08);
+}
+.faq-item summary {
+  padding: 18px 0;
+  font-family: var(--serif);
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 1.02rem;
+  cursor: pointer;
+  list-style: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: '+'; float: right; color: var(--gold); font-weight: 700; }
+.faq-item[open] summary::after { content: '–'; }
+.faq-item p { color: var(--navy-light); font-size: .92rem; padding-bottom: 18px; }
+.faq-item.faq-pendiente p {
+  color: #A6483A;
+  font-style: italic;
+  background: rgba(193, 68, 55, .06);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
 
 /* Instagram */
 .instagram { padding: 100px 24px; background: var(--bg); }
@@ -292,6 +326,8 @@ h1, h2, h3 {
 .footer-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
 .footer-buttons .btn { padding: 9px 18px; font-size: .85rem; }
 .footer-note { text-align: center; opacity: .5; margin-top: 36px; font-size: .8rem; }
+.footer-note a { text-decoration: underline; }
+.footer-note a:hover { opacity: .8; }
 
 /* WhatsApp float */
 .whatsapp-float {
