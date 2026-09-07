@@ -354,6 +354,17 @@ directamente, que era el objetivo. Se cambió a dos opciones:
 - **Las filas fantasma se pueden limpiar de verdad** con el utilitario `limpiar-filas-fantasma-una-vez` (rama `chore/utilitarios-migracion`, `values.batchClear`, dry-run por default) — solo filas sin ningún dato real y con strings `'FALSE'/'TRUE'`; nunca toca checkboxes desmarcados ni datos reales.
 - **No revertir el criterio estricto de "4 columnas sin dato real"** del fix de Karen Schneider (2026-08-20): una fila con datos reales pero fecha vacía sigue contando como ocupada. El cambio de 2026-08-24 solo agrega el filtro de contaminación encima.
 
+## Autosave tipo Google Sheets en movimientos/prestaciones (2026-08-25)
+
+Pedido de Fausto: guardar solo mientras se escribe, sin botón Guardar. Reglas de diseño acordadas y fijadas acá para no "corregirlas" después:
+
+- **La regla "nunca se borra un movimiento físicamente" tiene UNA excepción puntual**: la fila que el propio autosave creó en esta sesión del form y quedó vacía (el odontólogo la vació con retroceso) se limpia de verdad con la acción `movimiento-limpiar` (B:E y H a vacío, la fila vuelve a quedar libre). Es la única forma de cumplir "un movimiento nuevo vacío no deja fila basura" sin romper la regla general.
+- **Una fila PREEXISTENTE vaciada por error NO se borra ni se vacía**: el autosave restaura el contenido original y avisa que para quitarla está el ✕ (Anular en movimientos / Eliminar en prestaciones). El autosave solo escribe cuando hay contenido real.
+- **Ni la fecha precargada (hoy) ni el check "Autorizado" solos crean una fila**: hace falta tratamiento, código o monto — evita filas fantasma por tocar el form y cerrarlo.
+- **Cada apertura del form es una sesión con token (`movSesionId`/`presSesionId`)**: los guardados en segundo plano (flush de Cancelar, autosave lento) capturan su contexto y solo actualizan el estado del form si su sesión sigue siendo la activa — si el odontólogo ya abrió OTRO movimiento, cada uno guarda en su propia fila. Nunca se resetea `*AutosaveEnCurso` al abrir un form: si una escritura anterior sigue en vuelo, la nueva reintenta sola en 400ms (evita dos `agregar` a la vez → fila duplicada).
+- **Cancelar no "descarta"** (descartar = borrar con retroceso, decisión del usuario): solo cierra el panel al toque y el guardado pendiente corre en segundo plano para no perder la última tecla.
+- **Los `agregar` devuelven `fila` también en la respuesta "pendiente"** (respaldo de emergencia): el autosave necesita saber qué fila reservó para seguir EDITANDO esa fila — si no, cada tecla encolaba un `agregar` nuevo y la recuperación de respaldos duplicaba la fila.
+
 ## Zona horaria
 
 - **Nunca usar getters locales de `Date` para "hoy"/"ahora"** en código que corre en el navegador (afecta a cualquier visitante en otro huso horario). Siempre `Intl.DateTimeFormat` con `timeZone: 'America/Argentina/Buenos_Aires'` explícito. Ya hubo un bug real de esto, corregido — no reintroducirlo.

@@ -492,3 +492,22 @@ Rama `feature/turno-confirmacion-mejoras`.
 ## 2026-08-04
 
 - Sitio inicial: home pública del consultorio, sección "Tratamientos" (antes "Servicios"), ajustes mobile.
+
+## 2026-08-25 — Autosave tipo Google Sheets en /pacientes (movimientos y prestaciones, sin botón Guardar)
+
+Pedido de Fausto: que Franco no tenga que apretar "Guardar" — el panel de la ficha guarda solo mientras escribe, como Google Sheets. Alcance acordado: todo el panel (movimientos, prestaciones y los campos de la ficha que ya eran autosave), ~1,2s después de la última tecla (debounce), y el botón Guardar desaparece (se mantiene Cancelar solo para cerrar el panel; "descartar" = borrar con retroceso, como Sheets).
+
+**Cómo funciona (movimientos y prestaciones de obra social, mismos criterios):**
+- Al escribir en un movimiento/prestación NUEVO, el autosave crea la fila y recuerda su número (`movFilaCreada`/`presFilaCreada`); cada cambio posterior edita ESA misma fila (nunca duplica). El indicador `autosave-hint` muestra "Guardando… / Guardado ✓" o el error.
+- Al EDITAR una fila ya existente también autosave (escribir encima guarda en esa fila).
+- Si el autosave creó una fila nueva y el odontólogo la vacía por completo (retroceso), la fila se limpia de verdad (`movimiento-limpiar`, nueva acción backend) — no queda basura. Excepción puntual a la regla "nunca borrar movimientos": esa fila la creó el propio autosave hace segundos.
+- Una fila PREEXISTENTE vaciada NO se borra: se restaura el contenido original y el hint avisa que para quitarla está el ✕ (Anular en movimientos / Eliminar en prestaciones). La regla del consultorio (anular, nunca borrar) se mantiene intacta.
+- Ni la fecha (precargada con hoy) ni el check "Autorizado" solos crean una fila: hace falta tratamiento, código o monto.
+- Cancelar solo cierra el panel al toque; si quedó algo sin guardar (menos de 1,2s), el guardado pendiente corre en segundo plano con el contexto capturado (tokens `movSesionId`/`presSesionId`) — aunque se abra otro form al instante, cada guardado va a su propia fila.
+- `guardarMovDatos`/`guardarPresDatos` encapsulan la escritura con contexto capturado; reintento automático a los 400ms si una escritura anterior sigue en vuelo (no se pierde la última tecla).
+
+**Backend (`api/gestion/pacientes.js`):**
+- Acción nueva `movimiento-limpiar` (+ su caso en la recuperación de respaldos): escribe celdas vacías en B:E y H de la fila para que vuelva a quedar libre. Solo la usa el autosave con filas que él mismo creó.
+- `movimiento-agregar`/`prestacion-agregar` ahora devuelven `fila` también en la respuesta "pendiente" (respaldo): el autosave necesita saber qué fila reservó para seguir editándola y no encolar un segundo `agregar` que duplique la fila al recuperarse.
+
+**Verificación:** sintaxis JS OK (bloque embebido + api), producción 200 tras el deploy. Falta verificación visual de Franco en el consultorio (consultorio abierto, sin tocar el flujo de atención).

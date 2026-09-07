@@ -154,6 +154,7 @@ export default async function handler(req, res) {
       if (req.body.accion === 'movimiento-agregar') return await movimientoAgregar(req, res);
       if (req.body.accion === 'movimiento-editar') return await movimientoEditar(req, res);
       if (req.body.accion === 'movimiento-anular') return await movimientoAnular(req, res);
+      if (req.body.accion === 'movimiento-limpiar') return await movimientoLimpiar(req, res);
       if (req.body.accion === 'prestacion-agregar') return await prestacionAgregar(req, res);
       if (req.body.accion === 'prestacion-editar') return await prestacionEditar(req, res);
       if (req.body.accion === 'prestacion-eliminar') return await prestacionEliminar(req, res);
@@ -982,7 +983,10 @@ async function movimientoAgregar(req, res) {
     console.error(err);
     await respaldarCambioFallido(id, 'movimiento-agregar', { fecha, tratamiento, debe, haber, formaPago });
     await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-agregar, respaldado', error: err });
-    res.status(200).json({ success: true, pendiente: true });
+    // fila incluida igual que en el caso feliz: el autosave (2026-08-25) la necesita
+    // para seguir EDITANDO esa misma fila en la próxima tecla — si no, cada keystroke
+    // encolaba un movimiento-agregar nuevo y la recuperación duplicaba la fila.
+    res.status(200).json({ success: true, pendiente: true, fila });
   }
 }
 
@@ -1060,6 +1064,43 @@ async function movimientoAnular(req, res) {
   }
 }
 
+// EXCEPCIÓN a la regla "nunca se borra un movimiento físicamente": la usa SOLO el
+// autosave de /pacientes (autosave tipo Google Sheets, pedido 2026-08-25) cuando el
+// odontólogo crea un movimiento nuevo, el autosave ya escribió la fila, y después
+// borra TODO el contenido con la tecla de retroceso — quedaría una fila vacía de
+// basura que no se puede anular ni mostrar. Como esa fila fue creada por el propio
+// autosave en esta misma sesión (el frontend conoce su número), se limpia de verdad:
+// se escriben celdas vacías en B:E (fecha/tratamiento/debe/haber) y en H (forma de
+// pago) y la fila vuelve a quedar "libre" para el próximo movimiento. NUNCA se usa
+// para filas preexistentes: editarlas y dejarlas vacías restaura el contenido original
+// en el frontend (ver abrirFormMov/autosaveMovAhora), no llega nunca acá.
+async function movimientoLimpiar(req, res) {
+  const { id, fila } = req.body;
+  if (!id || !fila) return res.status(400).json({ success: false, message: 'Falta fila.' });
+
+  try {
+    const sheets = getPacientesSheetsClient();
+    await conReintentos(() => sheets.spreadsheets.values.update({
+      spreadsheetId: id,
+      range: `${SHEET_NAME}!B${fila}:E${fila}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [['', '', '', '']] },
+    }));
+    await conReintentos(() => sheets.spreadsheets.values.update({
+      spreadsheetId: id,
+      range: `${SHEET_NAME}!H${fila}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [['']] },
+    }));
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    await respaldarCambioFallido(id, 'movimiento-limpiar', { fila });
+    await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'movimiento-limpiar, respaldado', error: err });
+    res.status(200).json({ success: true, pendiente: true });
+  }
+}
+
 // ---------- Estado de prestaciones a obra social ----------
 // Tabla aparte (columnas J-M, misma fila de arranque que movimientos) — Obra
 // social/Nº de afiliado/Plan viven en C11/C12/C13 (CAMPO_CELDA, vía actualizar-campo),
@@ -1090,7 +1131,9 @@ async function prestacionAgregar(req, res) {
     console.error(err);
     await respaldarCambioFallido(id, 'prestacion-agregar', { fecha, tratamiento, codigo, autorizado });
     await avisarFallo({ endpoint: 'api/gestion/pacientes.js', detalle: 'prestacion-agregar, respaldado', error: err });
-    res.status(200).json({ success: true, pendiente: true });
+    // fila incluida igual que en el caso feliz — mismo motivo que en movimiento-agregar
+    // (el autosave sigue editando ESA fila, no encola agregar de nuevo).
+    res.status(200).json({ success: true, pendiente: true, fila });
   }
 }
 
@@ -1350,6 +1393,21 @@ async function intentarRecuperarRespaldos(sheets, drive, pacienteId) {
         await escribirMovimientoEnFila(pacienteId, payload.fila, payload);
       } else if (accion === 'movimiento-anular') {
         await movimientoAnularInterno(pacienteId, payload.fila);
+      } else if (accion === 'movimiento-limpiar') {
+        // Limpiado de una fila creada por el autosave y vaciada (ver movimientoLimpiar):
+        // escribe celdas vacías en B:E y H para que la fila vuelva a quedar libre.
+        await conReintentos(() => sheets.spreadsheets.values.update({
+          spreadsheetId: pacienteId,
+          range: `${SHEET_NAME}!B${payload.fila}:E${payload.fila}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [['', '', '', '']] },
+        }));
+        await conReintentos(() => sheets.spreadsheets.values.update({
+          spreadsheetId: pacienteId,
+          range: `${SHEET_NAME}!H${payload.fila}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [['']] },
+        }));
       } else if (accion === 'prestacion-agregar') {
         const { data: pres } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: pacienteId, range: rangoPrestacionesObraSocial() }));
         const fila = primeraFilaLibre(pres.values || []);

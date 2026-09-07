@@ -366,6 +366,12 @@
   .fusion-final-input { width: 100%; min-width: 110px; padding: 6px 8px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 12px; }
   .fusion-final-input.pendiente { border-color: var(--bloqueo); background: rgba(193,68,55,.06); }
   .fusion-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* Autosave tipo Google Sheets (2026-08-25): indicador que reemplaza al botón Guardar */
+  .autosave-hint { font-size: 12.5px; color: var(--muted, #8A8578); font-weight: 600; padding: 8px 2px; }
+  .autosave-hint.saving { color: var(--gold, #D4A24C); }
+  .autosave-hint.ok { color: var(--ok, #4F9A3C); }
+  .autosave-hint.error { color: var(--bad, #C1443A); }
 </style>
 </head>
 <body>
@@ -590,7 +596,7 @@
         <div class="field full" id="mov-forma-pago-wrap"><label>Forma de pago</label><input type="text" id="mov-forma-pago" placeholder="Ej: Efectivo, MP, Transferencia"></div>
       </div>
       <div class="panel-actions">
-        <button class="btn-confirm" id="mov-guardar">Guardar</button>
+        <span class="autosave-hint hidden" id="mov-autosave-hint"></span>
         <button class="btn-cancel" id="mov-cancelar">Cancelar</button>
       </div>
       <div class="panel-msg hidden" id="mov-msg"></div>
@@ -640,7 +646,7 @@
         <label for="pres-autorizado">Autorizado</label>
       </div>
       <div class="panel-actions">
-        <button class="btn-confirm" id="pres-guardar">Guardar</button>
+        <span class="autosave-hint hidden" id="pres-autosave-hint"></span>
         <button class="btn-cancel" id="pres-cancelar">Cancelar</button>
       </div>
       <div class="panel-msg hidden" id="pres-msg"></div>
@@ -1697,7 +1703,7 @@
 
   document.getElementById('btn-add-mov').addEventListener('click', () => abrirFormMov(null, false));
   document.getElementById('btn-add-mov-historica').addEventListener('click', () => abrirFormMov(null, true));
-  document.getElementById('mov-cancelar').addEventListener('click', () => ocultarAnimado(panelMov));
+  document.getElementById('mov-cancelar').addEventListener('click', cerrarFormMov);
 
   function fechaSheetAInput(fechaStr) {
     // "27/7/2026" -> "2026-07-27" para <input type=date>. Si no matchea, deja vacío.
@@ -1723,8 +1729,19 @@
 
   const movFechaHintHistorica = document.getElementById('mov-fecha-hint-historica');
 
+  let movSesionId = 0; // token: cada apertura del form invalida flushes/guardados viejos
   function abrirFormMov(fila, historica) {
     editandoMovFila = fila;
+    // Autosave (tipo Google Sheets): estado del formulario recién abierto. movFilaCreada
+    // solo se setea cuando el AUTOSAVE crea la fila (movimiento nuevo) — una fila
+    // PREEXISTENTE (fila != null acá) nunca se borra físicamente, ver autosaveMovAhora.
+    movSesionId++;
+    movFilaCreada = null;
+    clearTimeout(movAutosaveTimer);
+    // OJO: NO se resetea movAutosaveEnCurso acá a propósito. Si un guardado del form
+    // anterior sigue en vuelo (flush de cerrarFormMov o autosave lento), este form
+    // nuevo tiene que esperar a que termine (autosaveMovAhora reintenta solo en 400ms)
+    // — si no, dos movimiento-agregar podrían correr a la vez y duplicar la fila.
     cargaHistorica = !!historica;
     movMsg.classList.add('hidden');
     if (fila) {
@@ -1752,67 +1769,185 @@
     panelMov.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  document.getElementById('mov-guardar').addEventListener('click', async () => {
-    const fecha = movFecha.value;
-    // Fecha obligatoria SOLO para movimientos nuevos (ver el pedido, 2026-08-20 —
-    // endurecimiento tras el incidente de Karen Schneider): editar una fila vieja que ya
-    // estaba sin fecha no debe forzar a inventarle una, esos quedan protegidos por el
-    // fix de primeraFilaLibre() sin necesitar ninguna migración.
-    if (!editandoMovFila && !fecha) {
-      movMsg.textContent = 'La fecha es obligatoria.';
-      movMsg.className = 'panel-msg error';
-      movMsg.classList.remove('hidden');
-      return;
-    }
-    // Sin monto en ninguno de los dos campos se permite SIEMPRE QUE haya una
-    // descripción cargada (ej. "vino, se hizo una revisión, no pagó ni quedó
-    // debiendo nada") — pedido explícito 2026-08-28. Lo único que se sigue
-    // bloqueando es un movimiento totalmente vacío (sin monto y sin descripción).
-    if (!(Number(movDebe.value) || 0) && !(Number(movHaber.value) || 0) && !movTratamiento.value.trim()) {
-      movMsg.textContent = 'Cargá un monto de tratamiento, de pago, o al menos una descripción.';
-      movMsg.className = 'panel-msg error';
-      movMsg.classList.remove('hidden');
-      return;
-    }
-    // Capturado sincrónicamente ANTES de cualquier await (ver el fix de iniciarPolling
-    // más abajo, mismo motivo) — así el guardado y el refetch posterior apuntan siempre
-    // a la ficha que estaba abierta cuando se tocó "Guardar", nunca a lo que
-    // `fichaActual` pueda pasar a ser mientras tanto.
-    const idFicha = fichaActual.id;
-    const payload = {
-      id: idFicha,
-      fecha: fechaInputASheet(fecha),
+  // ---------- AUTOSAVE tipo Google Sheets (pedido 2026-08-25) ----------
+  // Los movimientos se guardan solos ~1,2s después de que el odontólogo deja de escribir
+  // (como Google Sheets), sin botón Guardar. Al escribir en un movimiento NUEVO el
+  // autosave crea la fila y recuerda su número (movFilaCreada) para seguir actualizando
+  // ESA misma fila con cada cambio (nunca duplica). Reglas de seguridad:
+  //  - Borrar todo el contenido de un movimiento nuevo recién creado por el autosave
+  //    deja la planilla limpia (movimiento-limpiar, única excepción a "no se borra
+  //    físicamente": la fila la creó el propio autosave hace segundos y quedó vacía).
+  //  - Un movimiento PREEXISTENTE no se puede dejar vacío borrando: se restaura el
+  //    contenido original (la regla del consultorio es anular, nunca borrar).
+  //  - Nunca se crea una fila por solo tocar la fecha (el formulario la precarga hoy):
+  //    hace falta tratamiento, monto o forma de pago para que exista un movimiento.
+  let movAutosaveTimer = null;
+  let movFilaCreada = null; // fila creada por el autosave en esta sesión del form (mov nuevo)
+  let movAutosaveEnCurso = false;
+
+  function mostrarHintMov(msg, tipo) {
+    const h = document.getElementById('mov-autosave-hint');
+    h.textContent = msg;
+    h.className = 'autosave-hint ' + (tipo || '');
+    h.classList.remove('hidden');
+    clearTimeout(movAutosaveHintTimer);
+    movAutosaveHintTimer = setTimeout(() => h.classList.add('hidden'), 4000);
+  }
+  let movAutosaveHintTimer = null;
+
+  function datosMovActuales() {
+    return {
+      fecha: movFecha.value,
       tratamiento: movTratamiento.value.trim(),
       debe: movDebe.value ? Number(movDebe.value) : 0,
       haber: movHaber.value ? Number(movHaber.value) : 0,
       formaPago: movFormaPago.value.trim(),
     };
-    const btn = document.getElementById('mov-guardar');
-    setBtnLoading(btn, 'Guardando...');
-    try {
-      const r = editandoMovFila
-        ? await apiPost({ accion: 'movimiento-editar', fila: editandoMovFila, ...payload })
-        : await apiPost({ accion: 'movimiento-agregar', ...payload });
-      if (r.success) {
-        ocultarAnimado(panelMov);
-        toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Movimiento guardado');
-        if (fichaActual && fichaActual.id === idFicha) {
-          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
-          renderFicha();
-        }
-      } else {
-        movMsg.textContent = r.message || 'No se pudo guardar.';
-        movMsg.className = 'panel-msg error';
-        movMsg.classList.remove('hidden');
-      }
-    } finally {
-      quitarBtnLoading(btn);
+  }
+  // "Tiene contenido real" = se escribió tratamiento, un monto o la forma de pago. Solo
+  // la fecha (precargada = hoy) no alcanza para crear ni para conservar una fila.
+  function movTieneContenido() {
+    const d = datosMovActuales();
+    return !!(d.tratamiento || d.debe > 0 || d.haber > 0 || d.formaPago);
+  }
+
+  async function refetchFichaSilencioso(id) {
+    const f = await apiGet({ modo: 'ficha', id });
+    if (fichaActual && fichaActual.id === id) {
+      fichaActual = f;
+      renderFicha();
     }
+  }
+
+  async function autosaveMovAhora() {
+    movAutosaveTimer = null;
+    if (movAutosaveEnCurso) {
+      // Un guardado anterior sigue en vuelo y llegó otra escritura: reintentar en
+      // 400ms en vez de descartar la última tecla en silencio.
+      movAutosaveTimer = setTimeout(autosaveMovAhora, 400);
+      return;
+    }
+    const idFicha = fichaActual ? fichaActual.id : null;
+    if (!idFicha) return;
+    const d = datosMovActuales();
+    const editandoFilaPrevia = !!editandoMovFila; // si venimos de editar una fila ya existente
+
+    // 1) Sin contenido real:
+    if (!movTieneContenido()) {
+      const filaACrearLimpiar = movFilaCreada; // snapshot antes de cualquier await
+      if (filaACrearLimpiar) {
+        // La fila la creó el autosave en esta sesión y quedó vacía -> se limpia de verdad.
+        const sesion = movSesionId;
+        movAutosaveEnCurso = true;
+        try {
+          await apiPost({ accion: 'movimiento-limpiar', id: idFicha, fila: filaACrearLimpiar });
+        } catch (e) { /* silencioso */ }
+        if (sesion === movSesionId) movFilaCreada = null;
+        movAutosaveEnCurso = false;
+        await refetchFichaSilencioso(idFicha);
+        return;
+      }
+      if (editandoFilaPrevia) {
+        // Movimiento PREEXISTENTE vaciado: restaurar el contenido original (nunca borrar).
+        const orig = fichaActual.movimientos.find((m) => m.fila === editandoMovFila);
+        if (orig) {
+          movFecha.value = fechaSheetAInput(orig.fecha);
+          movTratamiento.value = orig.tratamiento;
+          movDebe.value = montoSheetANumero(orig.debe);
+          movHaber.value = montoSheetANumero(orig.haber);
+          movFormaPago.value = orig.formaPago || '';
+          actualizarHintTipo();
+        }
+        mostrarHintMov('Un movimiento ya existente no se borra vaciándolo — se restauró el original (usá ✕ Anular para quitarlo).', 'error');
+      }
+      return; // form nuevo sin fila creada: no quedó nada en la planilla
+    }
+
+    // 2) Con contenido real: guardar con el contexto capturado al momento de escribir.
+    await guardarMovDatos(idFicha, movFilaCreada || editandoMovFila || null, d, editandoFilaPrevia, movSesionId);
+  }
+
+  // Escritura real a la planilla. Recibe filaDestino y datos ya capturados para que
+  // cerrarFormMov() pueda mandar el flush en segundo plano SIN arriesgarse a guardar
+  // los valores de OTRO formulario que se haya abierto mientras tanto (el flush corre
+  // después de ocultar el panel y el odontólogo puede abrir otro movimiento en ese
+  // lapso — el contexto capturado hace que cada guardado vaya a su propia fila).
+  async function guardarMovDatos(idFicha, filaDestino, d, editandoFilaPrevia, sesion) {
+    movAutosaveEnCurso = true;
+    mostrarHintMov('Guardando…', 'saving');
+    const fechaSheet = fechaInputASheet(d.fecha || '');
+    // Fecha obligatoria al CREAR (el server la exige en movimiento-agregar). Al editar
+    // filas viejas que quedaron sin fecha (protegidas por primeraFilaLibre) no se toca.
+    if (!fechaSheet && !editandoFilaPrevia) {
+      mostrarHintMov('Elegí la fecha para poder guardar.', 'error');
+      movAutosaveEnCurso = false;
+      return;
+    }
+    try {
+      const r = filaDestino
+        ? await apiPost({ accion: 'movimiento-editar', id: idFicha, fila: filaDestino, fecha: fechaSheet, tratamiento: d.tratamiento, debe: d.debe, haber: d.haber, formaPago: d.formaPago })
+        : await apiPost({ accion: 'movimiento-agregar', id: idFicha, fecha: fechaSheet, tratamiento: d.tratamiento, debe: d.debe, haber: d.haber, formaPago: d.formaPago });
+      if (r.success) {
+        // El guardado en sí siempre se completa (para no perder lo tipeado), pero la
+        // memoria de "fila creada por este form" (movFilaCreada) solo se actualiza si
+        // esta sesión del form sigue siendo la activa — si el odontólogo ya cerró y
+        // abrió OTRO movimiento, ese tiene su propia sesión y no hay que pisarle nada.
+        if (sesion === movSesionId && !filaDestino && r.fila && fichaActual && fichaActual.id === idFicha) movFilaCreada = r.fila;
+        mostrarHintMov(r.pendiente ? 'Guardado (pendiente de sincronizar)' : 'Guardado ✓', r.pendiente ? 'saving' : 'ok');
+        await refetchFichaSilencioso(idFicha);
+      } else {
+        mostrarHintMov(r.message || 'No se pudo guardar', 'error');
+      }
+    } catch (e) {
+      mostrarHintMov('Error al guardar', 'error');
+    }
+    movAutosaveEnCurso = false;
+  }
+
+  function programarAutosaveMov() {
+    clearTimeout(movAutosaveTimer);
+    movAutosaveTimer = setTimeout(autosaveMovAhora, 1200);
+  }
+  [movFecha, movTratamiento, movDebe, movHaber, movFormaPago].forEach((el) => {
+    el.addEventListener('input', programarAutosaveMov);
+    el.addEventListener('change', programarAutosaveMov);
   });
+
+  // Cerrar el form de movimiento. El botón no "descarta": en el autosave tipo Sheets
+  // descartar = borrar con retroceso (decisión del usuario, 2026-08-25). Cancelar solo
+  // cierra el panel al toque, y si quedó algo sin guardar (menos de ~1,2s desde la
+  // última tecla) el guardado pendiente corre en segundo plano para no perder nada.
+  function cerrarFormMov() {
+    clearTimeout(movAutosaveTimer);
+    ocultarAnimado(panelMov);
+    if (movAutosaveEnCurso) return;
+    // Snapshot del contexto ANTES de ocultar: el flush corre en segundo plano y puede
+    // tardar; si para entonces se abrió otro movimiento, este guardado igual va a la
+    // fila (o crea la fila) que corresponde a ESTE formulario (el token movSesionId
+    // capturado hace que su guardarMovDatos no pise el estado del form nuevo).
+    const idFicha = fichaActual ? fichaActual.id : null;
+    if (!idFicha) return;
+    const d = datosMovActuales();
+    const sesion = movSesionId;
+    const filaCreadaPorAutosave = movFilaCreada; // solo filas que el autosave creó acá
+    const editandoFilaPrevia = !!editandoMovFila;
+    if (!movTieneContenido()) {
+      // Si el autosave llegó a crear la fila y quedó vacía, limpiarla (sin basura).
+      // Un movimiento PREEXISTENTE vaciado no se toca: nunca se escribió nada (el
+      // guardado solo corre con contenido), la planilla quedó como estaba, y para
+      // quitarlo existe el ✕ Anular.
+      if (filaCreadaPorAutosave && sesion === movSesionId) {
+        movFilaCreada = null;
+        apiPost({ accion: 'movimiento-limpiar', id: idFicha, fila: filaCreadaPorAutosave }).then(() => refetchFichaSilencioso(idFicha)).catch(() => {});
+      }
+      return;
+    }
+    guardarMovDatos(idFicha, filaCreadaPorAutosave || editandoMovFila || null, d, editandoFilaPrevia, sesion);
+  }
 
   async function anularMovimiento(fila, btn) {
     // Capturado ANTES del confirmDialog (que espera un click del usuario, tiempo
-    // arbitrario) — mismo motivo que en mov-guardar de arriba.
+    // arbitrario) — mismo motivo que en el guardado original de movimientos.
     const idFicha = fichaActual.id;
     const ok = await confirmDialog({
       title: 'Anular movimiento',
@@ -2383,10 +2518,17 @@
   let editandoPresFila = null;
 
   document.getElementById('btn-add-pres').addEventListener('click', () => abrirFormPres(null));
-  document.getElementById('pres-cancelar').addEventListener('click', () => ocultarAnimado(panelPres));
+  document.getElementById('pres-cancelar').addEventListener('click', cerrarFormPres);
 
   function abrirFormPres(fila) {
     editandoPresFila = fila;
+    // Autosave: presFilaCreada solo cuando el autosave crea la fila (prestación nueva);
+    // una prestación PREEXISTENTE nunca se borra en silencio, ver autosavePresAhora.
+    presSesionId++;
+    presFilaCreada = null;
+    clearTimeout(presAutosaveTimer);
+    // Mismo criterio que en abrirFormMov: no resetear presAutosaveEnCurso, para no
+    // arrancar una escritura mientras el guardado del form anterior sigue en vuelo.
     presMsg.classList.add('hidden');
     if (fila) {
       const pres = fichaActual.prestacionesObraSocial.find((p) => p.fila === fila);
@@ -2406,46 +2548,154 @@
     panelPres.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  document.getElementById('pres-guardar').addEventListener('click', async () => {
-    const fecha = presFecha.value;
-    if (!fecha) {
-      presMsg.textContent = 'La fecha es obligatoria.';
-      presMsg.className = 'panel-msg error';
-      presMsg.classList.remove('hidden');
-      return;
-    }
-    // Capturado sincrónicamente ANTES de cualquier await (ver el fix de iniciarPolling
-    // más abajo, mismo motivo: nunca confiar en `fichaActual` después de un await).
-    const idFicha = fichaActual.id;
-    const payload = {
-      id: idFicha,
-      fecha: fechaInputASheet(fecha),
+  // ---------- AUTOSAVE tipo Google Sheets para prestaciones (pedido 2026-08-25) ----------
+  // Misma mecánica que los movimientos: se guarda solo ~1,2s después de dejar de
+  // escribir, sin botón Guardar. presFilaCreada recuerda la fila creada por el autosave
+  // en esta sesión (prestación NUEVA). Reglas:
+  //  - Una prestación nueva creada por el autosave que queda vacía se elimina sola
+  //    (prestacion-eliminar: en prestaciones sí está permitido borrar, es la tabla de
+  //    obra social sin saldos — ver api/gestion/pacientes.js).
+  //  - Una prestación PREEXISTENTE no se borra vaciando sus campos: se restaura el
+  //    contenido original y se avisa que hay que usar el ✕ de la tabla para eliminarla.
+  //  - Ni la fecha precargada (hoy) ni el check "Autorizado" solos crean una fila:
+  //    tiene que haber tratamiento o código escrito.
+  let presSesionId = 0; // token: cada apertura del form invalida flushes/guardados viejos
+  let presAutosaveTimer = null;
+  let presFilaCreada = null; // fila creada por el autosave en esta sesión del form
+  let presAutosaveEnCurso = false;
+
+  function mostrarHintPres(msg, tipo) {
+    const h = document.getElementById('pres-autosave-hint');
+    h.textContent = msg;
+    h.className = 'autosave-hint ' + (tipo || '');
+    h.classList.remove('hidden');
+    clearTimeout(presAutosaveHintTimer);
+    presAutosaveHintTimer = setTimeout(() => h.classList.add('hidden'), 4000);
+  }
+  let presAutosaveHintTimer = null;
+
+  function datosPresActuales() {
+    return {
+      fecha: presFecha.value,
       tratamiento: presTratamiento.value.trim(),
       codigo: presCodigo.value.trim(),
       autorizado: presAutorizado.checked,
     };
-    const btn = document.getElementById('pres-guardar');
-    setBtnLoading(btn, 'Guardando...');
-    try {
-      const r = editandoPresFila
-        ? await apiPost({ accion: 'prestacion-editar', fila: editandoPresFila, ...payload })
-        : await apiPost({ accion: 'prestacion-agregar', ...payload });
-      if (r.success) {
-        ocultarAnimado(panelPres);
-        toast(r.pendiente ? '✅ Guardado (pendiente de sincronizar)' : '✅ Prestación guardada');
-        if (fichaActual && fichaActual.id === idFicha) {
-          fichaActual = await apiGet({ modo: 'ficha', id: idFicha });
-          renderFicha();
-        }
-      } else {
-        presMsg.textContent = r.message || 'No se pudo guardar.';
-        presMsg.className = 'panel-msg error';
-        presMsg.classList.remove('hidden');
-      }
-    } finally {
-      quitarBtnLoading(btn);
+  }
+  // "Tiene contenido real" = tratamiento o código escritos (la fecha precargada y el
+  // check solos no alcanzan para crear ni conservar una prestación).
+  function presTieneContenido() {
+    const d = datosPresActuales();
+    return !!(d.tratamiento || d.codigo);
+  }
+
+  async function autosavePresAhora() {
+    presAutosaveTimer = null;
+    if (presAutosaveEnCurso) {
+      presAutosaveTimer = setTimeout(autosavePresAhora, 400);
+      return;
     }
+    const idFicha = fichaActual ? fichaActual.id : null;
+    if (!idFicha) return;
+    const d = datosPresActuales();
+    const editandoFilaPrevia = !!editandoPresFila;
+
+    if (!presTieneContenido()) {
+      const filaAEliminar = presFilaCreada; // snapshot antes de cualquier await
+      if (filaAEliminar) {
+        // La creó el autosave en esta sesión y quedó vacía -> se elimina (permitido acá).
+        const sesion = presSesionId;
+        presAutosaveEnCurso = true;
+        try {
+          await apiPost({ accion: 'prestacion-eliminar', id: idFicha, fila: filaAEliminar });
+        } catch (e) { /* silencioso */ }
+        if (sesion === presSesionId) presFilaCreada = null;
+        presAutosaveEnCurso = false;
+        await refetchFichaSilencioso(idFicha);
+        return;
+      }
+      if (editandoFilaPrevia) {
+        const orig = fichaActual.prestacionesObraSocial.find((p) => p.fila === editandoPresFila);
+        if (orig) {
+          presFecha.value = fechaSheetAInput(orig.fecha);
+          presTratamiento.value = orig.tratamiento;
+          presCodigo.value = orig.codigo;
+          presAutorizado.checked = orig.autorizado;
+        }
+        mostrarHintPres('Una prestación ya existente no se borra vaciándola — se restauró la original (usá ✕ en la tabla para eliminarla).', 'error');
+      }
+      return;
+    }
+
+    await guardarPresDatos(idFicha, presFilaCreada || editandoPresFila || null, d, editandoFilaPrevia, presSesionId);
+  }
+
+  // Escritura real a la planilla, con contexto ya capturado (mismo motivo que en
+  // guardarMovDatos: cerrarFormPres manda el flush en segundo plano y no puede leer
+  // los valores de OTRO formulario abierto mientras tanto).
+  async function guardarPresDatos(idFicha, filaDestino, d, editandoFilaPrevia, sesion) {
+    presAutosaveEnCurso = true;
+    mostrarHintPres('Guardando…', 'saving');
+    const fechaSheet = fechaInputASheet(d.fecha || '');
+    if (!fechaSheet && !editandoFilaPrevia) {
+      mostrarHintPres('Elegí la fecha para poder guardar.', 'error');
+      presAutosaveEnCurso = false;
+      return;
+    }
+    try {
+      const r = filaDestino
+        ? await apiPost({ accion: 'prestacion-editar', id: idFicha, fila: filaDestino, fecha: fechaSheet, tratamiento: d.tratamiento, codigo: d.codigo, autorizado: d.autorizado })
+        : await apiPost({ accion: 'prestacion-agregar', id: idFicha, fecha: fechaSheet, tratamiento: d.tratamiento, codigo: d.codigo, autorizado: d.autorizado });
+      if (r.success) {
+        // El guardado siempre se completa, pero la memoria de "fila creada por este
+        // form" solo se actualiza si esta sesión sigue siendo la activa (ver el mismo
+        // patrón con movSesionId en guardarMovDatos).
+        if (sesion === presSesionId && !filaDestino && r.fila && fichaActual && fichaActual.id === idFicha) presFilaCreada = r.fila;
+        mostrarHintPres(r.pendiente ? 'Guardado (pendiente de sincronizar)' : 'Guardado ✓', r.pendiente ? 'saving' : 'ok');
+        await refetchFichaSilencioso(idFicha);
+      } else {
+        mostrarHintPres(r.message || 'No se pudo guardar', 'error');
+      }
+    } catch (e) {
+      mostrarHintPres('Error al guardar', 'error');
+    }
+    presAutosaveEnCurso = false;
+  }
+
+  function programarAutosavePres() {
+    clearTimeout(presAutosaveTimer);
+    presAutosaveTimer = setTimeout(autosavePresAhora, 1200);
+  }
+  [presFecha, presTratamiento, presCodigo].forEach((el) => {
+    el.addEventListener('input', programarAutosavePres);
+    el.addEventListener('change', programarAutosavePres);
   });
+  presAutorizado.addEventListener('change', programarAutosavePres);
+
+  function cerrarFormPres() {
+    clearTimeout(presAutosaveTimer);
+    ocultarAnimado(panelPres);
+    if (presAutosaveEnCurso) return;
+    // Snapshot del contexto ANTES de ocultar (mismo patrón que cerrarFormMov): el flush
+    // corre en segundo plano y puede tardar; si se abrió otra prestación mientras tanto,
+    // el token presSesionId hace que este guardado no pise el estado del form nuevo.
+    const idFicha = fichaActual ? fichaActual.id : null;
+    if (!idFicha) return;
+    const d = datosPresActuales();
+    const sesion = presSesionId;
+    const filaCreadaPorAutosave = presFilaCreada; // solo filas que el autosave creó acá
+    const editandoFilaPrevia = !!editandoPresFila;
+    if (!presTieneContenido()) {
+      // Solo se elimina la fila que el AUTOSAVE creó en esta sesión y quedó vacía.
+      // Una prestación PREEXISTENTE vaciada no se toca: el ✕ de la tabla es el camino.
+      if (filaCreadaPorAutosave && sesion === presSesionId) {
+        presFilaCreada = null;
+        apiPost({ accion: 'prestacion-eliminar', id: idFicha, fila: filaCreadaPorAutosave }).then(() => refetchFichaSilencioso(idFicha)).catch(() => {});
+      }
+      return;
+    }
+    guardarPresDatos(idFicha, filaCreadaPorAutosave || editandoPresFila || null, d, editandoFilaPrevia, sesion);
+  }
 
   async function eliminarPrestacion(fila, btn) {
     // Capturado ANTES del confirmDialog, mismo motivo que en anularMovimiento.
