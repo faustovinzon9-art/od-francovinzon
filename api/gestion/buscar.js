@@ -435,8 +435,8 @@ async function proximoBloqueo(req, res) {
 
 // Listado central de pacientes: GET ?modo=pacientes-central&q=. Todas las fuentes
 // (fichas + turnos + creados desde gestión) unificadas en la planilla consolidada.
-// Filtra por nombre/apellido/DNI/teléfono/email (substring normalizado). Devuelve
-// hasta 50; fallback seguro a lista vacía.
+// Filtra por nombre/apellido/DNI/teléfono/email (substring normalizado). Sin q devuelve
+// la lista completa (hasta 2000). Si algo falla, fallback seguro a lista vacía.
 async function pacientesCentral(req, res) {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
@@ -451,7 +451,9 @@ async function pacientesCentral(req, res) {
         String(f.email || '').toLowerCase().includes(q)
       );
     }
-    let resultado = filas.slice(0, 500).map((f) => ({
+    // Lista completa: sin q se devuelven todos (la sección Pacientes de /gestion la
+    // muestra entera con su contador arriba, pedido 2026-08-25). Con q, los matches.
+    let resultado = filas.slice(0, q ? 500 : 2000).map((f) => ({
       nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono,
       email: f.email, conFicha: !!f.fichaId, fichaId: f.fichaId || '', origen: f.origen,
       actualizado: f.actualizado,

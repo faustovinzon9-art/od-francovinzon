@@ -525,3 +525,20 @@ Bug reportado por Fausto en el panel de fichas (`/pacientes`): si escribía un m
 - `renderFicha()` y el polling quedan intactos (sus guards de `id` ya eran correctos).
 
 Verificación: sintaxis JS OK, despliegue en producción 200. Falta la prueba visual de Franco (escribir un movimiento, volver a la lista, abrir otro paciente → no debe aparecer nada del anterior).
+
+## 2026-08-25 — Fix CRÍTICO: la sección "Pacientes" de /gestion nunca se ejecutó (script roto)
+
+Reportado por Fausto: en /gestion → Pacientes la lista aparece vacía y el buscador no funciona. Causa raíz encontrada en el commit que agregó las Fases 2-4 del sistema centralizado (364173a):
+- El bloque de código de la vista Pacientes se insertó DENTRO de `<script defer src="/_vercel/speed-insights/script.js">` (se perdió el `</script>` de cierre al insertar el código nuevo).
+- Según la especificación HTML, un `<script>` con atributo `src` IGNORA por completo su contenido inline → **ninguna** función de la sección Pacientes (`cargarPacientesCentral`, `abrirPerfilPaciente`, los listeners, etc.) existía en el navegador.
+- Además el bloque había quedado FUERA del IIFE principal, así que aunque se hubiese ejecutado no habría tenido acceso a `gestionKey`/`escapeHtml`/`TIME_ZONE`/`cambiarVista`.
+
+Fix (gestion/index.html): (1) se cerró el `<script src>` de Speed Insights; (2) todo el bloque del sistema centralizado se movió DENTRO del IIFE principal, justo antes del arranque.
+
+Además (mejoras pedidas en el mismo reporte):
+- **Lista completa con contador al entrar**: la vista baja la lista completa de la planilla (backend sin el límite viejo de 500 para búsqueda vacía — hasta 2000) y muestra "N pacientes en total" arriba (`.paci-contador`). Se refresca al entrar a la vista.
+- **Buscador como cualquier buscador**: filtra EN EL CLIENTE sobre la lista ya bajada (instantáneo, sin pegarle a Google en cada tecla — cuota compartida con el consultorio), case/accent-insensitive, DNI con/sin puntos, teléfono y email. Enter busca al toque. Si no hay matches en la cache, cae al plan B del servidor (Calendar).
+- Se arregló el bug del listener original que llamaba `cargarPacientesCentral('')` (borraba lo escrito) en vez de pasar el valor del input.
+- Respuestas fuera de orden protegidas con token de secuencia (`paciReqSeq`).
+
+Verificación: sintaxis JS OK (IIFE completo), estructura de scripts correcta. Falta verificación visual de Ayelen/Franco (entrar a Pacientes → lista completa con contador; escribir en el buscador → filtra al toque).

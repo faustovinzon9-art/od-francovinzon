@@ -170,7 +170,8 @@
   .feriado-badge { margin: 8px 0 0; padding: 7px 12px; border-radius: 9px; background: #FBF3E2; border: 1px solid var(--gold); color: var(--navy); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .feriado-badge-btn { padding: 3px 10px; border-radius: 100px; border: 1.5px solid var(--navy); background: var(--white); color: var(--navy); font-size: 10.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
   /* Vista Pacientes (sistema centralizado, 2026-08-25) — mismo lenguaje visual del resto */
-  .paci-busqueda { margin-bottom: 12px; }
+  .paci-busqueda { margin-bottom: 6px; }
+  .paci-contador { font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 2px 10px; }
   .paci-busqueda input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--white); font: inherit; font-size: 14px; }
   .paci-busqueda input:focus { outline: none; border-color: var(--gold); }
   .paci-fila { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--white); border: 1px solid var(--line); border-radius: 11px; margin-bottom: 8px; cursor: pointer; }
@@ -734,7 +735,8 @@
     <div class="paci-busqueda">
       <input type="text" id="paci-busqueda-input" placeholder="Buscar paciente por nombre, DNI, teléfono o email..." autocomplete="off">
     </div>
-    <div id="paci-lista"><div class="loading-note">Escribí para buscar pacientes...</div></div>
+    <div class="paci-contador hidden" id="paci-contador"></div>
+    <div id="paci-lista"><div class="loading-note">Cargando pacientes...</div></div>
     <div id="paci-perfil" class="hidden">
       <button class="action-btn" id="paci-perfil-volver">← Volver a la lista</button>
       <div id="paci-perfil-error" class="paci-vacio hidden"></div>
@@ -1324,7 +1326,12 @@
     actualizarVisibilidadVista();
     if (view === 'dia') return cargarAgenda();
     if (view === 'semana') return cargarSemana();
-    if (view === 'pacientes') return cargarPacientesCentral('');
+    if (view === 'pacientes') {
+      // Entrar a la vista = bajar la lista completa fresca (contador y datos al día).
+      // Las búsquedas posteriores filtran sobre esa lista sin volver al servidor.
+      paciListaCargada = false;
+      return cargarPacientesCentral('');
+    }
     return Promise.resolve();
   }
   viewDiaBtn.addEventListener('click', () => cambiarVista('dia'));
@@ -2924,18 +2931,6 @@
     cargarResumenSidebar();
   }, 60000);
 
-  // ---------- Arranque ----------
-  if (gestionKey) verificarYArrancar();
-})();
-</script>
-<script>
-  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-</script>
-<script defer src="/_vercel/insights/script.js"></script>
-<script>
-  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-</script>
-<script defer src="/_vercel/speed-insights/script.js">
 
   // ---------- SISTEMA CENTRALIZADO DE PACIENTES: vista "Pacientes" (2026-08-25) ----------
   // Listado central (registro consolidado: fichas + turnos + creados desde gestión),
@@ -2943,50 +2938,148 @@
   let perfilPacienteActual = null;
   let valoresOriginalesPerfil = {};
 
+  // Cache local de TODA la lista (se baja 1 sola vez y se reusa): el buscador filtra
+  // en el cliente sobre esa lista — instantáneo, funciona como cualquier buscador y no
+  // le pega a Google en cada tecla (la cuota de Google es compartida con el consultorio).
+  let paciListaCache = [];
+  let paciListaCargada = false;
+  let paciReqSeq = 0;
+
+  // Substring case/accent-insensitive: "garcia" matchea "García", "3442" matchea teléfonos.
+  function paciNormalizar(s) {
+    return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+  // DNI solo dígitos: la planilla los guarda con puntos (44.821.087) y el buscador tiene
+  // que encontrar "44821087" y "44.821.087" indistintamente.
+  function paciDniSoloDigitos(s) {
+    return paciNormalizar(s).replace(/\D/g, '');
+  }
+
+  function pintarPacientes(lista, query) {
+    const listaEl = document.getElementById('paci-lista');
+    const contadorEl = document.getElementById('paci-contador');
+    if (!lista.length) {
+      contadorEl.classList.add('hidden');
+      listaEl.innerHTML = '<div class="paci-vacio">' + (query ? 'No se encontró ningún paciente. Probá con otro nombre, DNI o teléfono.' : 'Todavía no hay pacientes cargados.') + '</div>';
+      return;
+    }
+    const base = paciListaCache.length || lista.length;
+    contadorEl.textContent = query
+      ? `${lista.length} resultado${lista.length === 1 ? '' : 's'} de ${base} paciente${base === 1 ? '' : 's'}`
+      : `${lista.length} paciente${lista.length === 1 ? '' : 's'} en total`;
+    contadorEl.classList.remove('hidden');
+    listaEl.innerHTML = lista.map((p) => `
+      <div class="paci-fila" data-dni="${escapeHtml(p.dni || '')}" data-tel="${escapeHtml(p.telefono || '')}">
+        <div class="paci-fila-info">
+          <div class="paci-fila-nombre">${escapeHtml(p.nombre || '')} ${escapeHtml(p.apellido || '')}</div>
+          <div class="paci-fila-detalle">
+            ${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'DNI: —'}
+            ${p.telefono ? ' · Tel: ' + escapeHtml(p.telefono) : ''}
+            ${p.email ? ' · ' + escapeHtml(p.email) : ''}
+          </div>
+        </div>
+        <span class="badge ${p.conFicha ? 'badge-ficha' : 'badge-sinficha'}">${p.conFicha ? 'Con ficha' : 'Sin ficha'}</span>
+      </div>`).join('');
+    listaEl.querySelectorAll('.paci-fila').forEach((el) => {
+      el.addEventListener('click', () => abrirPerfilPaciente(el.dataset.dni, el.dataset.tel));
+    });
+  }
+
+  // Fallback solo para búsquedas sin resultado en la cache: le pregunta al servidor (que
+  // si hace falta cae a Calendar — plan B de la lección 2026-08-25) por si el paciente
+  // existe solo como turno y todavía no está en la planilla consolidada.
+  function buscarEnServidor(q) {
+    const listaEl = document.getElementById('paci-lista');
+    const contadorEl = document.getElementById('paci-contador');
+    return fetch(`/api/gestion/buscar?modo=pacientes-central&q=${encodeURIComponent(q)}&key=${encodeURIComponent(gestionKey)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((datos) => {
+        if (!Array.isArray(datos) || !datos.length) {
+          contadorEl.classList.add('hidden');
+          listaEl.innerHTML = '<div class="paci-vacio">No se encontró ningún paciente. Probá con otro nombre, DNI o teléfono.</div>';
+          return;
+        }
+        pintarPacientes(datos, q);
+      })
+      .catch(() => {
+        contadorEl.classList.add('hidden');
+        listaEl.innerHTML = '<div class="paci-vacio">No se pudo cargar la lista. Revisá la conexión e intentá de nuevo.</div>';
+      });
+  }
+
+  // Aplica el filtro sobre la lista cacheada. Devuelve Promise.resolve() (para poder
+  // encadenar). Si no hay matches y hay texto, llama al plan B del servidor (Calendar).
+  function filtrarEnCache(queryRaw) {
+    const query = paciNormalizar(queryRaw);
+    if (!query) {
+      pintarPacientes(paciListaCache, '');
+      return Promise.resolve();
+    }
+    const qDni = paciDniSoloDigitos(query);
+    const matches = paciListaCache.filter((p) =>
+      paciNormalizar(`${p.nombre} ${p.apellido}`).includes(query) ||
+      paciNormalizar(p.telefono).includes(query) ||
+      paciNormalizar(p.email).includes(query) ||
+      // DNI: compara solo dígitos (ignora puntos/espacios del paciente Y de lo escrito)
+      (qDni.length >= 3 && paciDniSoloDigitos(p.dni).includes(qDni))
+    );
+    if (matches.length) {
+      pintarPacientes(matches, query);
+      return Promise.resolve();
+    }
+    // Cero resultados en la cache: preguntar al servidor (plan B a Calendar) una vez.
+    const listaEl = document.getElementById('paci-lista');
+    listaEl.innerHTML = '<div class="loading-note">Buscando...</div>';
+    return buscarEnServidor(queryRaw.trim());
+  }
+
   function cargarPacientesCentral(q) {
     const input = document.getElementById('paci-busqueda-input');
     if (q !== undefined) input.value = q;
-    const query = (input.value || '').trim();
+    const query = paciNormalizar(input.value);
     const listaEl = document.getElementById('paci-lista');
     const perfilEl = document.getElementById('paci-perfil');
-    if (perfilPacienteActual && !query) {
-      // al vaciar la búsqueda se vuelve a la lista
+    const contadorEl = document.getElementById('paci-contador');
+    // Escribir en el buscador con un perfil abierto = volver a la lista y buscar.
+    if (perfilPacienteActual) {
       perfilPacienteActual = null;
       perfilEl.classList.add('hidden');
       listaEl.classList.remove('hidden');
     }
-    if (perfilPacienteActual) return; // con un perfil abierto, la lista no se repinta
-    listaEl.innerHTML = '<div class="loading-note">Buscando...</div>';
-    return fetch(`/api/gestion/buscar?modo=pacientes-central&q=${encodeURIComponent(query)}&key=${encodeURIComponent(gestionKey)}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((datos) => {
-        if (!datos.length) {
-          listaEl.innerHTML = '<div class="paci-vacio">' + (query ? 'No se encontró ningún paciente. Probá con otro nombre, DNI o teléfono.' : 'Escribí para buscar pacientes...') + '</div>';
-          return;
-        }
-        listaEl.innerHTML = datos.map((p) => `
-          <div class="paci-fila" data-dni="${p.dni || ''}" data-tel="${p.telefono || ''}">
-            <div class="paci-fila-info">
-              <div class="paci-fila-nombre">${escapeHtml(p.nombre || '')} ${escapeHtml(p.apellido || '')}</div>
-              <div class="paci-fila-detalle">
-                ${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'DNI: —'}
-                ${p.telefono ? ' · Tel: ' + escapeHtml(p.telefono) : ''}
-                ${p.email ? ' · ' + escapeHtml(p.email) : ''}
-              </div>
-            </div>
-            <span class="badge ${p.conFicha ? 'badge-ficha' : 'badge-sinficha'}">${p.conFicha ? 'Con ficha' : 'Sin ficha'}</span>
-          </div>`).join('');
-        listaEl.querySelectorAll('.paci-fila').forEach((el) => {
-          el.addEventListener('click', () => abrirPerfilPaciente(el.dataset.dni, el.dataset.tel));
+    const seq = ++paciReqSeq;
+
+    // Sin la lista en cache todavía: bajarla completa (1 sola llamada).
+    if (!paciListaCargada) {
+      listaEl.innerHTML = '<div class="loading-note">Cargando pacientes...</div>';
+      return fetch(`/api/gestion/buscar?modo=pacientes-central&q=&key=${encodeURIComponent(gestionKey)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((datos) => {
+          if (seq !== paciReqSeq) return;
+          if (!Array.isArray(datos)) {
+            contadorEl.classList.add('hidden');
+            listaEl.innerHTML = '<div class="paci-vacio">No se pudo cargar la lista. Revisá la conexión e intentá de nuevo.</div>';
+            return;
+          }
+          paciListaCache = datos;
+          paciListaCargada = true;
+          return filtrarEnCache(input.value);
+        })
+        .catch(() => {
+          if (seq !== paciReqSeq) return;
+          contadorEl.classList.add('hidden');
+          listaEl.innerHTML = '<div class="paci-vacio">No se pudo cargar la lista. Revisá la conexión e intentá de nuevo.</div>';
         });
-      })
-      .catch(() => { listaEl.innerHTML = '<div class="paci-vacio">No se pudo cargar la lista.</div>'; });
+    }
+
+    // Lista ya en cache: filtrar en el cliente (instantáneo, sin pegarle a Google).
+    return filtrarEnCache(input.value);
   }
 
   function abrirPerfilPaciente(dni, telefono) {
     if (!dni && !telefono) return;
     const listaEl = document.getElementById('paci-lista');
     const perfilEl = document.getElementById('paci-perfil');
+    document.getElementById('paci-contador').classList.add('hidden');
     perfilEl.classList.remove('hidden');
     listaEl.classList.add('hidden');
     perfilPacienteActual = dni || telefono;
@@ -3126,13 +3219,35 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
-  // Buscador de la lista (debounce)
-  document.getElementById('paci-busqueda-input').addEventListener('input', () => {
-    clearTimeout(paciBusquedaDebounce);
-    paciBusquedaDebounce = setTimeout(() => cargarPacientesCentral(''), 300);
-  });
+  // Buscador de la lista (debounce): busca con lo que hay en el input. Vaciar el
+  // buscador vuelve a la lista completa (con su contador arriba).
+  const paciBusquedaInput = document.getElementById('paci-busqueda-input');
   let paciBusquedaDebounce = null;
+  paciBusquedaInput.addEventListener('input', () => {
+    clearTimeout(paciBusquedaDebounce);
+    paciBusquedaDebounce = setTimeout(() => cargarPacientesCentral(paciBusquedaInput.value), 250);
+  });
+  paciBusquedaInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      clearTimeout(paciBusquedaDebounce);
+      cargarPacientesCentral(paciBusquedaInput.value);
+    }
+  });
 
+
+
+  // ---------- Arranque ----------
+  if (gestionKey) verificarYArrancar();
+})();
 </script>
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script>
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+
 </body>
 </html>

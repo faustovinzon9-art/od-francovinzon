@@ -365,6 +365,11 @@ Pedido de Fausto: guardar solo mientras se escribe, sin botón Guardar. Reglas d
 - **Cancelar no "descarta"** (descartar = borrar con retroceso, decisión del usuario): solo cierra el panel al toque y el guardado pendiente corre en segundo plano para no perder la última tecla.
 - **Los `agregar` devuelven `fila` también en la respuesta "pendiente"** (respaldo de emergencia): el autosave necesita saber qué fila reservó para seguir EDITANDO esa fila — si no, cada tecla encolaba un `agregar` nuevo y la recuperación de respaldos duplicaba la fila.
 
+## Estructura de <script> en /gestion — lección (2026-08-25)
+
+- **Un `<script src="...">` ignora por completo su contenido inline.** El código de la sección Pacientes se insertó una vez dentro del tag `<script defer src="/_vercel/speed-insights/script.js">` (el `</script>` de cierre se perdió al pegar el bloque nuevo) y el navegador descartó todo ese código: la vista existía en el HTML pero ninguna función corría. Lección doble: (a) al insertar código cerca de un `<script src>` externo, verificar SIEMPRE que cada tag quede bien cerrado en su propia línea; (b) el check de sintaxis por bloque no alcanza — validar la ESTRUCTURA de tags del documento (contar aperturas/cierres y que ningún `<script>` con `src` tenga contenido inline pegado).
+- **El código que usa variables del panel (gestionKey/escapeHtml/TIME_ZONE/cambiarVista...) vive DENTRO del IIFE principal de /gestion.** Si un bloque nuevo necesita ese scope, va dentro del IIFE (antes del `})();`), no en un `<script>` aparte después del cierre.
+
 ## Autosave y navegación entre pacientes (2026-08-25)
 
 - **Cada form de movimiento/prestación recuerda la ficha a la que pertenece** (`movFichaId`/`presFichaId`, capturadas al abrirlo). El autosave y los flushes NUNCA usan `fichaActual` en vivo como destino: si un timer pendiente o un guardado en segundo plano termina después de que el usuario ya abrió otro paciente, escribe igual en la ficha correcta. No revertir a leer `fichaActual.id` en el momento de disparar el guardado.
