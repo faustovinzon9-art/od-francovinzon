@@ -511,3 +511,17 @@ Pedido de Fausto: que Franco no tenga que apretar "Guardar" — el panel de la f
 - `movimiento-agregar`/`prestacion-agregar` ahora devuelven `fila` también en la respuesta "pendiente" (respaldo): el autosave necesita saber qué fila reservó para seguir editándola y no encolar un segundo `agregar` que duplique la fila al recuperarse.
 
 **Verificación:** sintaxis JS OK (bloque embebido + api), producción 200 tras el deploy. Falta verificación visual de Franco en el consultorio (consultorio abierto, sin tocar el flujo de atención).
+
+## 2026-08-25 — Fix: datos de un paciente quedaban "pegados" al cambiar de paciente (autosave)
+
+Bug reportado por Fausto en el panel de fichas (`/pacientes`): si escribía un movimiento (tratamiento, pago, debe, etc.) y después hacía "Ver todas las fichas" y abría OTRO paciente, seguían apareciendo los datos del paciente anterior. Era peor de lo que se veía — dos problemas encadenados:
+- **UI**: los paneles de "Nuevo/Editar movimiento" y "Nueva/Editar prestación" quedaban abiertos (con su contenido) al salir de la ficha; al abrir otro paciente, el panel seguía arriba con los datos del anterior.
+- **Integridad (lo grave)**: el autosave pendiente (1,2s) podía dispararse DESPUÉS de que `fichaActual` ya apuntara al paciente nuevo → escribía los datos del paciente A en la planilla del paciente B. Además `movFilaCreada`/`presFilaCreada` (el número de fila que el autosave creó) quedaban "dueños" de una fila de A cuando se abría B.
+
+**Fix (pacientes/index.html)**:
+- Cada form ahora recuerda **a qué ficha pertenece** cuando se abre (`movFichaId`/`presFichaId`), y TODOS los autosaves/flushes usan esa ficha (no `fichaActual` en vivo) → un guardado tardío nunca puede escribir en el paciente equivocado.
+- Nueva función central `limpiarFormulariosAlNavegar()` que se llama en **todos** los puntos de navegación que salen de la ficha (volver a la lista, abrir otro paciente desde cualquier lado — lista, buscador, hoy, duplicados, fusión, deep-link —, vista de duplicados/fusión): cierra ambos forms con la misma semántica que Cancelar (lo pendiente se guarda hacia la ficha dueña), cancela timers, vacía campos, oculta hints y resetea el estado de autosave.
+- Los forms se abren siempre con hints/estado limpio.
+- `renderFicha()` y el polling quedan intactos (sus guards de `id` ya eran correctos).
+
+Verificación: sintaxis JS OK, despliegue en producción 200. Falta la prueba visual de Franco (escribir un movimiento, volver a la lista, abrir otro paciente → no debe aparecer nada del anterior).

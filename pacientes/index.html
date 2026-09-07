@@ -743,6 +743,7 @@
   let gestionKey = sessionStorage.getItem('gestionKey') || '';
   let pacientes = [];
   let fichaActual = null; // { id, campos, financiero, movimientos, driveModifiedTime }
+  let formulariosListos = false; // pasa a true cuando los const de los forms existen
   let pollTimer = null;
   let campoConFoco = null;
   let editandoMovFila = null;
@@ -1464,12 +1465,57 @@
   const autosaveStatus = document.getElementById('autosave-status');
 
   document.getElementById('volver-lista').addEventListener('click', () => {
+    limpiarFormulariosAlNavegar();
     detenerPolling();
     cambiarVista(vistaLista, vistaFicha);
     cargarLista();
   });
 
+  // ---------- Navegación entre pacientes (bug reportado por Fausto, 2026-08-25) ----------
+  // El form de movimiento y el de prestación pertenecen a UNA ficha. Al salir de la
+  // ficha (volver a la lista, abrir otro paciente, ver duplicados/fusión) hay que
+  // cerrarlos y limpiarlos SIEMPRE, o pasan dos cosas malas:
+  //   (1) quedan abiertos con los datos del paciente anterior → aparecen encima del
+  //       paciente recién abierto (lo que reportó Fausto); y
+  //   (2) un autosave pendiente puede dispararse con fichaActual YA cambiada y escribir
+  //       los datos del paciente A en la planilla del paciente B.
+  // Esta función cierra ambos forms con la MISMA semántica que Cancelar (lo que haya
+  // quedado sin guardar se guarda — en segundo plano, hacia la ficha dueña capturada en
+  // movFichaId/presFichaId), después vacía los campos y reinicia el estado de autosave.
+  // OJO: solo limpia si los const de los forms ya están definidos. Al arrancar, si ya
+  // hay GESTION_KEY guardada, arrancar() corre en un queueMicrotask que puede abrir una
+  // ficha por deep-link ?id= ANTES de que el código de abajo (donde viven los const de
+  // los forms y donde formulariosListos pasa a true) haya terminado de ejecutarse — por
+  // eso el guard con la bandera formulariosListos, no con referencia directa a los const.
+  function limpiarFormulariosAlNavegar() {
+    if (!formulariosListos) return;
+    // Cerrar con flush hacia el dueño de cada form (misma semántica que Cancelar).
+    cerrarFormMov();
+    cerrarFormPres();
+    // Vaciar campos y estado por más que los paneles ya estén ocultos.
+    clearTimeout(movAutosaveTimer); movAutosaveTimer = null;
+    clearTimeout(presAutosaveTimer); presAutosaveTimer = null;
+    movFecha.value = ''; movTratamiento.value = ''; movDebe.value = ''; movHaber.value = ''; movFormaPago.value = '';
+    movMsg.classList.add('hidden');
+    movTipoHint.textContent = '';
+    const hintHistorica = document.getElementById('mov-fecha-hint-historica');
+    if (hintHistorica) hintHistorica.classList.add('hidden');
+    // El indicador de autosave del encabezado también es por-ficha: no puede quedar el
+    // "Guardado ✓" de la ficha anterior flotando sobre la siguiente.
+    const statusFicha = document.getElementById('autosave-status');
+    if (statusFicha) { statusFicha.textContent = ''; statusFicha.className = 'autosave-status'; }
+    presFecha.value = ''; presTratamiento.value = ''; presCodigo.value = ''; presAutorizado.checked = false;
+    presMsg.classList.add('hidden');
+    const hintMov = document.getElementById('mov-autosave-hint');
+    if (hintMov) { hintMov.textContent = ''; hintMov.classList.add('hidden'); }
+    const hintPres = document.getElementById('pres-autosave-hint');
+    if (hintPres) { hintPres.textContent = ''; hintPres.classList.add('hidden'); }
+    editandoMovFila = null; movFilaCreada = null; movFichaId = null; cargaHistorica = false;
+    editandoPresFila = null; presFilaCreada = null; presFichaId = null;
+  }
+
   async function abrirFicha(id) {
+    limpiarFormulariosAlNavegar(); // el form del paciente anterior no puede seguir vivo
     cambiarVista(vistaFicha, vistaLista, vistaDuplicados, vistaFusion, vistaObraSocial);
     document.getElementById('f-titulo').textContent = 'Cargando…';
     try {
@@ -1737,6 +1783,7 @@
     // PREEXISTENTE (fila != null acá) nunca se borra físicamente, ver autosaveMovAhora.
     movSesionId++;
     movFilaCreada = null;
+    movFichaId = fichaActual ? fichaActual.id : null; // dueño de este form, ver arriba
     clearTimeout(movAutosaveTimer);
     // OJO: NO se resetea movAutosaveEnCurso acá a propósito. Si un guardado del form
     // anterior sigue en vuelo (flush de cerrarFormMov o autosave lento), este form
@@ -1744,6 +1791,8 @@
     // — si no, dos movimiento-agregar podrían correr a la vez y duplicar la fila.
     cargaHistorica = !!historica;
     movMsg.classList.add('hidden');
+    const hintMovAlAbrir = document.getElementById('mov-autosave-hint');
+    if (hintMovAlAbrir) { hintMovAlAbrir.textContent = ''; hintMovAlAbrir.classList.add('hidden'); }
     if (fila) {
       const mov = fichaActual.movimientos.find((m) => m.fila === fila);
       document.getElementById('mov-form-titulo').textContent = 'Editar movimiento';
@@ -1784,6 +1833,10 @@
   let movAutosaveTimer = null;
   let movFilaCreada = null; // fila creada por el autosave en esta sesión del form (mov nuevo)
   let movAutosaveEnCurso = false;
+  // Ficha a la que pertenece este form (capturada al ABRIRLO, no fichaActual en vivo):
+  // si un autosave pendiente o un flush tardío corre cuando fichaActual ya cambió a
+  // OTRO paciente, escribe igual en la ficha correcta (bug cross-paciente, 2026-08-25).
+  let movFichaId = null;
 
   function mostrarHintMov(msg, tipo) {
     const h = document.getElementById('mov-autosave-hint');
@@ -1827,7 +1880,7 @@
       movAutosaveTimer = setTimeout(autosaveMovAhora, 400);
       return;
     }
-    const idFicha = fichaActual ? fichaActual.id : null;
+    const idFicha = movFichaId || (fichaActual ? fichaActual.id : null);
     if (!idFicha) return;
     const d = datosMovActuales();
     const editandoFilaPrevia = !!editandoMovFila; // si venimos de editar una fila ya existente
@@ -1925,7 +1978,7 @@
     // tardar; si para entonces se abrió otro movimiento, este guardado igual va a la
     // fila (o crea la fila) que corresponde a ESTE formulario (el token movSesionId
     // capturado hace que su guardarMovDatos no pise el estado del form nuevo).
-    const idFicha = fichaActual ? fichaActual.id : null;
+    const idFicha = movFichaId || (fichaActual ? fichaActual.id : null);
     if (!idFicha) return;
     const d = datosMovActuales();
     const sesion = movSesionId;
@@ -2508,6 +2561,7 @@
     }
   }
 
+  formulariosListos = true; // acá ya existen panelMov/panelPres y sus campos
   const panelPres = document.getElementById('panel-pres');
   const presFecha = document.getElementById('pres-fecha');
   const presTratamiento = document.getElementById('pres-tratamiento');
@@ -2526,10 +2580,13 @@
     // una prestación PREEXISTENTE nunca se borra en silencio, ver autosavePresAhora.
     presSesionId++;
     presFilaCreada = null;
+    presFichaId = fichaActual ? fichaActual.id : null; // dueño de este form
     clearTimeout(presAutosaveTimer);
     // Mismo criterio que en abrirFormMov: no resetear presAutosaveEnCurso, para no
     // arrancar una escritura mientras el guardado del form anterior sigue en vuelo.
     presMsg.classList.add('hidden');
+    const hintPresAlAbrir = document.getElementById('pres-autosave-hint');
+    if (hintPresAlAbrir) { hintPresAlAbrir.textContent = ''; hintPresAlAbrir.classList.add('hidden'); }
     if (fila) {
       const pres = fichaActual.prestacionesObraSocial.find((p) => p.fila === fila);
       document.getElementById('pres-form-titulo').textContent = 'Editar prestación';
@@ -2563,6 +2620,8 @@
   let presAutosaveTimer = null;
   let presFilaCreada = null; // fila creada por el autosave en esta sesión del form
   let presAutosaveEnCurso = false;
+  // Dueño de este form (mismo criterio que movFichaId, ver arriba — bug cross-paciente).
+  let presFichaId = null;
 
   function mostrarHintPres(msg, tipo) {
     const h = document.getElementById('pres-autosave-hint');
@@ -2595,7 +2654,7 @@
       presAutosaveTimer = setTimeout(autosavePresAhora, 400);
       return;
     }
-    const idFicha = fichaActual ? fichaActual.id : null;
+    const idFicha = presFichaId || (fichaActual ? fichaActual.id : null);
     if (!idFicha) return;
     const d = datosPresActuales();
     const editandoFilaPrevia = !!editandoPresFila;
@@ -2679,7 +2738,7 @@
     // Snapshot del contexto ANTES de ocultar (mismo patrón que cerrarFormMov): el flush
     // corre en segundo plano y puede tardar; si se abrió otra prestación mientras tanto,
     // el token presSesionId hace que este guardado no pise el estado del form nuevo.
-    const idFicha = fichaActual ? fichaActual.id : null;
+    const idFicha = presFichaId || (fichaActual ? fichaActual.id : null);
     if (!idFicha) return;
     const d = datosPresActuales();
     const sesion = presSesionId;
@@ -2849,6 +2908,7 @@
   const dupGruposEl = document.getElementById('dup-grupos');
 
   async function abrirVistaDuplicados() {
+    limpiarFormulariosAlNavegar();
     cambiarVista(vistaDuplicados, vistaLista, vistaFicha, vistaFusion);
     try {
       pacientes = await apiGet({ modo: 'listar' });
@@ -2856,6 +2916,7 @@
     renderVistaDuplicados();
   }
   document.getElementById('volver-lista-desde-dup').addEventListener('click', () => {
+    limpiarFormulariosAlNavegar();
     cambiarVista(vistaLista, vistaDuplicados);
     cargarLista();
   });
@@ -2921,6 +2982,7 @@
   let fusionMantener = null; // 'a' | 'b'
 
   async function abrirFusion(idA, idB) {
+    limpiarFormulariosAlNavegar();
     cambiarVista(vistaFusion, vistaLista, vistaFicha, vistaDuplicados);
     document.getElementById('fusion-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">Cargando…</td></tr>';
     document.getElementById('fusion-msg').classList.add('hidden');

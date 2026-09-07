@@ -365,6 +365,12 @@ Pedido de Fausto: guardar solo mientras se escribe, sin botón Guardar. Reglas d
 - **Cancelar no "descarta"** (descartar = borrar con retroceso, decisión del usuario): solo cierra el panel al toque y el guardado pendiente corre en segundo plano para no perder la última tecla.
 - **Los `agregar` devuelven `fila` también en la respuesta "pendiente"** (respaldo de emergencia): el autosave necesita saber qué fila reservó para seguir EDITANDO esa fila — si no, cada tecla encolaba un `agregar` nuevo y la recuperación de respaldos duplicaba la fila.
 
+## Autosave y navegación entre pacientes (2026-08-25)
+
+- **Cada form de movimiento/prestación recuerda la ficha a la que pertenece** (`movFichaId`/`presFichaId`, capturadas al abrirlo). El autosave y los flushes NUNCA usan `fichaActual` en vivo como destino: si un timer pendiente o un guardado en segundo plano termina después de que el usuario ya abrió otro paciente, escribe igual en la ficha correcta. No revertir a leer `fichaActual.id` en el momento de disparar el guardado.
+- **Toda navegación que sale de la ficha limpia los forms** (función `limpiarFormulariosAlNavegar`, llamada desde volver-lista, abrirFicha, duplicados y fusión): cierra los paneles con semántica de Cancelar (lo pendiente se guarda hacia la ficha dueña), cancela timers, vacía campos y resetea estado. Es la única forma de que el contenido de un paciente no quede "pegado" ni se escriba en el paciente siguiente.
+- **Nunca se resetea `movAutosaveEnCurso`/`presAutosaveEnCurso` al abrir un form nuevo** (para no arrancar dos escrituras a la vez); en cambio el autosave reintenta solo a los 400ms mientras el guardado anterior siga en vuelo.
+
 ## Zona horaria
 
 - **Nunca usar getters locales de `Date` para "hoy"/"ahora"** en código que corre en el navegador (afecta a cualquier visitante en otro huso horario). Siempre `Intl.DateTimeFormat` con `timeZone: 'America/Argentina/Buenos_Aires'` explícito. Ya hubo un bug real de esto, corregido — no reintroducirlo.
