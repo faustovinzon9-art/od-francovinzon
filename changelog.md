@@ -542,3 +542,25 @@ Además (mejoras pedidas en el mismo reporte):
 - Respuestas fuera de orden protegidas con token de secuencia (`paciReqSeq`).
 
 Verificación: sintaxis JS OK (IIFE completo), estructura de scripts correcta. Falta verificación visual de Ayelen/Franco (entrar a Pacientes → lista completa con contador; escribir en el buscador → filtra al toque).
+
+## 2026-08-25 — Turnos se confirman solos cuando hubo movimiento en la ficha ese día
+
+Pedido de Fausto (con muchas preguntas una por una, respuestas en decisions.md): si un
+paciente tiene un turno el día D y en su ficha hay un MOVIMIENTO válido (no anulado) con
+fecha D, ese turno queda "Confirmado: Sí" automáticamente — aunque sea viejo y nadie lo
+haya confirmado a mano. Reglas: solo movimientos (NO prestaciones); se compara la fecha
+del movimiento contra el día del turno (sirve la carga histórica); aplica a pasado/hoy/
+futuro por igual; anulados no cuentan; varios turnos del mismo día se confirman todos
+(incluye sobreturnos); identidad por DNI y si no nombre exacto; homónimos sin DNI ese día
+→ no se confirma ninguno; un "Confirmado: No" puesto a mano se respeta (los turnos viejos
+no tienen ninguna marca, así que se confirman); se registra en el historial como
+'turno_confirmado_automatico'.
+
+**Cómo**: nuevo lib/confirmarTurnosPorMovimiento.js (helper compartido, no suma función al
+límite del plan). Hooks: (1) al guardar un movimiento nuevo (movimiento-agregar) se
+confirman los turnos del paciente en esa fecha; (2) al editar un movimiento y CAMBIARLE la
+fecha (el front avisa con confirmarAuto); (3) al crear o mover un turno a un día que ya
+tiene movimiento en la ficha (crear-turno.js y evento.js, best-effort). Pasada retroactiva
+única: modo temporal `confirmar-turnos-por-movimiento` en pacientes.js (CRON_SECRET,
+dry-run por default; corre con ?dryRun=0 en tandas ?maxFichas=/?offset=). Se saca del
+código apenas se confirme (regla del proyecto).

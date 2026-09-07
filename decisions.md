@@ -370,6 +370,35 @@ Pedido de Fausto: guardar solo mientras se escribe, sin botón Guardar. Reglas d
 - **Un `<script src="...">` ignora por completo su contenido inline.** El código de la sección Pacientes se insertó una vez dentro del tag `<script defer src="/_vercel/speed-insights/script.js">` (el `</script>` de cierre se perdió al pegar el bloque nuevo) y el navegador descartó todo ese código: la vista existía en el HTML pero ninguna función corría. Lección doble: (a) al insertar código cerca de un `<script src>` externo, verificar SIEMPRE que cada tag quede bien cerrado en su propia línea; (b) el check de sintaxis por bloque no alcanza — validar la ESTRUCTURA de tags del documento (contar aperturas/cierres y que ningún `<script>` con `src` tenga contenido inline pegado).
 - **El código que usa variables del panel (gestionKey/escapeHtml/TIME_ZONE/cambiarVista...) vive DENTRO del IIFE principal de /gestion.** Si un bloque nuevo necesita ese scope, va dentro del IIFE (antes del `})();`), no en un `<script>` aparte después del cierre.
 
+## Confirmación automática de turnos por movimiento en la ficha (2026-08-25)
+
+Pedido de Fausto con 20+ preguntas respondidas una por una. Reglas acordadas (NO revertir
+sin preguntar):
+- Un turno del día D queda "Confirmado: Sí" si la ficha del paciente tiene un MOVIMIENTO
+  válido (no anulado) con fecha D. Solo movimientos; las prestaciones de obra social NO
+  cuentan.
+- Se compara la FECHA DEL MOVIMIENTO (puede cargarse después, "carga histórica") contra el
+  día del turno. Aplica a turnos pasados, de hoy y futuros.
+- Los movimientos anulados no cuentan, pero una vez confirmado el turno queda confirmado
+  (anular después no lo des-confirma).
+- Varios turnos del mismo paciente el mismo día → se confirman todos (sobreturnos también).
+- Identidad: DNI del turno si lo tiene; si no, nombre+apellido exactos. Si ese día hay más
+  de un evento con el mismo nombre y ninguno con DNI (homónimos), NO se confirma ninguno
+  (nunca marcar al paciente equivocado).
+- Un "Confirmado: No" explícito se RESPETA (Ayelen lo desmarcó a mano): la regla solo
+  confirma turnos sin esa marca. Los turnos viejos nunca marcados no tienen ninguna marca →
+  se confirman.
+- El toggle manual sigue existiendo y puede desmarcar cuando quiera.
+- Disparadores: al guardar un movimiento nuevo con fecha; al editar un movimiento y cambiar
+  su fecha (flag confirmarAuto del front); al crear o mover un turno a un día que ya tiene
+  movimiento en la ficha. Best-effort siempre: ningún hook puede romper el guardado del
+  movimiento ni el alta del turno (consultorio abierto).
+- La confirmación automática se registra en el historial como 'turno_confirmado_automatico'
+  (distinguible de la manual).
+- Caso límite aceptado: si el agregar cae en el respaldo de emergencia (Google falló) el
+  turno no se confirma en ese momento; se recupera solo en el próximo guardado con cambio
+  de fecha o con la pasada retro.
+
 ## Autosave y navegación entre pacientes (2026-08-25)
 
 - **Cada form de movimiento/prestación recuerda la ficha a la que pertenece** (`movFichaId`/`presFichaId`, capturadas al abrirlo). El autosave y los flushes NUNCA usan `fichaActual` en vivo como destino: si un timer pendiente o un guardado en segundo plano termina después de que el usuario ya abrió otro paciente, escribe igual en la ficha correcta. No revertir a leer `fichaActual.id` en el momento de disparar el guardado.

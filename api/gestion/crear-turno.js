@@ -8,6 +8,10 @@ import { conReintentos } from '../../lib/retry.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
 import { obtenerHorariosConfig, logActividad } from '../../lib/adminConfig.js';
 import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
+// Confirmación automática por movimientos (2026-08-25): si este paciente ya tiene un
+// movimiento en la ficha con la fecha del turno (turno creado DESPUÉS del movimiento),
+// el turno nuevo queda confirmado. Best-effort, nunca bloquea el alta.
+import { confirmarTurnoPuntualSiMovimiento } from '../../lib/confirmarTurnosPorMovimiento.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -114,6 +118,16 @@ export default async function handler(req, res) {
     // completa después).
     await upsertPacienteConsolidado({ telefono: telNormalizado || '', nombre: aTituloCase(nombre), apellido: aTituloCase(apellido), dni, email, origen: 'turno' });
 
+    // Confirmación automática: si el paciente ya tiene movimiento con esa fecha en su
+    // ficha, el turno recién creado queda confirmado (Q13 — el orden no importa).
+    if (date) {
+      await confirmarTurnoPuntualSiMovimiento({
+        eventId: created.id, calendarId,
+        nombre: aTituloCase(nombre), apellido: aTituloCase(apellido || ''),
+        dni: dni || '', telefono: telNormalizado || '',
+        fechaISO: date,
+      }).catch(() => {});
+    }
     res.status(200).json({
       success: true,
       message: `${sobreturno ? 'Sobreturno' : 'Turno'} cargado para el ${date} a las ${time} hs.`,

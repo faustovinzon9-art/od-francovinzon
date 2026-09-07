@@ -1511,6 +1511,7 @@
     const hintPres = document.getElementById('pres-autosave-hint');
     if (hintPres) { hintPres.textContent = ''; hintPres.classList.add('hidden'); }
     editandoMovFila = null; movFilaCreada = null; movFichaId = null; cargaHistorica = false;
+    movFechaGuardada = null;
     editandoPresFila = null; presFilaCreada = null; presFichaId = null;
   }
 
@@ -1797,6 +1798,7 @@
       const mov = fichaActual.movimientos.find((m) => m.fila === fila);
       document.getElementById('mov-form-titulo').textContent = 'Editar movimiento';
       movFecha.value = fechaSheetAInput(mov.fecha);
+      movFechaGuardada = movFecha.value;
       movTratamiento.value = mov.tratamiento;
       movDebe.value = montoSheetANumero(mov.debe);
       movHaber.value = montoSheetANumero(mov.haber);
@@ -1804,6 +1806,7 @@
     } else {
       document.getElementById('mov-form-titulo').textContent = cargaHistorica ? 'Carga histórica' : 'Nuevo movimiento';
       movFecha.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+      movFechaGuardada = null; // todavía no se guardó nada: el alta confirmará solo
       movTratamiento.value = '';
       movDebe.value = '';
       movHaber.value = '';
@@ -1833,6 +1836,10 @@
   let movAutosaveTimer = null;
   let movFilaCreada = null; // fila creada por el autosave en esta sesión del form (mov nuevo)
   let movAutosaveEnCurso = false;
+  // Fecha del movimiento tal como está guardada/abierta (formato del <input>, AAAA-MM-DD):
+  // sirve para mandar confirmarAuto=true al backend cuando en una EDICIÓN cambia la fecha
+  // (el alta ya confirma solo; ver lib/confirmarTurnosPorMovimiento.js, 2026-08-25).
+  let movFechaGuardada = null;
   // Ficha a la que pertenece este form (capturada al ABRIRLO, no fichaActual en vivo):
   // si un autosave pendiente o un flush tardío corre cuando fichaActual ya cambió a
   // OTRO paciente, escribe igual en la ficha correcta (bug cross-paciente, 2026-08-25).
@@ -1937,9 +1944,14 @@
       return;
     }
     try {
+      // En una edición, si cambió la fecha pedimos que se confirmen los turnos del día
+      // nuevo (el alta ya lo hace solo). Sin esto, editar la fecha de un movimiento no
+      // actualizaría el turno correspondiente (pedido 2026-08-25).
+      const fechaCambio = !!(filaDestino && movFechaGuardada && d.fecha && d.fecha !== movFechaGuardada);
       const r = filaDestino
-        ? await apiPost({ accion: 'movimiento-editar', id: idFicha, fila: filaDestino, fecha: fechaSheet, tratamiento: d.tratamiento, debe: d.debe, haber: d.haber, formaPago: d.formaPago })
+        ? await apiPost({ accion: 'movimiento-editar', id: idFicha, fila: filaDestino, fecha: fechaSheet, tratamiento: d.tratamiento, debe: d.debe, haber: d.haber, formaPago: d.formaPago, confirmarAuto: fechaCambio })
         : await apiPost({ accion: 'movimiento-agregar', id: idFicha, fecha: fechaSheet, tratamiento: d.tratamiento, debe: d.debe, haber: d.haber, formaPago: d.formaPago });
+      if (r.success) movFechaGuardada = d.fecha;
       if (r.success) {
         // El guardado en sí siempre se completa (para no perder lo tipeado), pero la
         // memoria de "fila creada por este form" (movFilaCreada) solo se actualiza si

@@ -32,6 +32,11 @@ import { isValidAdminKey } from '../../lib/adminAuth.js';
 import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
 import { upsertPacienteConsolidado, actualizarPacienteConsolidado, listarPacientesConsolidados, PACIENTES_CONSOLIDADOS_NAME } from '../../lib/pacientesConsolidados.js';
+// Confirmación automática de turnos por movimientos (pedido 2026-08-25, ver
+// lib/confirmarTurnosPorMovimiento.js): al guardar/editar un movimiento con fecha, si ese
+// paciente tiene un turno ese día, queda "Confirmado: Sí". Best-effort, nunca rompe el
+// guardado (todo error se traga acá — el consultorio no puede quedar bloqueado por esto).
+import { confirmarTurnosDeFichaEnFecha, fechaMovimientoAISO } from '../../lib/confirmarTurnosPorMovimiento.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
@@ -78,6 +83,24 @@ export default async function handler(req, res) {
     // entender por qué la sección Pacientes aparece vacía. Se saca apenas se diagnostique.
     if (req.method === 'GET' && req.query.modo === 'diagnostico-consolidados') {
       return await diagnosticoConsolidados(req, res);
+    }
+
+    // UTILITARIO TEMPORAL (2026-08-25): pasada única de confirmación automática de turnos
+    // por movimientos — recorre las fichas y marca "Confirmado: Sí" en los turnos cuyo día
+    // tenga un movimiento válido. Dry-run por default (?dryRun=0 para escribir). Con
+    // CRON_SECRET (Bearer), como diagnostico-consolidados. Se saca apenas se confirme.
+    if (req.method === 'GET' && req.query.modo === 'confirmar-turnos-por-movimiento') {
+      const secreto = process.env.CRON_SECRET;
+      const auth = req.headers.authorization || '';
+      if (!secreto || auth !== `Bearer ${secreto}`) {
+        return res.status(401).json({ error: 'unauthorized' });
+      }
+      const dryRun = req.query.dryRun !== '0';
+      const maxFichas = parseInt(req.query.maxFichas || '0', 10) || 0;
+      const offset = parseInt(req.query.offset || '0', 10) || 0;
+      const { pasadaRetroactivaConfirmacion } = await import('../../lib/confirmarTurnosPorMovimiento.js');
+      const r = await pasadaRetroactivaConfirmacion({ dryRun, maxFichas, offset });
+      return res.status(200).json(r);
     }
 
     // Fotos de pacientes (/mobilephotouploaderodfrancovinzon, ver el pedido) — SIN
@@ -978,6 +1001,12 @@ async function movimientoAgregar(req, res) {
 
   try {
     await escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago });
+    // Confirmación automática (best-effort): solo cuando hay una fecha y contenido real
+    // (un movimiento nuevo es "el paciente vino ese día" — ver decisions.md 2026-08-25).
+    const fechaISO = fechaMovimientoAISO(fecha || '');
+    if (fechaISO && (tratamiento || Number(debe) > 0 || Number(haber) > 0 || formaPago)) {
+      await confirmarTurnosDeFichaEnFecha({ fichaId: id, fechaISO }).catch(() => {});
+    }
     res.status(200).json({ success: true, fila });
   } catch (err) {
     console.error(err);
@@ -991,11 +1020,19 @@ async function movimientoAgregar(req, res) {
 }
 
 async function movimientoEditar(req, res) {
-  const { id, fila, fecha, tratamiento, debe, haber, formaPago } = req.body;
+  const { id, fila, fecha, tratamiento, debe, haber, formaPago, confirmarAuto } = req.body;
   if (!id || !fila) return res.status(400).json({ success: false, message: 'Falta fila.' });
 
   try {
     await escribirMovimientoEnFila(id, fila, { fecha, tratamiento, debe, haber, formaPago });
+    // Confirmación automática solo cuando el front avisa que la FECHA cambió en esta
+    // edición (confirmarAuto: true) — cubre "editar un movimiento y moverlo a otro día".
+    if (confirmarAuto) {
+      const fechaISO = fechaMovimientoAISO(fecha || '');
+      if (fechaISO) {
+        await confirmarTurnosDeFichaEnFecha({ fichaId: id, fechaISO }).catch(() => {});
+      }
+    }
     res.status(200).json({ success: true });
   } catch (err) {
     console.error(err);

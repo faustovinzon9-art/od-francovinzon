@@ -6,6 +6,9 @@ import { avisarFallo } from '../../lib/alertas.js';
 import { aTituloCase } from '../../lib/pacientesSheet.js';
 import { logActividad } from '../../lib/adminConfig.js';
 import { upsertPacienteConsolidado } from '../../lib/pacientesConsolidados.js';
+// Confirmación automática por movimientos (2026-08-25): si al MOVER un turno a un día
+// que ya tiene movimiento en la ficha de ese paciente, queda confirmado (Q13). Best-effort.
+import { confirmarTurnoPuntualSiMovimiento } from '../../lib/confirmarTurnosPorMovimiento.js';
 
 // Mover y cancelar un turno/sobreturno comparten ruta (distinguidos por "accion")
 // para no pasarnos del límite de funciones serverless del plan gratuito de Vercel.
@@ -129,6 +132,21 @@ export default async function handler(req, res) {
       detalle: `${requestBody.summary || original.summary || 'paciente'} — pasó a ${nuevaFecha} ${nuevaHora}hs`,
       actor: 'gestión (Ayelen)',
     });
+
+    // Confirmación automática si el día de destino ya tiene movimiento en la ficha.
+    const descOriginal = original.description || '';
+    if (nuevaFecha) {
+      const nombreFinal = requestBody.summary || original.summary || '';
+      const partesNombre = nombreFinal.split(/\s+/);
+      const nombreSync = partesNombre.shift() || '';
+      const apellidoSync = partesNombre.join(' ');
+      await confirmarTurnoPuntualSiMovimiento({
+        eventId, calendarId,
+        nombre: nombreSync, apellido: apellidoSync,
+        dni: extraerDni(descOriginal), telefono: extraerTelefono(descOriginal),
+        fechaISO: nuevaFecha,
+      }).catch(() => {});
+    }
 
     // Best-effort, ver lib/pacientesConsolidados.js — solo si el nombre cambió de verdad
     // (requestBody.summary solo se setea en ese caso, ver arriba).
