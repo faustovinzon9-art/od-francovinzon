@@ -564,3 +564,14 @@ tiene movimiento en la ficha (crear-turno.js y evento.js, best-effort). Pasada r
 única: modo temporal `confirmar-turnos-por-movimiento` en pacientes.js (CRON_SECRET,
 dry-run por default; corre con ?dryRun=0 en tandas ?maxFichas=/?offset=). Se saca del
 código apenas se confirme (regla del proyecto).
+
+**Resultado de la pasada retroactiva (EJECUTADA 2026-08-25, con el CRON_SECRET)**: la
+pasada real marcó como confirmados **~120 turnos** en todo el historial (Pamela Barral,
+Maria Eugenia Galotto, Mariano Ibarra, Noe Gallay, Marta Grassetti, Gonzalo Gimenez,
+Evelyn Sanchez, Celia Rovetta, etc.). Corrida por tandas (maxFichas/offset) para no
+agotar la cuota de lectura de Google compartida con el consultorio. **Verificación de
+control**: pasada de idempotencia en dry-run sobre las 198 fichas → 145 con movimientos,
+**0 turnos pendientes** (todo lo que correspondía quedó confirmado; la regla no pisa
+"Confirmado: No" manuales ni repite trabajo). El modo temporal `confirmar-turnos-por-movimiento`
+se **dio de baja del código** (regla del proyecto); el helper lib/confirmarTurnosPorMovimiento.js
+queda con solo las funciones que usan los hooks en vivo.

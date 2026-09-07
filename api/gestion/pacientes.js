@@ -85,24 +85,6 @@ export default async function handler(req, res) {
       return await diagnosticoConsolidados(req, res);
     }
 
-    // UTILITARIO TEMPORAL (2026-08-25): pasada única de confirmación automática de turnos
-    // por movimientos — recorre las fichas y marca "Confirmado: Sí" en los turnos cuyo día
-    // tenga un movimiento válido. Dry-run por default (?dryRun=0 para escribir). Con
-    // CRON_SECRET (Bearer), como diagnostico-consolidados. Se saca apenas se confirme.
-    if (req.method === 'GET' && req.query.modo === 'confirmar-turnos-por-movimiento') {
-      const secreto = process.env.CRON_SECRET;
-      const auth = req.headers.authorization || '';
-      if (!secreto || auth !== `Bearer ${secreto}`) {
-        return res.status(401).json({ error: 'unauthorized' });
-      }
-      const dryRun = req.query.dryRun !== '0';
-      const maxFichas = parseInt(req.query.maxFichas || '0', 10) || 0;
-      const offset = parseInt(req.query.offset || '0', 10) || 0;
-      const { pasadaRetroactivaConfirmacion } = await import('../../lib/confirmarTurnosPorMovimiento.js');
-      const r = await pasadaRetroactivaConfirmacion({ dryRun, maxFichas, offset });
-      return res.status(200).json(r);
-    }
-
     // Fotos de pacientes (/mobilephotouploaderodfrancovinzon, ver el pedido) — SIN
     // clave a propósito (decisión explícita del usuario): la única protección es que
     // la URL de esa página no es adivinable. Se acota el daño igual: buscar-publico
