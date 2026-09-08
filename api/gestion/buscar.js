@@ -457,6 +457,13 @@ async function pacientesCentral(req, res) {
       nombre: f.nombre, apellido: f.apellido, dni: f.dni, telefono: f.telefono,
       email: f.email, conFicha: !!f.fichaId, fichaId: f.fichaId || '', origen: f.origen,
       actualizado: f.actualizado,
+      // Estadísticas de asistencia (columnas I..M, las calcula el cron de 5:30 o el
+      // botón "Actualizar" de /gestion — ver lib/asistenciaPacientes.js, 2026-08-25).
+      turnosPasados: f.turnosPasados || 0,
+      turnosAsistidos: f.turnosAsistidos || 0,
+      visitas: f.visitas || 0,
+      ultimaVisita: f.ultimaVisita || '',
+      calcActualizado: f.calcActualizado || '',
     }));
 
     // PLAN B (lección 2026-08-25): si la planilla consolidada no trae resultados (está

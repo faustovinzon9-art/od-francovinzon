@@ -37,6 +37,9 @@ import { upsertPacienteConsolidado, actualizarPacienteConsolidado, listarPacient
 // paciente tiene un turno ese día, queda "Confirmado: Sí". Best-effort, nunca rompe el
 // guardado (todo error se traga acá — el consultorio no puede quedar bloqueado por esto).
 import { confirmarTurnosDeFichaEnFecha, fechaMovimientoAISO } from '../../lib/confirmarTurnosPorMovimiento.js';
+// Estadísticas de asistencia por paciente (pedido 2026-08-25): recálculo diario (cron
+// 5:30 AM) + botón manual desde /gestion. Ver lib/asistenciaPacientes.js.
+import { recalcularAsistencia } from '../../lib/asistenciaPacientes.js';
 import { generarPdfReceta } from '../../lib/pdfExport.js';
 import { parsearReceta, camposFaltantes } from '../../lib/recetaParser.js';
 import { extraerUrlFirmaElectronica } from '../../lib/recetaFirmaQr.js';
@@ -76,6 +79,20 @@ export default async function handler(req, res) {
     // de este archivo, ver el comentario del encabezado.
     if (req.method === 'GET' && req.query.modo === 'healthcheck') {
       return await healthcheck(req, res);
+    }
+
+    // Recálculo diario automático de asistencia (cron 5:30 AM, ver vercel.json) — mismo
+    // modo que el botón manual, autenticado con CRON_SECRET en vez de GESTION_KEY.
+    if (req.method === 'GET' && req.query.modo === 'recalcular-asistencia-cron') {
+      const secreto = process.env.CRON_SECRET;
+      const auth = req.headers.authorization || '';
+      if (!secreto || auth !== `Bearer ${secreto}`) {
+        return res.status(401).json({ error: 'unauthorized' });
+      }
+      const maxFichas = parseInt(req.query.maxFichas || '0', 10) || 0;
+      const offset = parseInt(req.query.offset || '0', 10) || 0;
+      const r = await recalcularAsistencia({ dryRun: false, maxFichas, offset });
+      return res.status(200).json(r);
     }
 
     // UTILITARIO TEMPORAL DE DIAGNÓSTICO (2026-08-25): solo lectura — reporta el estado de
@@ -121,6 +138,16 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (!claveValida(req.query.key)) return res.status(401).json({ error: 'unauthorized' });
+      // Recálculo manual de asistencia (botón "Actualizar" de /gestion Pacientes) —
+      // ?dryRun=1 para contar sin escribir, tandas con maxFichas/offset. El cron diario
+      // de 5:30 usa el mismo modo pero autenticado con CRON_SECRET (ver más abajo).
+      if (req.query.modo === 'recalcular-asistencia') {
+        const dryRun = req.query.dryRun === '1';
+        const maxFichas = parseInt(req.query.maxFichas || '0', 10) || 0;
+        const offset = parseInt(req.query.offset || '0', 10) || 0;
+        const r = await recalcularAsistencia({ dryRun, maxFichas, offset });
+        return res.status(200).json(r);
+      }
       if (req.query.modo === 'listar') return await listar(req, res);
       if (req.query.modo === 'ficha') return await obtenerFicha(req, res);
       if (req.query.modo === 'modified') return await obtenerModified(req, res);

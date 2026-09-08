@@ -3,6 +3,10 @@
     {
       "path": "/api/gestion/pacientes?modo=healthcheck",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/gestion/pacientes?modo=recalcular-asistencia-cron",
+      "schedule": "30 8 * * *"
     }
   ],
   "rewrites": [

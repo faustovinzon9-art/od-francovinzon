@@ -184,6 +184,23 @@
   .paci-ficha-estado.sin-ficha { background: var(--warn-soft, #FFFBEB); color: var(--warn, #D97706); }
   .badge-ficha { background: var(--ok-soft, #ECFDF5); color: var(--ok, #059669); }
   .badge-sinficha { background: var(--warn-soft, #FFFBEB); color: var(--warn, #D97706); }
+  /* Píldora de asistencia (2026-08-25): el color lo pone JS con hsl() — rojo 0% →
+     amarillo 50% → verde 100%. El fondo se muestra con un canal alfa bajo para que el
+     texto (oscuro) siga siendo legible en cualquier tono. */
+  .paci-asist-pill { display: inline-flex; align-items: center; justify-content: center;
+    min-width: 46px; padding: 3px 9px; border-radius: 100px; font-weight: 800;
+    font-size: 12px; color: #14330f; border: 1.5px solid rgba(0,0,0,.08); }
+  .paci-asist-det { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+  .paci-asist-det small { font-size: 9.5px; color: var(--muted); font-weight: 600; }
+  .paci-asist-sub { font-size: 9.5px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .paci-orden { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
+  .paci-orden label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .3px; }
+  .paci-orden select { padding: 7px 10px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--white); font: inherit; font-size: 12.5px; }
+  .paci-orden select:focus { outline: none; border-color: var(--gold); }
+  .paci-refrescar { padding: 6px 14px; border-radius: 100px; border: 1.5px solid var(--navy);
+    background: var(--white); color: var(--navy); font-weight: 700; font-size: 11.5px; cursor: pointer; }
+  .paci-refrescar:disabled { opacity: .55; cursor: wait; }
+  .paci-refrescar:not(:disabled):hover { border-color: var(--gold); color: var(--navy); }
   .paci-turno-fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
   .paci-turno-fila:last-child { border-bottom: none; }
   .paci-turno-fecha { font-weight: 700; color: var(--navy); flex-shrink: 0; }
@@ -736,6 +753,18 @@
       <input type="text" id="paci-busqueda-input" placeholder="Buscar paciente por nombre, DNI, teléfono o email..." autocomplete="off">
     </div>
     <div class="paci-contador hidden" id="paci-contador"></div>
+    <div class="paci-orden">
+      <label for="paci-orden-select">Ordenar</label>
+      <select id="paci-orden-select">
+        <option value="nombre">Nombre (A-Z)</option>
+        <option value="asistencia-desc">% de asistencia (mejores)</option>
+        <option value="asistencia-asc">% de asistencia (peores)</option>
+        <option value="visitas-desc">Más visitas</option>
+        <option value="inasistencias-desc">Más inasistencias</option>
+        <option value="ultimo-desc">Último atendido</option>
+      </select>
+      <button type="button" class="paci-refrescar" id="paci-refrescar" title="Recalcular porcentajes de asistencia">↻ Actualizar %</button>
+    </div>
     <div id="paci-lista"><div class="loading-note">Cargando pacientes...</div></div>
     <div id="paci-perfil" class="hidden">
       <button class="action-btn" id="paci-perfil-volver">← Volver a la lista</button>
@@ -2955,6 +2984,52 @@
     return paciNormalizar(s).replace(/\D/g, '');
   }
 
+  // Estado del ordenamiento de la lista.
+  let paciOrden = 'nombre';
+
+  // % de asistencia: solo si tiene turnos pasados Y visitas (movimientos). Sin eso, no hay
+  // píldora (regla del usuario: sin ficha/movimientos o sin turnos no se muestra nada).
+  function pctAsistencia(p) {
+    if (!p.turnosPasados || !p.visitas) return null;
+    return Math.round((p.turnosAsistidos / p.turnosPasados) * 100);
+  }
+
+  // Color de la píldora: hue rojo(0) -> amarillo(50) -> verde(100). hsl() con saturación
+  // alta y luminosidad media: 0 → hsl(0), 50 → hsl(60) (amarillo), 100 → hsl(120) (verde).
+  function colorAsistencia(pct) {
+    const hue = Math.max(0, Math.min(100, pct)) * 1.2; // 0..120
+    return `hsl(${hue}, 70%, 55%)`;
+  }
+
+  // Ordena una copia de la lista según paciOrden. Los que no tienen datos de asistencia
+  // (sin píldora) van al final en los ordenamientos por asistencia/visitas.
+  function ordenarPacientes(lista) {
+    const orden = paciOrden;
+    const porNombre = (a, b) => `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es');
+    const conDato = (p) => (p.turnosPasados || 0) > 0 && (p.visitas || 0) > 0;
+    const copia = [...lista];
+    if (orden === 'nombre') return copia.sort(porNombre);
+    // Los ordenamientos de asistencia usan la píldora como dato; sin píldora al final.
+    const [con, sin] = [copia.filter(conDato), copia.filter((p) => !conDato(p))].map((x) => [...x]);
+    const sinFin = sin.sort(porNombre);
+    switch (orden) {
+      case 'asistencia-desc': return [...con.sort((a, b) => pctAsistencia(b) - pctAsistencia(a)), ...sinFin];
+      case 'asistencia-asc': return [...con.sort((a, b) => pctAsistencia(a) - pctAsistencia(b)), ...sinFin];
+      case 'visitas-desc': return [...con.sort((a, b) => (b.visitas || 0) - (a.visitas || 0)), ...sinFin];
+      case 'inasistencias-desc': return [...con.sort((a, b) => (b.turnosPasados - b.turnosAsistidos) - (a.turnosPasados - a.turnosAsistidos)), ...sinFin];
+      case 'ultimo-desc': return [...con.sort((a, b) => String(b.ultimaVisita).localeCompare(String(a.ultimaVisita))), ...sinFin];
+      default: return copia.sort(porNombre);
+    }
+  }
+
+  // Formatea una fecha AAAA-MM-DD a "d MMM" corto legible (ej. 2026-08-24 → 24 ago).
+  function formatoFechaCorta(iso) {
+    if (!iso) return '';
+    const [y, m, d] = String(iso).slice(0, 10).split('-');
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return `${parseInt(d, 10)} ${meses[parseInt(m, 10) - 1]} ${y}`;
+  }
+
   function pintarPacientes(lista, query) {
     const listaEl = document.getElementById('paci-lista');
     const contadorEl = document.getElementById('paci-contador');
@@ -2968,7 +3043,17 @@
       ? `${lista.length} resultado${lista.length === 1 ? '' : 's'} de ${base} paciente${base === 1 ? '' : 's'}`
       : `${lista.length} paciente${lista.length === 1 ? '' : 's'} en total`;
     contadorEl.classList.remove('hidden');
-    listaEl.innerHTML = lista.map((p) => `
+    const ordenadas = ordenarPacientes(lista);
+    listaEl.innerHTML = ordenadas.map((p) => {
+      const pct = pctAsistencia(p);
+      const pill = pct !== null
+        ? `<div class="paci-asist-det">
+             <span class="paci-asist-pill" style="background:${colorAsistencia(pct)}22; border-color:${colorAsistencia(pct)}">${pct}%</span>
+             <small>${p.visitas} visitas · ${p.turnosPasados - p.turnosAsistidos} inasist.</small>
+           </div>`
+        : '<div class="paci-asist-det"><span class="paci-asist-det" style="font-size:11px;color:var(--muted);font-weight:600">—</span></div>';
+      const sub = p.ultimaVisita ? `<div class="paci-asist-sub">Última visita: ${formatoFechaCorta(p.ultimaVisita)}</div>` : '';
+      return `
       <div class="paci-fila" data-dni="${escapeHtml(p.dni || '')}" data-tel="${escapeHtml(p.telefono || '')}">
         <div class="paci-fila-info">
           <div class="paci-fila-nombre">${escapeHtml(p.nombre || '')} ${escapeHtml(p.apellido || '')}</div>
@@ -2976,13 +3061,26 @@
             ${p.dni ? 'DNI ' + escapeHtml(p.dni) : 'DNI: —'}
             ${p.telefono ? ' · Tel: ' + escapeHtml(p.telefono) : ''}
             ${p.email ? ' · ' + escapeHtml(p.email) : ''}
+            ${sub}
           </div>
         </div>
+        ${pill}
         <span class="badge ${p.conFicha ? 'badge-ficha' : 'badge-sinficha'}">${p.conFicha ? 'Con ficha' : 'Sin ficha'}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     listaEl.querySelectorAll('.paci-fila').forEach((el) => {
       el.addEventListener('click', () => abrirPerfilPaciente(el.dataset.dni, el.dataset.tel));
     });
+    // Aviso la primera vez (nadie calculado todavía): el % se llena con el cron de 5:30
+    // o tocando "Actualizar %" arriba.
+    const hayCalc = ordenadas.some((p) => p.calcActualizado);
+    if (!hayCalc && paciListaCache.length) {
+      const aviso = document.createElement('div');
+      aviso.className = 'paci-vacio';
+      aviso.style.cssText = 'padding:8px 4px 2px; text-align:left; font-size:11.5px;';
+      aviso.innerHTML = '💡 Los porcentajes de asistencia se calculan solos cada mañana. Tocá <b>↻ Actualizar %</b> para calcularlos ahora.';
+      listaEl.appendChild(aviso);
+    }
   }
 
   // Fallback solo para búsquedas sin resultado en la cache: le pregunta al servidor (que
@@ -3234,7 +3332,57 @@
     }
   });
 
+  // Selector de orden: cambia el criterio y repinta (la lista ya está en cache).
+  const paciOrdenSelect = document.getElementById('paci-orden-select');
+  paciOrdenSelect.addEventListener('change', () => {
+    paciOrden = paciOrdenSelect.value;
+    const query = paciBusquedaInput.value;
+    pintarPacientes(
+      query.trim() ? paciListaCache.filter((p) => {
+        const q = paciNormalizar(query);
+        const qDni = paciDniSoloDigitos(query);
+        return paciNormalizar(`${p.nombre} ${p.apellido}`).includes(q) ||
+          paciNormalizar(p.telefono).includes(q) || paciNormalizar(p.email).includes(q) ||
+          (qDni.length >= 3 && paciDniSoloDigitos(p.dni).includes(qDni));
+      }) : paciListaCache,
+      query.trim()
+    );
+  });
 
+  // Botón "Actualizar %": recalcula la asistencia en el backend (columnas de la planilla)
+  // y vuelve a bajar la lista para mostrar los valores nuevos. Mientras corre, el botón
+  // muestra "Calculando…" y queda deshabilitado (puede tardar: cruza Calendar + fichas).
+  const paciRefrescarBtn = document.getElementById('paci-refrescar');
+  paciRefrescarBtn.addEventListener('click', () => {
+    paciRefrescarBtn.disabled = true;
+    paciRefrescarBtn.textContent = 'Calculando…';
+    const finalizar = (ok) => {
+      if (paciRefrescarBtn) { paciRefrescarBtn.disabled = false; paciRefrescarBtn.textContent = '↻ Actualizar %'; }
+      if (ok) toast('✅ Porcentajes de asistencia actualizados');
+    };
+    // El recálculo cruza Calendar + todas las fichas y puede superar el límite de una
+    // sola invocación serverless: se corre por tandas cortas (40 fichas) encadenadas,
+    // usando el total que devuelve el backend para saber cuándo parar. Al terminar se
+    // limpia la cache y se vuelve a bajar la lista con los números nuevos.
+    const TANDA = 40;
+    let offset = 0;
+    const correrTandas = () =>
+      fetch(`/api/gestion/pacientes?modo=recalcular-asistencia&key=${encodeURIComponent(gestionKey)}&maxFichas=${TANDA}&offset=${offset}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => {
+          if (!res || res.error) { finalizar(false); return; }
+          const total = res.totalConFicha || 0;
+          offset += TANDA;
+          if (offset < total) return correrTandas();
+          // Última tanda: bajar la lista fresca con los valores nuevos.
+          paciListaCargada = false;
+          return cargarPacientesCentral(paciBusquedaInput.value)
+            .then(() => finalizar(true))
+            .catch(() => finalizar(false));
+        })
+        .catch(() => finalizar(false));
+    correrTandas();
+  });
 
   // ---------- Arranque ----------
   if (gestionKey) verificarYArrancar();
