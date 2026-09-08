@@ -575,3 +575,41 @@ control**: pasada de idempotencia en dry-run sobre las 198 fichas → 145 con mo
 "Confirmado: No" manuales ni repite trabajo). El modo temporal `confirmar-turnos-por-movimiento`
 se **dio de baja del código** (regla del proyecto); el helper lib/confirmarTurnosPorMovimiento.js
 queda con solo las funciones que usan los hooks en vivo.
+
+## 2026-08-25 — Porcentaje de asistencia por paciente en /gestion (pestaña Pacientes)
+
+Pedido de Fausto (respuestas a las preguntas en decisions.md): en la lista de Pacientes de
+/gestion, cada paciente con ficha muestra su **porcentaje de asistencia** en una píldora de
+color (verde → amarillo → rojo según 0–50–100) con una línea de detalle ("N visitas · M
+inasistencias") y "Última visita". La lista se ordena por varios criterios (nombre, % de
+asistencia mejores/peores, más visitas, más inasistencias, último atendido).
+
+**Reglas** (acordadas con Fausto): asistió = movimiento válido ese día en su ficha; el % se
+calcula POR TURNO (si hubo movimiento ese día, todos los turnos de ese día cuentan); el
+denominador son los turnos pasados (fecha < hoy, los cancelados se borran y no cuentan; los
+sobreturnos sí cuentan); visitas = días distintos con movimiento ≤ hoy (incluye urgencias
+sin turno). Sin ficha o sin movimientos → sin píldora. Sin turnos pasados → aparece sin
+píldora. Identidad por DNI primero y si no nombre exacto; homónimos sin DNI ese día no
+cuentan para nadie; se respeta un "Confirmado: No" explícito. Cálculo: turnos pasados 0 →
+sin píldora; si no, redondeo de turnosAsistidos/turnosPasados.
+
+**Cómo**:
+- `lib/asistenciaPacientes.js` (helper nuevo, no suma función al límite del plan):
+  `recalcularAsistencia()` (indexa el calendario principal 2020→ayer, excluye hoy/futuro y
+  bloqueos, atribuye turnos por DNI/nombre exacto) y `atribuirTurnosPasados()`.
+- Columnas nuevas en la planilla "Pacientes consolidados (no tocar)": encabezado A1:M1
+  idempotente (I..M = turnosPasados, turnosAsistidos, visitas, ultimaVisita, calcActualizado).
+  Los upserts nunca tocan I..M — solo el recálculo.
+- `api/gestion/pacientes.js`: modos GET `recalcular-asistencia` (botón, clave del gestor,
+  soporta dryRun/maxFichas/offset para tandas) y `recalcular-asistencia-cron` (CRON_SECRET).
+  Nuevo cron en vercel.json: `30 8 * * *` (5:30 Argentina).
+- `api/gestion/buscar.js` (modo pacientes-central): cada paciente trae turnosPasados/
+  turnosAsistidos/visitas/ultimaVisita/calcActualizado.
+- Frontend `gestion/index.html`: píldora con color `hsl(pct*1.2, 70%, 55%)`, línea de
+  detalle con visitas e inasistencias, "Última visita", selector de orden y botón
+  "Actualizar %" que corre el recálculo en tandas de 40 fichas y refresca la lista.
+
+**Ejecución en producción (2026-08-25, con CRON_SECRET)**: recálculo completo por tandas
+(?maxFichas=40&offset=) sobre las **204 fichas** (204/204, una tanda topó con cuota de
+lectura de Google y se reintentó). Verificado en planilla (muestreo): Pamela Barral 2/2,
+Maria Eugenia Galotto 1/1, etc. Queda el cron diario de 5:30 para mantenerlo actualizado.

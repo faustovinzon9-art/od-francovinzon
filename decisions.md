@@ -405,6 +405,31 @@ sin preguntar):
 - **Toda navegación que sale de la ficha limpia los forms** (función `limpiarFormulariosAlNavegar`, llamada desde volver-lista, abrirFicha, duplicados y fusión): cierra los paneles con semántica de Cancelar (lo pendiente se guarda hacia la ficha dueña), cancela timers, vacía campos y resetea estado. Es la única forma de que el contenido de un paciente no quede "pegado" ni se escriba en el paciente siguiente.
 - **Nunca se resetea `movAutosaveEnCurso`/`presAutosaveEnCurso` al abrir un form nuevo** (para no arrancar dos escrituras a la vez); en cambio el autosave reintenta solo a los 400ms mientras el guardado anterior siga en vuelo.
 
+## Porcentaje de asistencia por paciente en /gestion (2026-08-25)
+
+Pedido de Fausto con preguntas respondidas una por una. Reglas acordadas (NO revertir sin
+preguntar):
+- **Asistió** = hay un MOVIMIENTO válido (no anulado) en la ficha con la fecha del turno.
+  Las prestaciones de obra social NO cuentan para la asistencia.
+- El porcentaje se calcula **por turno** (no por visita): si hubo movimiento ese día, TODOS
+  los turnos del paciente de ese día cuentan como asistidos (sobreturnos incluidos).
+- **Denominador = turnos pasados** (fecha < hoy, contando sobreturnos). Los cancelados no
+  cuentan porque se borran del calendario (no quedan eventos "cancelados" que filtrar).
+- **Visitas** = días distintos con movimiento válido ≤ hoy (incluye urgencias/atenciones
+  sin turno previo). Se muestra como "N visitas" y alimenta "Última visita" y los ordenes.
+- Paciente sin ficha o sin movimientos → NO tiene píldora. Con turnos pasados pero sin
+  movimientos → 0%. Sin turnos pasados → aparece sin píldora (nada que medir).
+- El cálculo NUNCA pisa un "Confirmado: No" manual: la asistencia sale de la ficha
+  (movimientos), el confirmado del turno es un dato aparte que se respeta.
+- Identidad para atribuir turnos: DNI del turno si lo tiene; si no, nombre+apellido exactos
+  contra la planilla. Si ese día hay homónimos sin DNI, el turno no cuenta para nadie
+  (nunca atribuir al paciente equivocado).
+- El recálculo se guarda en las columnas I..M de "Pacientes consolidados (no tocar)" solo
+  por el cron diario (5:30) o el botón "Actualizar %": los upserts normales (guardar perfil,
+  alta de paciente) JAMÁS tocan I..M para no pisar el dato calculado con valores viejos.
+- La ventana del recálculo es 2020 → AYER (excluye hoy: un turno de hoy aún no es "pasado"
+  y su confirmación la maneja el flujo normal).
+
 ## Zona horaria
 
 - **Nunca usar getters locales de `Date` para "hoy"/"ahora"** en código que corre en el navegador (afecta a cualquier visitante en otro huso horario). Siempre `Intl.DateTimeFormat` con `timeZone: 'America/Argentina/Buenos_Aires'` explícito. Ya hubo un bug real de esto, corregido — no reintroducirlo.
