@@ -1929,10 +1929,10 @@ async function diagnosticoConsolidados(req, res) {
       return res.status(200).json({ planillaExiste: false });
     }
     const id = archivo.files[0].id;
-    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: 'A2:H2000' }));
+    const { data } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: 'A2:M2000' }));
     const filas = data.values || [];
     const conDatos = filas.filter((r) => r[0] || r[1] || r[2] || r[3]);
-    const { data: enc } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: 'A1:H1' }));
+    const { data: enc } = await conReintentos(() => sheets.spreadsheets.values.get({ spreadsheetId: id, range: 'A1:M1' }));
     res.status(200).json({
       planillaExiste: true, planillaId: id,
       encabezado: enc.values?.[0] || [],
