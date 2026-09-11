@@ -196,14 +196,6 @@ h1, h2, h3 {
 .faq-item summary::after { content: '+'; float: right; color: var(--gold); font-weight: 700; }
 .faq-item[open] summary::after { content: '–'; }
 .faq-item p { color: var(--navy-light); font-size: .92rem; padding-bottom: 18px; }
-.faq-item.faq-pendiente p {
-  color: #A6483A;
-  font-style: italic;
-  background: rgba(193, 68, 55, .06);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 18px;
-}
 
 /* Instagram */
 .instagram { padding: 100px 24px; background: var(--bg); }
