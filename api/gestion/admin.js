@@ -8,11 +8,11 @@ import { isValidGestionKey } from '../../lib/googleCalendar.js';
 import {
   getCalendarClient, CALENDAR_ID, SOBRETURNOS_CALENDAR_ID, BLOCK_MARKER, TIME_ZONE, WEEKLY_SCHEDULE,
   SLOT_MINUTES, pad2, toArgDate, eventBounds, formatArgDay, formatArgTime, extraerTelefono, extraerConfirmado,
-  extraerEsNuevoPaciente, getHorariosLibresDia,
+  extraerEsNuevoPaciente, extraerMotivo, getHorariosLibresDia,
 } from '../../lib/googleCalendar.js';
 import { getPacientesDriveClient, getPacientesSheetsClient } from '../../lib/googleOAuthPacientes.js';
 import {
-  PACIENTES_FOLDER_ID, SHEET_NAME, parsearNombreArchivo, rangoMovimientos,
+  PACIENTES_FOLDER_ID, SHEET_NAME, parsearNombreArchivo, rangoMovimientos, rangoPrestacionesObraSocial,
 } from '../../lib/pacientesSheet.js';
 import { avisarFallo } from '../../lib/alertas.js';
 import { conReintentos } from '../../lib/retry.js';
@@ -21,6 +21,8 @@ import {
   leerActividadReciente, leerAlertasRecientes,
 } from '../../lib/adminConfig.js';
 import { listarPacientesConsolidados } from '../../lib/pacientesConsolidados.js';
+import { construirPerfil, perfilACsv } from '../../lib/perfilPacientes.js';
+import { armarHojas, crearXlsx, crearMarkdown } from '../../lib/exportPacientesCompleto.js';
 
 // Config de solo-lectura que también necesita /pacientes y /gestion (listas
 // desplegables, radios, plantilla de WhatsApp) — no son datos sensibles, así que
@@ -75,6 +77,8 @@ export default async function handler(req, res) {
       if (recurso === 'export-ficha') return await conError(exportFichaPdf, req, res);
       if (recurso === 'export-pacientes-csv') return await conError(exportPacientesCsv, req, res);
       if (recurso === 'export-turnos') return await conError(exportTurnos, req, res);
+      if (recurso === 'export-perfil-anonimo') return await conError(exportPerfilPacientes, req, res);
+      if (recurso === 'export-pacientes-completo') return await conError(exportPacientesCompleto, req, res);
       return res.status(400).json({ success: false, error: 'recurso inválido' });
     }
 
@@ -1150,4 +1154,236 @@ async function exportFinancieroPdf(req, res) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoSeguro(nombre)}_${nombreArchivoSeguro(apellido)}_estado_cuenta.pdf"`);
   res.status(200).send(buffer);
+}
+
+// ---------- 5b. Perfil ANÓNIMO de pacientes (2026-09-24) ----------
+// Para el trabajo de Buyer Persona de la facu: solo conteos y porcentajes, nunca una fila
+// por paciente. La agregación está en lib/perfilPacientes.js (funciones puras); acá solo
+// se lee lo mínimo y NO identificable:
+//   - Fichas: C8 (fecha de nacimiento), C10:C11 (localidad, obra social), C15 (plan de
+//     tratamiento) y los movimientos. Nombre/apellido/DNI (C5:C7), domicilio (C9), Nº de
+//     afiliado (C12) y teléfono (C14) NO se piden a la API.
+//   - Calendar: fecha/hora y la description (marca de paciente nuevo, carga manual,
+//     motivo → solo su categoría). El título del evento (= nombre del paciente) no se usa.
+//   - Planilla consolidada: solo las columnas numéricas de asistencia/visitas.
+// No modifica fichas ni turnos: solo lee (la planilla consolidada se lee con la misma
+// función que usa el dashboard de métricas). Mismo patrón de lotes de 25
+// que calcularFinanzasPacientes() para cuidar la cuota de Google.
+async function exportPerfilPacientes(req, res) {
+  const meses = Math.min(Math.max(Number(req.query.meses) || 12, 1), 36);
+  const errores = [];
+
+  // ---- Fichas ----
+  const fichas = [];
+  let fichasFallidas = 0;
+  try {
+    const drive = getPacientesDriveClient();
+    const sheets = getPacientesSheetsClient();
+    let archivos = [];
+    let pageToken;
+    do {
+      const { data } = await conReintentos(() => drive.files.list({
+        q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+        fields: 'files(id, name), nextPageToken',
+        pageSize: 250,
+        pageToken,
+      }));
+      archivos = archivos.concat(data.files || []);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    archivos = archivos.filter((f) => !/^⭐/.test(f.name));
+
+    const LOTE = 25;
+    for (let i = 0; i < archivos.length; i += LOTE) {
+      const lote = archivos.slice(i, i + LOTE);
+      const resultados = await Promise.all(lote.map(async (f) => {
+        try {
+          const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+            spreadsheetId: f.id,
+            ranges: [`${SHEET_NAME}!C8`, `${SHEET_NAME}!C10:C11`, `${SHEET_NAME}!C15`, rangoMovimientos()],
+          }));
+          const [nacRaw, locOsRaw, planRaw, movRaw] = data.valueRanges || [];
+          const celda = (r, i2 = 0) => (r?.values?.[i2]?.[0] != null ? String(r.values[i2][0]) : '');
+          return {
+            fechaNacimiento: celda(nacRaw),
+            localidad: celda(locOsRaw, 0),
+            obraSocial: celda(locOsRaw, 1),
+            planTratamiento: celda(planRaw),
+            // B..H = Fecha, Tratamiento, Debe, Haber, Saldo, (vacía), Forma de pago
+            movimientos: (movRaw?.values || []).map((row) => ({
+              fecha: row[0] || '', tratamiento: row[1] || '', debe: row[2] || '', haber: row[3] || '', formaPago: row[6] || '',
+            })),
+          };
+        } catch (err) {
+          console.warn('[admin.js] perfil anónimo: no se pudo leer una ficha:', err?.message || err);
+          return null;
+        }
+      }));
+      resultados.forEach((r) => { if (r) fichas.push(r); else fichasFallidas++; });
+    }
+  } catch (err) {
+    errores.push(`fichas: ${err?.message || err}`);
+  }
+
+  // ---- Turnos ----
+  const turnos = [];
+  const hasta = new Date();
+  const desde = new Date(hasta.getTime() - meses * 30.44 * 24 * 60 * 60000);
+  try {
+    const calendar = getCalendarClient();
+    const listarTodo = async (calendarId) => {
+      let items = [];
+      let pageToken;
+      do {
+        const { data } = await conReintentos(() => calendar.events.list({
+          calendarId, timeMin: desde.toISOString(), timeMax: hasta.toISOString(),
+          singleEvents: true, maxResults: 2500, pageToken,
+          fields: 'items(start,end,description),nextPageToken',
+        }));
+        items = items.concat(data.items || []);
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+      return items;
+    };
+    const [principal, sobre] = await Promise.all([listarTodo(CALENDAR_ID), listarTodo(SOBRETURNOS_CALENDAR_ID)]);
+    const diaSemanaArg = new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, weekday: 'short' });
+    const DIA_IDX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    [...principal.map((ev) => ({ ev, tipo: 'turno' })), ...sobre.map((ev) => ({ ev, tipo: 'sobreturno' }))]
+      .filter(({ ev }) => ev.start?.dateTime && !(ev.description || '').includes(BLOCK_MARKER))
+      .forEach(({ ev, tipo }) => {
+        const { start } = eventBounds(ev);
+        const desc = ev.description || '';
+        turnos.push({
+          inicio: {
+            dia: DIA_IDX[diaSemanaArg.format(start)],
+            hora: Number(formatArgTime(start).slice(0, 2)),
+            fechaISO: formatArgDay(start),
+          },
+          tipo,
+          esNuevo: extraerEsNuevoPaciente(desc),
+          cargadoManual: desc.includes('Cargado manualmente desde el panel de gestión'),
+          motivo: extraerMotivo(desc),
+        });
+      });
+  } catch (err) {
+    errores.push(`turnos: ${err?.message || err}`);
+  }
+
+  // ---- Visitas / asistencia ----
+  let consolidados = [];
+  try {
+    consolidados = (await listarPacientesConsolidados())
+      .map((c) => ({ visitas: c.visitas, turnosPasados: c.turnosPasados, turnosAsistidos: c.turnosAsistidos }));
+  } catch (err) {
+    errores.push(`consolidados: ${err?.message || err}`);
+  }
+
+  if (!fichas.length && !turnos.length) {
+    return res.status(200).json({ success: false, error: `No se pudieron leer datos. ${errores.join(' · ')}` });
+  }
+
+  const { filas } = construirPerfil({
+    fichas, turnos, consolidados,
+    meta: { fichasFallidas, rangoTurnos: `${formatArgDay(desde)} a ${formatArgDay(hasta)} (últimos ${meses} meses)` },
+  });
+  errores.forEach((e) => filas.unshift(['Resumen', 'Aviso: parte de los datos no se pudo leer', e, 0, null]));
+
+  if (req.query.formato === 'json') return res.status(200).json({ success: true, filas });
+
+  const hoyStr = formatArgDay(new Date());
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="perfil_pacientes_anonimo_${hoyStr}.csv"`);
+  res.status(200).send('﻿' + perfilACsv(filas));
+}
+
+// ---------- 5c. Export COMPLETO de pacientes: Excel (.xlsx) y Markdown (.md) (2026-09-24) ----------
+// Botón "Exportar todos los datos" de /admin → Datos de pacientes. Una fila por paciente
+// con TODOS los campos de la ficha (incluye datos personales: solo ADMIN_KEY, nunca
+// GESTION_KEY), más hojas de movimientos y prestaciones a obra social, y los pacientes
+// que solo sacaron turno (planilla consolidada). Armado del archivo en
+// lib/exportPacientesCompleto.js. Solo lectura: no llama a intentarRecuperarRespaldos()
+// ni escribe nada en las fichas. Lotes de 25 como el resto de los escaneos de fichas.
+async function exportPacientesCompleto(req, res) {
+  const formato = req.query.formato === 'md' ? 'md' : 'xlsx';
+  const drive = getPacientesDriveClient();
+  const sheets = getPacientesSheetsClient();
+
+  let archivos = [];
+  let pageToken;
+  do {
+    const { data } = await conReintentos(() => drive.files.list({
+      q: `'${PACIENTES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+      fields: 'files(id, name), nextPageToken',
+      pageSize: 250,
+      pageToken,
+    }));
+    archivos = archivos.concat(data.files || []);
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  archivos = archivos.filter((f) => !/^⭐/.test(f.name));
+
+  const fichas = [];
+  const fallidas = [];
+  const limpia = (v) => (v === true || v === false || v === 'TRUE' || v === 'FALSE' ? '' : (v ?? ''));
+  const LOTE = 25;
+  for (let i = 0; i < archivos.length; i += LOTE) {
+    const lote = archivos.slice(i, i + LOTE);
+    const resultados = await Promise.all(lote.map(async (f) => {
+      try {
+        const { data } = await conReintentos(() => sheets.spreadsheets.values.batchGet({
+          spreadsheetId: f.id,
+          ranges: [`${SHEET_NAME}!C5:C15`, `${SHEET_NAME}!E6:F11`, rangoMovimientos(), rangoPrestacionesObraSocial()],
+        }));
+        const [camposRaw, finRaw, movRaw, presRaw] = data.valueRanges || [];
+        const c = (camposRaw?.values || []).map((r) => (r[0] != null ? String(r[0]) : ''));
+        while (c.length < 11) c.push('');
+        const [nombre, apellido, dni, fechaNacimiento, domicilio, localidad, obraSocial, nAfiliado, plan, telefono, planTratamiento] = c;
+        const fin = finRaw?.values || [];
+        return {
+          id: f.id,
+          campos: { nombre, apellido, dni, fechaNacimiento, domicilio, localidad, obraSocial, nAfiliado, plan, telefono, planTratamiento },
+          // Mismas celdas que obtenerFicha() de pacientes.js: total/pagado/saldo en F6:F8,
+          // "AL DÍA"/"DEBE $X" en la celda ancla E9.
+          financiero: { total: fin[0]?.[1] || '', pagado: fin[1]?.[1] || '', saldo: fin[2]?.[1] || '', estado: fin[3]?.[0] || '' },
+          movimientos: (movRaw?.values || []).map((row) => ({
+            fecha: row[0] || '', tratamiento: limpia(row[1]), debe: row[2] || '', haber: row[3] || '', saldo: row[4] || '', formaPago: limpia(row[6]),
+          })),
+          prestaciones: (presRaw?.values || []).map((row) => ({
+            fecha: row[0] || '', tratamiento: limpia(row[1]), codigo: limpia(row[2]), autorizado: row[3] === true || row[3] === 'TRUE',
+          })),
+        };
+      } catch (err) {
+        console.warn(`[admin.js] export completo: no se pudo leer la ficha ${f.name}:`, err?.message || err);
+        return { fallida: f.name };
+      }
+    }));
+    resultados.forEach((r) => { if (r.fallida) fallidas.push(r.fallida); else fichas.push(r); });
+  }
+
+  let consolidados = [];
+  try {
+    consolidados = await listarPacientesConsolidados();
+  } catch (err) {
+    console.warn('[admin.js] export completo: no se pudo leer la planilla consolidada:', err?.message || err);
+  }
+
+  const hojas = armarHojas({ fichas, consolidados });
+  if (fallidas.length) {
+    hojas.push({
+      nombre: 'Fichas no leídas',
+      columnas: [{ titulo: 'Archivo de la ficha (reintentar el export)', tipo: 'texto', ancho: 50 }],
+      filas: fallidas.map((n) => [n]),
+    });
+  }
+
+  const hoyStr = formatArgDay(new Date());
+  res.setHeader('Cache-Control', 'no-store');
+  if (formato === 'md') {
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pacientes_${hoyStr}.md"`);
+    return res.status(200).send(crearMarkdown(hojas, { generado: hoyStr }));
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="pacientes_${hoyStr}.xlsx"`);
+  res.status(200).send(Buffer.from(crearXlsx(hojas)));
 }

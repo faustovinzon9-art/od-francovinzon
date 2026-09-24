@@ -348,8 +348,11 @@
         <div class="card">
           <h2>Exportar</h2>
           <div class="row-actions">
-            <button class="btn btn-outline" id="p-export-pacientes-csv">Exportar todos los pacientes (CSV)</button>
+            <button class="btn btn-outline" id="p-export-completo-xlsx">Exportar todos los datos (Excel)</button>
+            <button class="btn btn-outline" id="p-export-completo-md">Exportar todos los datos (.md)</button>
           </div>
+          <p class="hint">Una fila por paciente con todos los datos de la ficha, más hojas de movimientos y prestaciones a obra social. Incluye datos personales y de salud: guardalo en un lugar seguro. Tarda 1–3 minutos.</p>
+          <div class="msg" id="p-completo-msg"></div>
           <h3 style="font-size:14px;margin:16px 0 8px;">Turnos por rango de fechas</h3>
           <div class="field-row">
             <div class="field"><label>Desde</label><input type="date" id="p-turnos-desde"></div>
@@ -359,6 +362,22 @@
             <button class="btn btn-outline" id="p-export-turnos-csv">Exportar turnos (CSV)</button>
             <button class="btn btn-outline" id="p-export-turnos-pdf">Exportar turnos (PDF)</button>
           </div>
+          <h3 style="font-size:14px;margin:16px 0 8px;">Perfil anónimo de pacientes</h3>
+          <p class="hint">Solo totales y porcentajes (edad, localidad, obra social, tratamientos, días y horarios, visitas). No incluye nombres, DNI, teléfonos ni domicilios. Tarda 1–3 minutos porque recorre todas las fichas.</p>
+          <div class="field-row">
+            <div class="field"><label>Turnos a analizar</label>
+              <select id="p-perfil-meses">
+                <option value="6">Últimos 6 meses</option>
+                <option value="12" selected>Últimos 12 meses</option>
+                <option value="24">Últimos 24 meses</option>
+                <option value="36">Últimos 36 meses</option>
+              </select>
+            </div>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-outline" id="p-export-perfil">Exportar perfil anónimo (CSV)</button>
+          </div>
+          <div class="msg" id="p-perfil-msg"></div>
         </div>
       </div>
 
@@ -993,8 +1012,37 @@
       `).join('') || '<p class="hint">Sin resultados.</p>';
     } catch { /* red */ }
   }
-  document.getElementById('p-export-pacientes-csv').addEventListener('click', () => {
-    window.location.href = `/api/gestion/admin?recurso=export-pacientes-csv&key=${encodeURIComponent(adminKey)}`;
+  // Descarga por fetch + blob (no window.location): los export largos muestran el
+  // progreso y el error real, y funciona igual en Safari de iPad/iPhone.
+  async function descargarExport(url, btn, msgId, nombrePorDefecto) {
+    btn.disabled = true;
+    setMsg(msgId, 'Generando… recorriendo todas las fichas (puede tardar unos minutos).', '');
+    try {
+      const r = await fetch(url);
+      const tipo = r.headers.get('content-type') || '';
+      if (!r.ok || tipo.includes('application/json')) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || j.message || `Error ${r.status}`);
+      }
+      const blob = await r.blob();
+      const nombre = (r.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || nombrePorDefecto;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 60000);
+      setMsg(msgId, `Listo: ${nombre}`, 'ok');
+    } catch (err) {
+      setMsg(msgId, `No se pudo generar: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  document.getElementById('p-export-completo-xlsx').addEventListener('click', (e) => {
+    descargarExport(`/api/gestion/admin?recurso=export-pacientes-completo&formato=xlsx&key=${encodeURIComponent(adminKey)}`, e.currentTarget, 'p-completo-msg', 'pacientes.xlsx');
+  });
+  document.getElementById('p-export-completo-md').addEventListener('click', (e) => {
+    descargarExport(`/api/gestion/admin?recurso=export-pacientes-completo&formato=md&key=${encodeURIComponent(adminKey)}`, e.currentTarget, 'p-completo-msg', 'pacientes.md');
   });
   document.getElementById('p-export-turnos-csv').addEventListener('click', () => {
     const desde = document.getElementById('p-turnos-desde').value;
@@ -1007,6 +1055,11 @@
     const hasta = document.getElementById('p-turnos-hasta').value;
     if (!desde || !hasta) { toast('Elegí desde y hasta'); return; }
     window.location.href = `/api/gestion/admin?recurso=export-turnos&desde=${desde}&hasta=${hasta}&formato=pdf&key=${encodeURIComponent(adminKey)}`;
+  });
+
+  document.getElementById('p-export-perfil').addEventListener('click', (e) => {
+    const meses = document.getElementById('p-perfil-meses').value;
+    descargarExport(`/api/gestion/admin?recurso=export-perfil-anonimo&meses=${meses}&key=${encodeURIComponent(adminKey)}`, e.currentTarget, 'p-perfil-msg', 'perfil_pacientes_anonimo.csv');
   });
 
   // ---------- Accesos ----------

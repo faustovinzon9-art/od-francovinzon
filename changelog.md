@@ -2,6 +2,25 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-09-24 — /admin: "Exportar todos los datos" de pacientes en Excel (.xlsx) y Markdown (.md)
+
+- Reemplaza el botón viejo "Exportar todos los pacientes (CSV)" (solo nombre/apellido/DNI) por **"Exportar todos los datos (Excel)"** y **"(.md)"** en `/admin` → Datos de pacientes. El recurso viejo `export-pacientes-csv` sigue existiendo en el back.
+- Recurso nuevo `export-pacientes-completo` (`&formato=xlsx|md`) en `api/gestion/admin.js` (sin archivo nuevo bajo `api/`). Armado del archivo en `lib/exportPacientesCompleto.js`.
+- Excel con 3 hojas: **Pacientes** (una fila por paciente, todos los campos de la ficha + total/pagado/saldo, tratamientos realizados, primera/última visita, visitas y % de asistencia de la planilla consolidada, link a la ficha; incluye los pacientes "solo turno"), **Movimientos** y **Prestaciones obra social**. Encabezado fijo, filtros, fechas y montos como valores reales de Excel. Ordenado por apellido y nombre.
+- El .xlsx se arma a mano (OOXML + zip) con **`fflate`** (dependencia nueva, chica y sin dependencias) — no se sumó una librería de Excel pesada.
+- Solo lectura (no llama a `intentarRecuperarRespaldos()`), solo `ADMIN_KEY`, `Cache-Control: no-store`. Descarga por fetch + blob para que funcione en Safari de iPad.
+- Verificado con datos simulados: el .xlsx abre en openpyxl y LibreOffice, el .md arma las tablas. Falta probar en el preview con datos reales.
+
+## 2026-09-24 — /admin: export "Perfil anónimo de pacientes" (CSV)
+
+Pedido de Fausto para el Buyer Persona de la facu (TPO Comunicación Multimedial):
+- Botón nuevo en `/admin` → Datos de pacientes → Exportar: **"Exportar perfil anónimo (CSV)"**, con selector de 6/12/24/36 meses de turnos.
+- Recurso nuevo `export-perfil-anonimo` dentro de `api/gestion/admin.js` (**sin archivo nuevo bajo `api/`**, siguen 11 de 12). La agregación vive en `lib/perfilPacientes.js` (funciones puras).
+- **Solo totales y porcentajes**: franjas de edad, financiación (particular / obra social), obras sociales, localidades, tratamientos por categoría, plan de tratamiento, forma de pago, año de primera visita, turnos por día/hora/franja/mes, nuevos vs. recurrentes, canal de reserva, motivo (categoría), visitas por paciente y asistencia, más cruces edad×financiación, edad×tratamiento y día×franja.
+- Privacidad: de las fichas solo se piden C8, C10:C11, C15 y los movimientos (nunca nombre, DNI, domicilio, Nº de afiliado ni teléfono); del Calendar no se usa el título; motivos y planes de tratamiento salen solo como categoría; localidades/obras sociales con menos de 3 pacientes se agrupan en "Otras".
+- CSV con `;` y coma decimal (Excel en español). `&formato=json` devuelve lo mismo en JSON.
+- Verificado con datos simulados (Google mockeado): no sale ningún dato identificable y no se piden celdas identificables. Falta probarlo en el preview con datos reales.
+
 ## 2026-08-25 — Review de calidad del sistema centralizado (2 bugs de runtime corregidos)
 
 Aplicando la lección del día (cazar bugs con review manual antes de que los encuentre la

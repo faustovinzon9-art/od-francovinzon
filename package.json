@@ -6,6 +6,7 @@
   "dependencies": {
     "@napi-rs/canvas": "^1.0.7",
     "bwip-js": "^4.11.4",
+    "fflate": "^0.8.3",
     "googleapis": "^174.0.0",
     "jsqr": "^1.4.0",
     "pdfjs-dist": "^6.2.108",
