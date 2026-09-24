@@ -2,6 +2,16 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-09-24 — /admin: export "Perfil anónimo de pacientes" (CSV)
+
+Pedido de Fausto para el Buyer Persona de la facu (TPO Comunicación Multimedial):
+- Botón nuevo en `/admin` → Datos de pacientes → Exportar: **"Exportar perfil anónimo (CSV)"**, con selector de 6/12/24/36 meses de turnos.
+- Recurso nuevo `export-perfil-anonimo` dentro de `api/gestion/admin.js` (**sin archivo nuevo bajo `api/`**, siguen 11 de 12). La agregación vive en `lib/perfilPacientes.js` (funciones puras).
+- **Solo totales y porcentajes**: franjas de edad, financiación (particular / obra social), obras sociales, localidades, tratamientos por categoría, plan de tratamiento, forma de pago, año de primera visita, turnos por día/hora/franja/mes, nuevos vs. recurrentes, canal de reserva, motivo (categoría), visitas por paciente y asistencia, más cruces edad×financiación, edad×tratamiento y día×franja.
+- Privacidad: de las fichas solo se piden C8, C10:C11, C15 y los movimientos (nunca nombre, DNI, domicilio, Nº de afiliado ni teléfono); del Calendar no se usa el título; motivos y planes de tratamiento salen solo como categoría; localidades/obras sociales con menos de 3 pacientes se agrupan en "Otras".
+- CSV con `;` y coma decimal (Excel en español). `&formato=json` devuelve lo mismo en JSON.
+- Verificado con datos simulados (Google mockeado): no sale ningún dato identificable y no se piden celdas identificables. Falta probarlo en el preview con datos reales.
+
 ## 2026-08-25 — Review de calidad del sistema centralizado (2 bugs de runtime corregidos)
 
 Aplicando la lección del día (cazar bugs con review manual antes de que los encuentre la

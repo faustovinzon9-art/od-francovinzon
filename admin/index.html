@@ -359,6 +359,22 @@
             <button class="btn btn-outline" id="p-export-turnos-csv">Exportar turnos (CSV)</button>
             <button class="btn btn-outline" id="p-export-turnos-pdf">Exportar turnos (PDF)</button>
           </div>
+          <h3 style="font-size:14px;margin:16px 0 8px;">Perfil anónimo de pacientes</h3>
+          <p class="hint">Solo totales y porcentajes (edad, localidad, obra social, tratamientos, días y horarios, visitas). No incluye nombres, DNI, teléfonos ni domicilios. Tarda 1–3 minutos porque recorre todas las fichas.</p>
+          <div class="field-row">
+            <div class="field"><label>Turnos a analizar</label>
+              <select id="p-perfil-meses">
+                <option value="6">Últimos 6 meses</option>
+                <option value="12" selected>Últimos 12 meses</option>
+                <option value="24">Últimos 24 meses</option>
+                <option value="36">Últimos 36 meses</option>
+              </select>
+            </div>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-outline" id="p-export-perfil">Exportar perfil anónimo (CSV)</button>
+          </div>
+          <div class="msg" id="p-perfil-msg"></div>
         </div>
       </div>
 
@@ -1007,6 +1023,35 @@
     const hasta = document.getElementById('p-turnos-hasta').value;
     if (!desde || !hasta) { toast('Elegí desde y hasta'); return; }
     window.location.href = `/api/gestion/admin?recurso=export-turnos&desde=${desde}&hasta=${hasta}&formato=pdf&key=${encodeURIComponent(adminKey)}`;
+  });
+
+  // Perfil anónimo: fetch + blob (no window.location) porque tarda y así se puede
+  // mostrar el progreso y el error real en vez de dejar la pestaña colgada.
+  document.getElementById('p-export-perfil').addEventListener('click', async () => {
+    const btn = document.getElementById('p-export-perfil');
+    const meses = document.getElementById('p-perfil-meses').value;
+    btn.disabled = true;
+    setMsg('p-perfil-msg', 'Generando… recorriendo fichas y turnos (puede tardar unos minutos).', '');
+    try {
+      const r = await fetch(`/api/gestion/admin?recurso=export-perfil-anonimo&meses=${meses}&key=${encodeURIComponent(adminKey)}`);
+      const tipo = r.headers.get('content-type') || '';
+      if (!r.ok || tipo.includes('application/json')) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || j.message || `Error ${r.status}`);
+      }
+      const blob = await r.blob();
+      const nombre = (r.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'perfil_pacientes_anonimo.csv';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setMsg('p-perfil-msg', 'Listo, se descargó el CSV.', 'ok');
+    } catch (err) {
+      setMsg('p-perfil-msg', `No se pudo generar: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // ---------- Accesos ----------
