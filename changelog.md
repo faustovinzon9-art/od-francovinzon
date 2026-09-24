@@ -2,6 +2,15 @@
 
 Registro breve de cambios importantes. Agregar una línea (o pocas) después de cada cambio grande — no hace falta detallar cada commit, para eso está `git log`.
 
+## 2026-09-24 — /admin: "Exportar todos los datos" de pacientes en Excel (.xlsx) y Markdown (.md)
+
+- Reemplaza el botón viejo "Exportar todos los pacientes (CSV)" (solo nombre/apellido/DNI) por **"Exportar todos los datos (Excel)"** y **"(.md)"** en `/admin` → Datos de pacientes. El recurso viejo `export-pacientes-csv` sigue existiendo en el back.
+- Recurso nuevo `export-pacientes-completo` (`&formato=xlsx|md`) en `api/gestion/admin.js` (sin archivo nuevo bajo `api/`). Armado del archivo en `lib/exportPacientesCompleto.js`.
+- Excel con 3 hojas: **Pacientes** (una fila por paciente, todos los campos de la ficha + total/pagado/saldo, tratamientos realizados, primera/última visita, visitas y % de asistencia de la planilla consolidada, link a la ficha; incluye los pacientes "solo turno"), **Movimientos** y **Prestaciones obra social**. Encabezado fijo, filtros, fechas y montos como valores reales de Excel. Ordenado por apellido y nombre.
+- El .xlsx se arma a mano (OOXML + zip) con **`fflate`** (dependencia nueva, chica y sin dependencias) — no se sumó una librería de Excel pesada.
+- Solo lectura (no llama a `intentarRecuperarRespaldos()`), solo `ADMIN_KEY`, `Cache-Control: no-store`. Descarga por fetch + blob para que funcione en Safari de iPad.
+- Verificado con datos simulados: el .xlsx abre en openpyxl y LibreOffice, el .md arma las tablas. Falta probar en el preview con datos reales.
+
 ## 2026-09-24 — /admin: export "Perfil anónimo de pacientes" (CSV)
 
 Pedido de Fausto para el Buyer Persona de la facu (TPO Comunicación Multimedial):
